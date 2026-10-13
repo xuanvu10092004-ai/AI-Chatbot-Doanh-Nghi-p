@@ -45,8 +45,8 @@ def get_config() -> dict[str, object]:
     return {
         "host": os.environ["DB_HOST"],
         "port": int(os.environ["DB_PORT"]),
-        "user": os.environ["DB_USER"],
-        "password": os.environ["DB_PASSWORD"],
+        "user": os.getenv('ADMIN_DB_USER', os.environ["DB_USER"]),
+        "password": os.getenv('ADMIN_DB_PASSWORD', os.environ["DB_PASSWORD"]),
         "chatbot_ro_password": os.environ["CHATBOT_RO_PASSWORD"],
         "database": database,
         "charset": "utf8mb4",
@@ -165,13 +165,24 @@ def execute_script(
 
 
 def apply_extensions(connection, password: str) -> None:
+    with connection.cursor() as cur:
+        cur.execute('CREATE TABLE IF NOT EXISTS schema_migrations(filename VARCHAR(255) PRIMARY KEY, applied_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)')
+    connection.commit()
     for extension in sorted((PROJECT_ROOT / "data/schema/extensions").glob("[0-9][0-9]_*.sql")):
+        with connection.cursor() as cur:
+            cur.execute('SELECT filename FROM schema_migrations WHERE filename=%s',(extension.name,))
+            if cur.fetchone():
+                print(f'Skipped {extension.name}')
+                continue
         if extension.name == "03_chatbot_ro_user.sql":
             with connection.cursor() as cur:
                 cur.execute("CREATE USER IF NOT EXISTS 'chatbot_ro'@'localhost' IDENTIFIED BY %s", (password,))
                 cur.execute("ALTER USER 'chatbot_ro'@'localhost' IDENTIFIED BY %s", (password,))
                 cur.execute("REVOKE ALL PRIVILEGES, GRANT OPTION FROM 'chatbot_ro'@'localhost'")
         execute_script(connection, extension)
+        with connection.cursor() as cur:
+            cur.execute('INSERT INTO schema_migrations(filename) VALUES(%s)',(extension.name,))
+        connection.commit()
         print(f"Applied {extension.name}")
 
 
@@ -224,6 +235,18 @@ def main() -> int:
         if initialize:
             execute_script(connection, SEED_FILE)
         apply_extensions(connection, str(config['chatbot_ro_password']))
+        if initialize:
+            from scripts.seed_demo_passwords import seed
+            seed(connection)
+        app_password=os.getenv('APP_DB_PASSWORD')
+        if not app_password:
+            raise RuntimeError('APP_DB_PASSWORD is required')
+        with connection.cursor() as cur:
+            cur.execute("CREATE USER IF NOT EXISTS 'honda_app'@'localhost' IDENTIFIED BY %s",(app_password,))
+            cur.execute("ALTER USER 'honda_app'@'localhost' IDENTIFIED BY %s",(app_password,))
+            cur.execute("REVOKE ALL PRIVILEGES, GRANT OPTION FROM 'honda_app'@'localhost'")
+            cur.execute("GRANT SELECT,INSERT,UPDATE,DELETE ON honda_chatbot.* TO 'honda_app'@'localhost'")
+            cur.execute("GRANT EXECUTE ON FUNCTION honda_chatbot.fn_session_branch TO 'honda_app'@'localhost'")
         counts = verify_counts(connection)
     except Exception as exc:
         if connection is not None and connection.is_connected():
