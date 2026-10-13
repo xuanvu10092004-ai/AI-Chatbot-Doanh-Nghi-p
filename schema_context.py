@@ -1,0 +1,105 @@
+from __future__ import annotations
+
+from typing import Any
+
+
+AI_VIEW_PATTERN = "v_ai_%"
+SCHEMA_SYNONYMS = {
+    "xe ga": "tay_ga",
+    "xe số": "xe_so",
+    "xe côn": "con_tay",
+    "đại lý": "branches",
+    "cửa hàng": "branches",
+    "chi nhánh": "branches",
+    "NT01": "branches.code = 'NT01'",
+    "NT02": "branches.code = 'NT02'",
+    "CR01": "branches.code = 'CR01'",
+    "tiền tệ": "VNĐ",
+    "giá": "cột *_price, đơn vị VNĐ",
+}
+
+
+def _fetch_rows(connection: Any, query: str, params: tuple[Any, ...]) -> list[dict[str, Any]]:
+    cursor = connection.cursor(dictionary=True)
+    try:
+        cursor.execute(query, params)
+        return list(cursor.fetchall())
+    finally:
+        cursor.close()
+
+
+def _format_synonyms() -> str:
+    lines = ["Từ điển đồng nghĩa và quy ước:"]
+    for term, meaning in SCHEMA_SYNONYMS.items():
+        lines.append(f"- {term} = {meaning}")
+    return "\n".join(lines)
+
+
+def build_schema_context(connection: Any, database: str) -> str:
+    """Build prompt context from metadata for v_ai_* views only."""
+    views = _fetch_rows(
+        connection,
+        """
+        SELECT TABLE_NAME, TABLE_COMMENT
+        FROM information_schema.TABLES
+        WHERE TABLE_SCHEMA = %s AND TABLE_NAME LIKE %s
+        ORDER BY TABLE_NAME
+        """,
+        (database, AI_VIEW_PATTERN),
+    )
+    if not views:
+        raise RuntimeError("Không tìm thấy view v_ai_* trong schema hiện tại")
+
+    view_names = [row["TABLE_NAME"] for row in views]
+    placeholders = ", ".join(["%s"] * len(view_names))
+    columns = _fetch_rows(
+        connection,
+        f"""
+        SELECT TABLE_NAME, ORDINAL_POSITION, COLUMN_NAME, COLUMN_TYPE,
+               IS_NULLABLE, COLUMN_COMMENT
+        FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA = %s AND TABLE_NAME IN ({placeholders})
+        ORDER BY TABLE_NAME, ORDINAL_POSITION
+        """,
+        (database, *view_names),
+    )
+
+    comments = {row["TABLE_NAME"]: row.get("TABLE_COMMENT") or "" for row in views}
+    grouped: dict[str, list[dict[str, Any]]] = {name: [] for name in view_names}
+    for column in columns:
+        grouped[column["TABLE_NAME"]].append(column)
+
+    lines = [
+        "Schema context dành cho text-to-SQL.",
+        "Chỉ được truy vấn các view v_ai_* bên dưới; không truy cập bảng gốc.",
+        "Các giá trị giá/list_price/cost_price/gross_margin là số nguyên đơn vị VNĐ.",
+    ]
+    for view_name in view_names:
+        table_comment = comments[view_name]
+        description = f" ({table_comment})" if table_comment else ""
+        lines.append(f"\nVIEW {view_name}{description}:")
+        for column in grouped[view_name]:
+            nullable = "NULL" if column["IS_NULLABLE"] == "YES" else "NOT NULL"
+            column_comment = column.get("COLUMN_COMMENT") or ""
+            comment = f" - {column_comment}" if column_comment else ""
+            lines.append(
+                f"- {column['COLUMN_NAME']}: {column['COLUMN_TYPE']}, {nullable}{comment}"
+            )
+
+    lines.append("")
+    lines.append(_format_synonyms())
+    return "\n".join(lines)
+
+
+def allowed_ai_views(connection: Any, database: str) -> frozenset[str]:
+    """Return the metadata-derived whitelist used by SQL validation."""
+    rows = _fetch_rows(
+        connection,
+        """
+        SELECT TABLE_NAME
+        FROM information_schema.VIEWS
+        WHERE TABLE_SCHEMA = %s AND TABLE_NAME LIKE %s
+        """,
+        (database, AI_VIEW_PATTERN),
+    )
+    return frozenset(row["TABLE_NAME"] for row in rows)
