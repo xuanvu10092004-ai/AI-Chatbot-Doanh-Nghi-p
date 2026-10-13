@@ -10,7 +10,9 @@ SET @index_exists = (
 );
 SET @sql = IF(
     @index_exists = 0,
-    'ALTER TABLE kb_documents ADD FULLTEXT INDEX ft_kb_documents_title_content (title, content) WITH PARSER ngram',
+    IF(VERSION() LIKE '%MariaDB%',
+       'ALTER TABLE kb_documents ADD FULLTEXT INDEX ft_kb_documents_title_content (title, content)',
+       'ALTER TABLE kb_documents ADD FULLTEXT INDEX ft_kb_documents_title_content (title, content) WITH PARSER ngram'),
     'SELECT 1'
 );
 PREPARE stmt FROM @sql;

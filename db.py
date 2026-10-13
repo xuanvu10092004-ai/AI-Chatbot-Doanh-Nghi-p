@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+from pathlib import Path
 from contextlib import contextmanager
 from typing import Any, Iterator
 
@@ -10,7 +11,7 @@ from mysql.connector import MySQLConnection
 from mysql.connector.pooling import MySQLConnectionPool
 
 
-load_dotenv()
+load_dotenv(Path(__file__).resolve().parent / '.env')
 _APP_POOL: MySQLConnectionPool | None = None
 _TEXT_SQL_POOL: MySQLConnectionPool | None = None
 
@@ -29,6 +30,7 @@ def _base_config() -> dict[str, Any]:
         "database": _required("DB_NAME"),
         "charset": "utf8mb4",
         "collation": "utf8mb4_unicode_ci",
+        "connection_timeout": 5,
     }
 
 
@@ -58,21 +60,40 @@ def _pool(role: str) -> MySQLConnectionPool:
 def get_connection(role: str = "app") -> MySQLConnection:
     if role not in {"app", "text_to_sql"}:
         raise ValueError("role phải là app hoặc text_to_sql")
-    return _pool(role).get_connection()
+    connection = _pool(role).get_connection()
+    if role == 'text_to_sql':
+        try:
+            with connection.cursor() as cur:
+                cur.execute('SET @ai_branch = NULL')
+                cur.execute('SELECT VERSION()')
+                version = cur.fetchone()[0]
+                if 'MariaDB' in version:
+                    cur.execute('SET SESSION max_statement_time = %s', (5,))
+                else:
+                    cur.execute('SET SESSION MAX_EXECUTION_TIME = %s', (5000,))
+        except Exception:
+            connection.close()
+            raise
+    return connection
 
 
 @contextmanager
 def cursor(role: str = "app", dictionary: bool = True) -> Iterator[Any]:
     connection = get_connection(role)
-    db_cursor = connection.cursor(dictionary=dictionary)
+    db_cursor = None
     try:
+        db_cursor = connection.cursor(dictionary=dictionary)
         yield db_cursor
+        connection.commit()
+    except Exception:
+        connection.rollback()
+        raise
     finally:
-        db_cursor.close()
+        if db_cursor is not None:
+            db_cursor.close()
         connection.close()
 
 
 def execute_write(query: str, params: tuple[Any, ...] = ()) -> None:
     with cursor("app", dictionary=False) as db_cursor:
         db_cursor.execute(query, params)
-        db_cursor.connection.commit()

@@ -5,3 +5,4 @@ python-dotenv==1.1.1
 groq==0.30.0
 mysql-connector-python==9.4.0
 pytest==8.4.1
+sqlglot==28.0.0
