@@ -5,7 +5,7 @@ from typing import Any
 
 from flask import Flask, jsonify, render_template, request, session
 
-from access_control import create_session, record_message, resolve_user_id
+from access_control import create_session, record_message, resolve_user_id, resume_session, read_history
 from ai_service import generate_answer
 from database_service import (
     SchemaExtensionRequired,
@@ -16,6 +16,8 @@ from database_service import (
 from rag_service import search_documents
 from routing import route_question
 from sql_service import answer_sql_question
+from sql_service import SchemaExtensionRequired as SQLSchemaExtensionRequired
+from mysql.connector import Error as DatabaseError
 
 
 app = Flask(__name__)
@@ -54,7 +56,7 @@ def potential_customers():
 
 
 def _current_user_id() -> int | None:
-    session_user_id = session.get("user_id") if secret_key else None
+    session_user_id = session.get("user_id") if app.secret_key else None
     return resolve_user_id(
         session_user_id,
         request.headers.get("X-Demo-User-Id"),
@@ -86,39 +88,61 @@ def bookings():
 
 @app.route("/chat", methods=["POST"])
 def chat():
-    data: dict[str, Any] = request.get_json(silent=True) or {}
-    question = str(data.get("question", "")).strip()
-    if not question:
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict) or not isinstance(data.get('question'), str) or not data['question'].strip():
         return jsonify({"answer": "Vui lòng nhập câu hỏi.", "type": "None", "module": "None"}), 400
-
-    user_id = _current_user_id()
-    session_id = create_session(user_id, "web")
-    record_message(session_id, "user", question)
-    route = route_question(question)
-
+    question = data['question'].strip()
+    if len(question) > 4000:
+        return jsonify(answer="Câu hỏi quá dài."), 400
+    session_id = None
     try:
+        user_id = _current_user_id()
+        existing_id = session.get('chat_session_id') if app.secret_key else None
+        if existing_id is not None and resume_session(existing_id, user_id):
+            session_id = existing_id
+        else:
+            session_id = create_session(user_id, "web")
+            if app.secret_key:
+                session['chat_session_id'] = session_id
+        history = read_history(session_id)
+        record_message(session_id, "user", question)
+        route = route_question(question)
         if route["type"] == "SQL":
             context = answer_sql_question(question, user_id, session_id)
         else:
             context = search_documents(question, user_id, session_id)
         denied = context == "Tôi không thể hỗ trợ yêu cầu này."
-        answer = context if denied else generate_answer(question, context)
+        no_evidence = context.startswith(('Không tìm thấy', 'Chưa tìm thấy'))
+        engine = 'database'
+        if denied or no_evidence:
+            answer = context
+        elif not os.getenv('GROQ_API_KEY') and os.getenv('APP_ENV') == 'dev':
+            answer = context
+        else:
+            try:
+                answer = generate_answer(question, context, history)
+                engine = 'groq'
+            except Exception:
+                answer = "Dịch vụ AI chưa sẵn sàng. Vui lòng thử lại sau."
+                record_message(session_id, 'bot', answer)
+                return jsonify(answer=answer, error='ai-unavailable', session_id=session_id), 503
         record_message(session_id, "bot", answer)
         return jsonify({
             "answer": answer,
             "type": route["type"],
             "module": route["module"],
             "session_id": session_id,
+            "engine": engine,
         })
-    except SchemaExtensionRequired as exc:
+    except (SchemaExtensionRequired, SQLSchemaExtensionRequired) as exc:
         message = str(exc)
         record_message(session_id, "bot", message)
         return jsonify({"error": "schema-extension-required", "message": message}), 501
-    except Exception as exc:
-        message = f"Lỗi backend: {exc}"
-        record_message(session_id, "bot", message)
-        return jsonify({"error": "backend-error", "message": message}), 500
+    except (DatabaseError, RuntimeError):
+        return jsonify(error='database-unavailable', answer="Chưa kết nối được cơ sở dữ liệu. Vui lòng thử lại sau."), 503
+    except Exception:
+        return jsonify(error='backend-error', answer="Chưa xử lý được yêu cầu. Vui lòng thử lại sau."), 500
 
 
 if __name__ == "__main__":
-    app.run(host="127.0.0.1", port=5000, debug=True, use_reloader=False)
+    app.run(host="127.0.0.1", port=5000, debug=False, use_reloader=False)

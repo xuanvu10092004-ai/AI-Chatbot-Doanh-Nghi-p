@@ -51,7 +51,7 @@ function sendQuestion() {
             // Tạo bong bóng tin nhắn bot (màu xám, căn trái)
             const botMessage = document.createElement("div");
             botMessage.className = "bot-message";
-            botMessage.innerText = data.answer;  // Nội dung trả về từ backend
+            botMessage.innerText = data.answer || data.message || "Chưa xử lý được yêu cầu.";
             chatMessages.appendChild(botMessage);
 
             // Tự động cuộn xuống cuối khu vực chat để hiện tin nhắn mới nhất

@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from access_control import authorize_intent, create_session, detect_intent
+from access_control import authorize_intent, create_session, detect_intent, permitted_views
+from query_plans import plan_query
 from db import get_connection
 from sql_safety import validate_sql
 
@@ -32,15 +33,29 @@ def _format_rows(rows: list[dict[str, Any]]) -> str:
     return "\n".join(lines)
 
 
-def _execute_text_to_sql(sql: str, params: tuple[Any, ...] = ()) -> list[dict[str, Any]]:
-    validated = validate_sql(sql, AI_VIEWS)
+def _execute_text_to_sql(sql: str, params: tuple[Any, ...] = (), *, allowed_views=None, scope_branch_ids=None) -> list[dict[str, Any]]:
+    validated = validate_sql(sql, frozenset({'v_ai_products'} if allowed_views is None else allowed_views))
+    if scope_branch_ids is not None and len(scope_branch_ids) != 1:
+        raise ValueError("ambiguous_branch_scope")
     connection = get_connection("text_to_sql")
-    db_cursor = connection.cursor(dictionary=True)
+    db_cursor = None
     try:
+        db_cursor = connection.cursor(dictionary=True)
+        db_cursor.execute("SET @ai_branch = %s", (scope_branch_ids[0] if scope_branch_ids else None,))
+        db_cursor.execute("SELECT VERSION() AS version")
+        version = db_cursor.fetchone()['version']
+        if 'MariaDB' in version:
+            db_cursor.execute("SET SESSION max_statement_time = %s", (validated.timeout_ms / 1000,))
+        else:
+            db_cursor.execute("SET SESSION MAX_EXECUTION_TIME = %s", (validated.timeout_ms,))
         db_cursor.execute(validated.sql, params)
         return list(db_cursor.fetchall())
     finally:
-        db_cursor.close()
+        if db_cursor is not None:
+            try:
+                db_cursor.execute("SET @ai_branch = NULL")
+            finally:
+                db_cursor.close()
         connection.close()
 
 
@@ -70,58 +85,7 @@ def answer_sql_question(
             "Opportunity, Quote và Booking cần schema-extension; chưa được tự thiết kế bảng."
         )
 
-    scopes = authorization["scope_branch_ids"]
-    branch_sql, branch_params = _branch_clause(scopes)
-    normalized = question.casefold()
-
-    if intent_code == "ask_cost_margin":
-        sql = """
-            SELECT model_name, variant_name, color, list_price, cost_price, gross_margin
-            FROM v_ai_product_costs
-            WHERE model_name LIKE %s
-            ORDER BY model_name, variant_name
-            LIMIT 100
-        """
-        rows = _execute_text_to_sql(sql, ("%SH%" if "sh" in normalized else "%",))
-        return _format_rows(rows)
-
-    if intent_code == "ask_stock":
-        sql = f"""
-            SELECT branch_code, branch_name, model_name, variant_name, color,
-                   quantity, list_price
-            FROM v_ai_inventory
-            WHERE 1 = 1{branch_sql}
-            ORDER BY quantity DESC, model_name, variant_name
-            LIMIT 100
-        """
-        return _format_rows(_execute_text_to_sql(sql, branch_params))
-
-    if intent_code == "ask_customer_info":
-        sql = """
-            SELECT customer_id, full_name, phone, email, province, district, customer_status
-            FROM v_ai_customers
-            ORDER BY full_name
-            LIMIT 100
-        """
-        return _format_rows(_execute_text_to_sql(sql))
-
-    if intent_code == "ask_order_status":
-        sql = f"""
-            SELECT order_id, customer_name, model_name, variant_name, branch_code,
-                   quantity, line_amount, status, created_at
-            FROM v_ai_orders
-            WHERE 1 = 1{branch_sql}
-            ORDER BY created_at DESC
-            LIMIT 100
-        """
-        return _format_rows(_execute_text_to_sql(sql, branch_params))
-
-    sql = """
-        SELECT model_name, variant_name, color, segment, engine_cc, list_price, total_stock
-        FROM v_ai_products
-        WHERE model_name LIKE %s
-        ORDER BY model_name, list_price
-        LIMIT 100
-    """
-    model_pattern = "%SH 160i%" if "sh 160i" in normalized else "%"
-    return _format_rows(_execute_text_to_sql(sql, (model_pattern,)))
+    sql, params = plan_query(question, intent_code)
+    rows = _execute_text_to_sql(sql, params, allowed_views=permitted_views(user_id),
+                                scope_branch_ids=authorization['scope_branch_ids'])
+    return _format_rows(rows)

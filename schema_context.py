@@ -35,7 +35,7 @@ def _format_synonyms() -> str:
     return "\n".join(lines)
 
 
-def build_schema_context(connection: Any, database: str) -> str:
+def build_schema_context(connection: Any, database: str, allowed_views: frozenset[str] | None = None) -> str:
     """Build prompt context from metadata for v_ai_* views only."""
     views = _fetch_rows(
         connection,
@@ -47,6 +47,8 @@ def build_schema_context(connection: Any, database: str) -> str:
         """,
         (database, AI_VIEW_PATTERN),
     )
+    if allowed_views is not None:
+        views = [row for row in views if row['TABLE_NAME'] in allowed_views]
     if not views:
         raise RuntimeError("Không tìm thấy view v_ai_* trong schema hiện tại")
 
@@ -65,6 +67,8 @@ def build_schema_context(connection: Any, database: str) -> str:
     )
 
     comments = {row["TABLE_NAME"]: row.get("TABLE_COMMENT") or "" for row in views}
+    dictionary = _fetch_rows(connection, 'SELECT view_name, column_name, description_vi FROM ai_data_dictionary', ())
+    descriptions = {(row['view_name'], row['column_name']): row['description_vi'] for row in dictionary}
     grouped: dict[str, list[dict[str, Any]]] = {name: [] for name in view_names}
     for column in columns:
         grouped[column["TABLE_NAME"]].append(column)
@@ -80,7 +84,7 @@ def build_schema_context(connection: Any, database: str) -> str:
         lines.append(f"\nVIEW {view_name}{description}:")
         for column in grouped[view_name]:
             nullable = "NULL" if column["IS_NULLABLE"] == "YES" else "NOT NULL"
-            column_comment = column.get("COLUMN_COMMENT") or ""
+            column_comment = descriptions.get((view_name, column['COLUMN_NAME']), column.get("COLUMN_COMMENT") or "")
             comment = f" - {column_comment}" if column_comment else ""
             lines.append(
                 f"- {column['COLUMN_NAME']}: {column['COLUMN_TYPE']}, {nullable}{comment}"

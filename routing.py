@@ -62,7 +62,7 @@ def remove_vietnamese_accents(text):
     # - Bước này đang làm gì: Tách ký tự gốc và dấu riêng biệt bằng NFD, sau đó mã hóa ASCII bỏ qua các ký tự không chuẩn.
     # - Dữ liệu đi từ đâu đến đâu: Chuỗi Unicode tiếng Việt -> Chuỗi ASCII thuần không dấu.
     # ---------------------------------------------------------
-    text = unicodedata.normalize("NFD", text)
+    text = unicodedata.normalize("NFD", text.replace('đ', 'd').replace('Đ', 'D'))
     text = text.encode("ascii", "ignore").decode("utf-8")
     return text
 
@@ -374,7 +374,16 @@ def route_question(question):
     # ---------------------------------------------------------
     # Bước 1 trong hàm: Gọi classify_question để xác định kiểu xử lý "SQL" hay "RAG"
     # ---------------------------------------------------------
-    question_type = classify_question(question)
+    from access_control import detect_intent
+    intent = detect_intent(question)
+    if intent in {'ask_stock', 'ask_order_status', 'ask_customer_info', 'ask_cost_margin'}:
+        question_type = 'SQL'
+    elif intent in {'ask_promotion', 'ask_sales_policy', 'ask_tech_procedure', 'ask_finance_procedure', 'ask_hr_policy'}:
+        question_type = 'RAG'
+    elif any(word in question.casefold() for word in ('giá', 'gia', 'phiên bản', 'phân khúc', 'mẫu xe')):
+        question_type = 'SQL'
+    else:
+        question_type = classify_question(question)
 
     # ---------------------------------------------------------
     # Bước 2 trong hàm: Gọi detect_module để xác định phân hệ nghiệp vụ
