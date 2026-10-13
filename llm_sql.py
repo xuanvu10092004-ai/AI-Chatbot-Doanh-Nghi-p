@@ -59,6 +59,9 @@ def generate_query(question: str, allowed_views: frozenset[str]) -> tuple[str, t
     connection = get_connection()
     try:
         schema = build_schema_context(connection, os.environ['DB_NAME'], allowed_views)
+        schema += '\nPhạm vi quyền đã được backend kiểm tra và sẽ được áp dụng khi chạy SQL. Không cần hỏi lại chi nhánh khi câu hỏi yêu cầu nhóm theo branch_code.'
+        if 'v_ai_inventory' in allowed_views:
+            schema += '\nVí dụ hợp lệ, tổng số xe theo mã chi nhánh: SELECT branch_code, SUM(quantity) AS total_stock FROM v_ai_inventory GROUP BY branch_code ORDER BY branch_code. Các cột này có trong schema; đây là câu hỏi đủ rõ để trả SQL.'
         with connection.cursor() as cur:
             cur.execute('SELECT DISTINCT model_name FROM v_ai_products ORDER BY model_name')
             models = [row[0] for row in cur.fetchall()]

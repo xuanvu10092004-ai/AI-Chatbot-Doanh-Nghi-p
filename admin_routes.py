@@ -52,19 +52,21 @@ def register_admin(app):
     @app.get('/api/admin/audit')
     @require_permission('audit:read')
     def audit_list():
-        filters=['1=1'];params=[]
-        for key,column in [('actor','actor_user_id'),('action','action')]:
+        scope,values=scope_filter('audit:read','au.home_branch_id','l.actor_user_id')
+        filters=[scope];params=list(values)
+        for key,column in [('actor','l.actor_user_id'),('action','l.action')]:
             if request.args.get(key):filters.append(column+'=%s');params.append(request.args[key])
         for key,operator in [('from','>='),('to','<=')]:
-            if request.args.get(key):filters.append('created_at'+operator+'%s');params.append(request.args[key])
+            if request.args.get(key):filters.append('l.created_at'+operator+'%s');params.append(request.args[key])
         with cursor() as cur:
-            cur.execute('SELECT * FROM rbac_audit_log WHERE '+' AND '.join(filters)+' ORDER BY id DESC LIMIT 100',tuple(params));rbac=cur.fetchall()
-            parts=['1=1'];bind=[]
-            for key,col in [('decision','decision'),('actor','user_id')]:
+            cur.execute('SELECT l.* FROM rbac_audit_log l LEFT JOIN users au ON au.id=l.actor_user_id WHERE '+' AND '.join(filters)+' ORDER BY l.id DESC LIMIT 100',tuple(params));rbac=cur.fetchall()
+            scope,values=scope_filter('audit:read','cu.home_branch_id','cl.user_id')
+            parts=[scope];bind=list(values)
+            for key,col in [('decision','cl.decision'),('actor','cl.user_id')]:
                 if request.args.get(key):parts.append(col+'=%s');bind.append(request.args[key])
             for key,op in [('from','>='),('to','<=')]:
-                if request.args.get(key):parts.append('created_at'+op+'%s');bind.append(request.args[key])
-            cur.execute('SELECT * FROM chatbot_audit_log WHERE '+' AND '.join(parts)+' ORDER BY id DESC LIMIT 100',tuple(bind));chat=cur.fetchall()
+                if request.args.get(key):parts.append('cl.created_at'+op+'%s');bind.append(request.args[key])
+            cur.execute('SELECT cl.* FROM chatbot_audit_log cl LEFT JOIN users cu ON cu.id=cl.user_id WHERE '+' AND '.join(parts)+' ORDER BY cl.id DESC LIMIT 100',tuple(bind));chat=cur.fetchall()
         return jsonify(rows=rbac,chatbot=chat)
 
     for plural,kind,permission in [('users','user','user:manage'),('roles','role','rbac:manage'),('permissions','permission','rbac:manage')]:

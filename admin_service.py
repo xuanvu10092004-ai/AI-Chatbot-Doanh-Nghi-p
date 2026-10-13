@@ -1,5 +1,5 @@
 """Thay đổi RBAC được serialize, audit và version trong cùng transaction."""
-from datetime import datetime
+from datetime import datetime,timezone
 from flask import g
 from werkzeug.security import generate_password_hash
 from db import cursor
@@ -129,7 +129,7 @@ def set_roles(cur,user_id,roles,replace=True):
         if role['name']=='super_admin':
             cur.execute("SELECT 1 FROM v_user_permissions WHERE user_id=%s AND role_name='super_admin' LIMIT 1",(g.user['id'],))
             if not cur.fetchone():raise AdminRejected('Chỉ super_admin có thể gán super_admin.')
-        if 'rbac:manage' not in permissions():
+        if permissions().get('rbac:manage',{}).get('scope')!='all':
             cur.execute('SELECT p.code,rp.data_scope FROM role_permissions rp JOIN permissions p ON p.id=rp.permission_id WHERE rp.role_id=%s',(int(assignment['role_id']),))
             for row in cur.fetchall():
                 owned=permissions().get(row['code'])
@@ -141,6 +141,8 @@ def set_roles(cur,user_id,roles,replace=True):
     for assignment in roles:
         expiry=assignment.get('expires_at') or None
         if expiry:
-            try:expiry=datetime.fromisoformat(expiry)
+            try:
+                expiry=datetime.fromisoformat(expiry)
+                if expiry.tzinfo:expiry=expiry.astimezone(timezone.utc).replace(tzinfo=None)
             except (ValueError,TypeError):raise AdminRejected('Ngày hết hạn không hợp lệ.')
         cur.execute('INSERT INTO user_roles(user_id,role_id,scope_branch_id,expires_at,granted_by) VALUES(%s,%s,%s,%s,%s) ON DUPLICATE KEY UPDATE scope_branch_id=VALUES(scope_branch_id),expires_at=VALUES(expires_at),granted_by=VALUES(granted_by)',(user_id,int(assignment['role_id']),assignment.get('scope_branch_id'),expiry,g.user['id']))

@@ -55,10 +55,11 @@ def require_permission(*codes):
     def decorator(fn):
         @wraps(fn)
         def wrapped(*args,**kwargs):
-            if any(code not in permissions() for code in codes):
+            if any(code not in permissions() or (code=='rbac:manage' and permissions()[code]['scope']!='all') for code in codes):
                 if request.path.startswith('/api/') or request.is_json:return jsonify(error='forbidden',message='Bạn không có quyền thực hiện yêu cầu này.'),403
                 return render_template('error.html',message='Bạn không có quyền vào trang này.'),403
             return fn(*args,**kwargs)
+        wrapped.required_permissions=codes
         return wrapped
     return decorator
 
@@ -80,7 +81,7 @@ def initialize_request():
     if not public and not g.user and not guest:
         if request.path.startswith('/api/') or request.endpoint=='chat_api':return jsonify(error='authentication-required',message='Vui lòng đăng nhập.'),401
         return redirect(url_for('login',next=request.full_path.rstrip('?')))
-    if guest and not public and request.endpoint not in {'chat_page','chat_api','logout'}:
+    if guest and not public and request.endpoint not in {'home','chat_page','chat_api','logout'}:
         if request.path.startswith('/api/'):return jsonify(error='forbidden'),403
         return render_template('error.html',message='Khách chỉ sử dụng Trợ lý AI.'),403
     if request.method in {'POST','PUT','PATCH','DELETE'}:
@@ -112,4 +113,4 @@ def authenticate(email,password):
 def navigation():
     with cursor() as cur:
         cur.execute('SELECT n.*,p.code AS permission FROM nav_items n LEFT JOIN permissions p ON p.id=n.required_permission_id ORDER BY sort_order,code')
-        return [r for r in cur.fetchall() if r['permission'] in permissions() and (g.user or r['code']=='chat')]
+        return [r for r in cur.fetchall() if r['permission'] in permissions() and (r['permission']!='rbac:manage' or permissions()[r['permission']]['scope']=='all') and (g.user or r['code']=='chat')]

@@ -33,10 +33,14 @@ def get_config() -> dict[str, object]:
         "DB_PASSWORD",
         "DB_NAME",
         "CHATBOT_RO_PASSWORD",
+        "APP_DB_PASSWORD",
+        "DEMO_ACCOUNT_PASSWORD",
     )
     missing = [name for name in required if os.getenv(name) is None]
     if missing:
         raise RuntimeError(f"Thiếu biến môi trường: {', '.join(missing)}")
+    if len(os.environ['DEMO_ACCOUNT_PASSWORD'])<10:
+        raise RuntimeError('DEMO_ACCOUNT_PASSWORD must contain at least 10 characters')
 
     database = os.environ["DB_NAME"]
     if database != "honda_chatbot":
@@ -165,6 +169,7 @@ def execute_script(
 
 
 def apply_extensions(connection, password: str) -> None:
+    applied=set()
     with connection.cursor() as cur:
         cur.execute('CREATE TABLE IF NOT EXISTS schema_migrations(filename VARCHAR(255) PRIMARY KEY, applied_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)')
     connection.commit()
@@ -183,7 +188,9 @@ def apply_extensions(connection, password: str) -> None:
         with connection.cursor() as cur:
             cur.execute('INSERT INTO schema_migrations(filename) VALUES(%s)',(extension.name,))
         connection.commit()
+        applied.add(extension.name)
         print(f"Applied {extension.name}")
+    return applied
 
 
 def verify_counts(connection: mysql.connector.MySQLConnection) -> dict[str, int]:
@@ -191,7 +198,7 @@ def verify_counts(connection: mysql.connector.MySQLConnection) -> dict[str, int]
         "products": ("SELECT COUNT(*) FROM products", ()),
         "product_variants": ("SELECT COUNT(*) FROM product_variants", ()),
         "inventory": ("SELECT COUNT(*) FROM inventory", ()),
-        "customers": ("SELECT COUNT(*) FROM users WHERE id > %s", (100,)),
+        "customers": ("SELECT COUNT(*) FROM users WHERE id > %s AND user_type='customer'", (100,)),
         "customer_profiles": ("SELECT COUNT(*) FROM customer_profiles", ()),
         "orders": ("SELECT COUNT(*) FROM orders", ()),
     }
@@ -234,8 +241,8 @@ def main() -> int:
         connection = connect(config, with_database=True)
         if initialize:
             execute_script(connection, SEED_FILE)
-        apply_extensions(connection, str(config['chatbot_ro_password']))
-        if initialize:
+        applied=apply_extensions(connection, str(config['chatbot_ro_password']))
+        if initialize or '06_auth_dynamic_rbac.sql' in applied:
             from scripts.seed_demo_passwords import seed
             seed(connection)
         app_password=os.getenv('APP_DB_PASSWORD')
@@ -246,8 +253,6 @@ def main() -> int:
             cur.execute("ALTER USER 'honda_app'@'localhost' IDENTIFIED BY %s",(app_password,))
             cur.execute("REVOKE ALL PRIVILEGES, GRANT OPTION FROM 'honda_app'@'localhost'")
             cur.execute("GRANT SELECT,INSERT,UPDATE,DELETE ON honda_chatbot.* TO 'honda_app'@'localhost'")
-            cur.execute("GRANT EXECUTE ON FUNCTION honda_chatbot.fn_session_branch TO 'honda_app'@'localhost'")
-            cur.execute("GRANT EXECUTE ON FUNCTION honda_chatbot.fn_session_user TO 'honda_app'@'localhost'")
         counts = verify_counts(connection)
     except Exception as exc:
         if connection is not None and connection.is_connected():
@@ -256,6 +261,8 @@ def main() -> int:
         for key in ("password", "chatbot_ro_password"):
             if config.get(key):
                 safe_message = safe_message.replace(str(config[key]), "***")
+        for key in ('APP_DB_PASSWORD','DEMO_ACCOUNT_PASSWORD'):
+            if os.getenv(key):safe_message=safe_message.replace(os.environ[key],'***')
         print(f"MySQL initialization failed: {safe_message}", file=sys.stderr)
         return 1
     finally:

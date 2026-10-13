@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import re
 from typing import Any
 
 from flask import Flask, jsonify, render_template, request, session, g, redirect
@@ -33,7 +34,7 @@ if secret_key:
     app.secret_key = secret_key
 else:
     raise RuntimeError('FLASK_SECRET_KEY is required')
-app.config.update(SESSION_COOKIE_HTTPONLY=True,SESSION_COOKIE_SAMESITE='Lax',SESSION_COOKIE_SECURE=os.getenv('APP_ENV')!='dev')
+app.config.update(SESSION_COOKIE_HTTPONLY=True,SESSION_COOKIE_SAMESITE='Lax',SESSION_COOKIE_SECURE=os.getenv('APP_ENV')!='dev',MAX_CONTENT_LENGTH=65536)
 app.before_request(initialize_request)
 register_auth(app)
 register_dashboard(app)
@@ -167,6 +168,7 @@ def chat():
             "engine": engine,
             "access_denied": denied,
             "rows": context.rows if isinstance(context,QueryEvidence) else [],
+            "sources": [{'id':int(i),'title':title} for i,title in re.findall(r'\[Nguồn id=(\d+) \| tiêu đề=([^\]]+)\]',str(context))],
         })
     except (SchemaExtensionRequired, SQLSchemaExtensionRequired) as exc:
         message = str(exc)
