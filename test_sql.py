@@ -7,7 +7,7 @@ __test__ = False
 # File này dùng để làm gì:
 #   - Nhận danh sách các câu hỏi test thuộc luồng SQL.
 #   - Gọi `routing.route_question` để phân loại và xác định module.
-#   - Gọi `sql_service.answer_sql_question` để truy vấn CSDL SQLite lấy dữ liệu ngữ cảnh thực tế (context).
+#   - Gọi `sql_service.answer_sql_question` để truy vấn CSDL MySQL/MariaDB lấy dữ liệu ngữ cảnh thực tế (context).
 #   - Gọi `ai_service.generate_answer` truyền context tới Groq AI LLM sinh câu trả lời tự nhiên.
 #   - In kết quả kiểm thử (Loại, Module, Context, Groq AI response) ra màn hình terminal.
 # Khi nào file được gọi:
@@ -17,7 +17,7 @@ __test__ = False
 #           ↓
 #   [routing.route_question -> Xác định "SQL" & tên Module]
 #           ↓
-#   [sql_service.answer_sql_question -> Truy vấn SQLite lấy dữ liệu]
+#   [sql_service.answer_sql_question -> Truy vấn MySQL/MariaDB lấy dữ liệu]
 #           ↓
 #   [ai_service.generate_answer -> Groq AI sinh văn bản trả lời]
 #           ↓
@@ -60,9 +60,9 @@ def test_pipeline(question):
     print(f"Module  : {module}")
 
     # ---------------------------------------------------------
-    # Bước 2 trong hàm: Lấy context dữ liệu từ cơ sở dữ liệu SQLite
+    # Bước 2 trong hàm: Lấy context dữ liệu từ cơ sở dữ liệu MySQL/MariaDB
     # - Điều kiện IF / ELSE:
-    #     + Khi TRUE (SQL): Gọi `answer_sql_question(question)` lấy ngữ cảnh thực tế từ `database.db`.
+    #     + Khi TRUE (SQL): Gọi `answer_sql_question(question)` lấy ngữ cảnh thực tế từ `honda_chatbot`.
     #     + Khi FALSE (RAG): Đặt giá trị thông báo bỏ qua RAG trong file test này.
     # ---------------------------------------------------------
     if question_type == "SQL":

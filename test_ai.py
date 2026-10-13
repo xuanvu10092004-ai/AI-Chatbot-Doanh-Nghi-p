@@ -24,15 +24,14 @@ import os
 
 import pytest
 
-pytestmark = pytest.mark.skipif(
-    not os.getenv("GROQ_API_KEY"),
-    reason="GROQ_API_KEY is not configured",
-)
 
 from routing import route_question          # Phân loại SQL hay RAG
 from sql_service import answer_sql_question # Lấy dữ liệu thật từ database
 from rag_service import search_documents    # Tìm tài liệu thật từ bảng documents
 from ai_service import generate_answer      # Gọi Groq AI sinh câu trả lời
+from access_control import create_session
+
+pytestmark = pytest.mark.skipif(not os.getenv('GROQ_API_KEY'), reason='GROQ_API_KEY is not configured')
 
 
 # ==========================================================
@@ -45,6 +44,7 @@ from ai_service import generate_answer      # Gọi Groq AI sinh câu trả lờ
 # - Hàm này được gọi ở đâu: Được gọi trong vòng lặp FOR ở khối `if __name__ == "__main__":`.
 # - Vai trò trong hệ thống: Hàm thực thi kiểm thử tích hợp toàn trình (End-to-End Test Case Runner).
 # ==========================================================
+@pytest.mark.parametrize('question', ['SH 160i giá bao nhiêu?', 'Thủ tục trả góp?'])
 def test_with_real_data(question):
     """
     Chạy toàn bộ pipeline: câu hỏi → routing → lấy dữ liệu → AI trả lời.
@@ -72,16 +72,17 @@ def test_with_real_data(question):
     # ---------------------------------------------------------
     # Bước 2 trong hàm: Điều hướng lấy dữ liệu context từ nguồn phù hợp
     # - Điều kiện IF / ELSE:
-    #     + Khi TRUE (SQL): Lấy ngữ cảnh từ CSDL SQLite thông qua `answer_sql_question(question)`.
-    #     + Khi FALSE (RAG): Tìm kiếm văn bản tài liệu liên quan từ `search_documents(question)`.
+    #     + Khi TRUE (SQL): Lấy ngữ cảnh từ CSDL MySQL/MariaDB thông qua `answer_sql_question(question, session_id=session_id)`.
+    #     + Khi FALSE (RAG): Tìm kiếm văn bản tài liệu liên quan từ `search_documents(question, session_id=session_id)`.
     # ---------------------------------------------------------
+    session_id = create_session(None)
     if question_type == "SQL":
         # Truy vấn database thật → trả về chuỗi kết quả
-        context = answer_sql_question(question)
+        context = answer_sql_question(question, session_id=session_id)
         print(f"Context :\n{context.strip()}")
     else:
         # RAG → tìm tài liệu thật từ bảng documents
-        context = search_documents(question)
+        context = search_documents(question, session_id=session_id)
         print(f"Context :\n{context.strip()}")
 
     # ---------------------------------------------------------
@@ -96,7 +97,7 @@ def test_with_real_data(question):
     # ---------------------------------------------------------
     # Bước 4 trong hàm: Trả về câu trả lời
     # ---------------------------------------------------------
-    return answer
+    assert isinstance(answer, str) and answer.strip()
 
 
 # ==========================================================

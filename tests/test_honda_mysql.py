@@ -8,12 +8,12 @@ from db import get_connection
 
 @pytest.fixture()
 def mysql_connection():
-    try:
-        connection = get_connection("app")
-        connection.cursor().execute("SELECT 1")
-    except Exception as exc:
-        pytest.skip(f"MySQL unavailable: {exc}")
+    connection = get_connection("app")
+    with connection.cursor() as cur:
+        cur.execute("SELECT 1")
+        assert cur.fetchone()[0] == 1
     yield connection
+    connection.rollback()
     connection.close()
 
 

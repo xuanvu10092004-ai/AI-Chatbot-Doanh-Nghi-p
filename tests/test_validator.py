@@ -32,3 +32,27 @@ def test_validator_caps_limit():
 def test_validator_rejects_unsafe_sql(sql):
     with pytest.raises(ValueError):
         validate_sql(sql, VIEWS)
+
+
+@pytest.mark.parametrize('sql', [
+    'WITH models AS (SELECT * FROM v_ai_products) SELECT * FROM models',
+    'SELECT model_name FROM v_ai_products UNION SELECT model_name FROM v_ai_inventory',
+    'SELECT segment, COUNT(*) FROM v_ai_products GROUP BY segment',
+])
+def test_valid_ast_queries(sql):
+    assert validate_sql(sql, VIEWS).limit == 100
+
+
+@pytest.mark.parametrize('sql', [
+    'SELECT * FROM v_ai_products, users',
+    'WITH users AS (SELECT * FROM users) SELECT * FROM users',
+    'SELECT * FROM information_schema.tables',
+    'SELECT @ai_branch FROM v_ai_products',
+    'SELECT GET_LOCK("x", 1) FROM v_ai_products',
+    'SELECT * FROM v_ai_products FOR UPDATE',
+    'SELECT * FROM v_ai_products WHERE EXISTS (SELECT * FROM users)',
+    'SELECT * FROM v_ai_product_costs',
+])
+def test_ast_attacks_rejected(sql):
+    with pytest.raises(ValueError):
+        validate_sql(sql, frozenset({'v_ai_products', 'v_ai_inventory'}))
