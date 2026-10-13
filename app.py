@@ -22,6 +22,7 @@ from question_language import resolve_followup
 from answer_renderer import QueryEvidence
 from security import initialize_request,permissions,navigation,csrf_token,require_permission
 from auth_routes import register_auth
+from dashboard_routes import register_dashboard
 
 
 app = Flask(__name__)
@@ -33,6 +34,7 @@ else:
 app.config.update(SESSION_COOKIE_HTTPONLY=True,SESSION_COOKIE_SAMESITE='Lax',SESSION_COOKIE_SECURE=os.getenv('APP_ENV')!='dev')
 app.before_request(initialize_request)
 register_auth(app)
+register_dashboard(app)
 
 @app.after_request
 def security_headers(response):
@@ -58,14 +60,14 @@ def chat_page():
 
 
 @app.route("/api/dashboard", methods=["GET"])
+@require_permission('dashboard:view')
 def dashboard():
-    try:
-        return jsonify(get_dashboard_stats())
-    except Exception as exc:
-        return jsonify({"error": str(exc)}), 500
+    from dashboard_service import WIDGETS,widget_data
+    return jsonify({code:widget_data(code) for code,(_,codes) in WIDGETS.items() if all(c in permissions() for c in codes)})
 
 
 @app.route("/api/low-stock", methods=["GET"])
+@require_permission('inventory:read')
 def low_stock():
     try:
         return jsonify(get_low_stock_products())
@@ -74,6 +76,7 @@ def low_stock():
 
 
 @app.route("/api/potential-customers", methods=["GET"])
+@require_permission('customer:read')
 def potential_customers():
     try:
         return jsonify(get_potential_customers())
