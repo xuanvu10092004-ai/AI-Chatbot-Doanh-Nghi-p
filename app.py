@@ -118,3 +118,7 @@ def chat():
         message = f"Lỗi backend: {exc}"
         record_message(session_id, "bot", message)
         return jsonify({"error": "backend-error", "message": message}), 500
+
+
+if __name__ == "__main__":
+    app.run(host="127.0.0.1", port=5000, debug=True, use_reloader=False)
