@@ -3,7 +3,7 @@ import json
 import os
 import secrets
 from functools import wraps
-from urllib.parse import urlsplit
+from urllib.parse import urlsplit,unquote
 from flask import g,session,request,redirect,url_for,jsonify,render_template
 from werkzeug.security import check_password_hash,generate_password_hash
 from db import cursor
@@ -17,6 +17,7 @@ def csrf_token():
 
 
 def safe_next(value):
+    if value: value=unquote(value)
     if not value or not value.startswith('/') or value.startswith('//') or '\\' in value or any(ord(c)<32 for c in value):return None
     parsed=urlsplit(value)
     return value if not parsed.scheme and not parsed.netloc else None
@@ -100,6 +101,7 @@ def authenticate(email,password):
         if not user or not user['is_active'] or user['locked'] or not valid:
             if user and user['is_active'] and not user['locked']:
                 cur.execute('UPDATE users SET failed_login_count=failed_login_count+1,locked_until=CASE WHEN failed_login_count>=5 THEN DATE_ADD(NOW(),INTERVAL 15 MINUTE) ELSE locked_until END WHERE id=%s',(user['id'],))
+                cur.execute('SELECT locked_until IS NOT NULL AND locked_until>NOW() AS locked FROM users WHERE id=%s',(user['id'],));user['locked']=bool(cur.fetchone()['locked'])
             audit(cur,'login_locked' if user and user['locked'] else 'login_failed','user',user['id'] if user else None,actor=user['id'] if user else None)
             return None
         cur.execute('UPDATE users SET failed_login_count=0,locked_until=NULL,last_login_at=NOW() WHERE id=%s',(user['id'],))

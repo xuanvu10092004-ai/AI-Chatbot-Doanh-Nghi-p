@@ -35,6 +35,15 @@ def check_invariants(cur,actor,had_manage):
 
 def mutate(kind,target_id,data,operation='save'):
     actor=g.user['id'];had_manage='rbac:manage' in permissions()
+    if kind in {'user','assignment'}:
+        grant=permissions()['user:manage']
+        if grant['scope']!='all':
+            with cursor() as check:
+                check.execute('SELECT home_branch_id FROM users WHERE id=%s',(target_id or actor,));target=check.fetchone()
+            if target_id and (not target or (grant['scope']=='branch' and target['home_branch_id']!=grant['branch']) or (grant['scope']=='own' and target_id!=actor)):
+                raise AdminRejected('Tài khoản ngoài phạm vi quản trị của bạn.')
+            if 'home_branch_id' in data and grant['scope']=='branch' and data['home_branch_id']!=grant['branch']:raise AdminRejected('Chi nhánh ngoài phạm vi quản trị.')
+            if not target_id and grant['scope']=='own':raise AdminRejected('Không có quyền tạo tài khoản mới.')
     with cursor() as cur:
         cur.execute('SELECT version FROM rbac_meta WHERE id=1 FOR UPDATE');cur.fetchone()
         before=None;after=None
@@ -42,6 +51,7 @@ def mutate(kind,target_id,data,operation='save'):
             if target_id:
                 cur.execute('SELECT * FROM roles WHERE id=%s',(target_id,));before=cur.fetchone()
                 if not before:raise AdminRejected('Không tìm thấy vai trò.')
+                cur.execute('SELECT permission_id,data_scope FROM role_permissions WHERE role_id=%s',(target_id,));before['permissions']=cur.fetchall()
                 if before['name']=='super_admin':raise AdminRejected('Vai trò super_admin được bảo vệ và luôn có tất cả quyền.')
                 if operation=='delete':
                     cur.execute('SELECT COUNT(*) AS n FROM user_roles WHERE role_id=%s',(target_id,));used=cur.fetchone()['n']
@@ -76,6 +86,7 @@ def mutate(kind,target_id,data,operation='save'):
             if target_id:
                 cur.execute('SELECT id,email,full_name,home_branch_id,is_active,must_change_password FROM users WHERE id=%s',(target_id,));before=cur.fetchone()
                 if not before:raise AdminRejected('Không tìm thấy tài khoản.')
+                cur.execute('SELECT role_id,scope_branch_id,expires_at FROM user_roles WHERE user_id=%s',(target_id,));before['roles']=cur.fetchall()
                 if 'locked_until' in data and target_id==actor:raise AdminRejected('Không được tự khóa tài khoản.')
                 cur.execute('UPDATE users SET full_name=%s,home_branch_id=%s,is_active=%s WHERE id=%s',(data.get('full_name',before['full_name']),data.get('home_branch_id',before['home_branch_id']),bool_value(data.get('is_active',before['is_active'])),target_id))
                 if data.get('unlock'):
@@ -92,6 +103,7 @@ def mutate(kind,target_id,data,operation='save'):
             if 'roles' in data:
                 set_roles(cur,target_id,data['roles'])
             cur.execute('SELECT id,email,full_name,home_branch_id,is_active,must_change_password,locked_until FROM users WHERE id=%s',(target_id,));after=cur.fetchone()
+            cur.execute('SELECT role_id,scope_branch_id,expires_at FROM user_roles WHERE user_id=%s',(target_id,));after['roles']=cur.fetchall()
         elif kind=='assignment':
             cur.execute('SELECT role_id,scope_branch_id,expires_at FROM user_roles WHERE user_id=%s',(target_id,));before=cur.fetchall()
             if operation=='delete':cur.execute('DELETE FROM user_roles WHERE user_id=%s AND role_id=%s',(target_id,int(data['role_id'])))
@@ -103,7 +115,8 @@ def mutate(kind,target_id,data,operation='save'):
             cur.execute('UPDATE permissions SET description=%s WHERE id=%s',(data.get('description',''),target_id));after={**before,'description':data.get('description','')}
         else:raise AdminRejected('Thao tác không hợp lệ.')
         check_invariants(cur,actor,had_manage)
-        audit(cur,operation+'_'+kind,kind,target_id,before,after,actor=actor)
+        action=('lock_user' if data.get('lock') else 'unlock_user' if data.get('unlock') else 'password_reset' if data.get('password') and before else operation+'_'+kind)
+        audit(cur,action,kind,target_id,before,after,actor=actor)
         cur.execute('UPDATE rbac_meta SET version=version+1 WHERE id=1')
     return target_id
 
@@ -116,6 +129,14 @@ def set_roles(cur,user_id,roles,replace=True):
         if role['name']=='super_admin':
             cur.execute("SELECT 1 FROM v_user_permissions WHERE user_id=%s AND role_name='super_admin' LIMIT 1",(g.user['id'],))
             if not cur.fetchone():raise AdminRejected('Chỉ super_admin có thể gán super_admin.')
+        if 'rbac:manage' not in permissions():
+            cur.execute('SELECT p.code,rp.data_scope FROM role_permissions rp JOIN permissions p ON p.id=rp.permission_id WHERE rp.role_id=%s',(int(assignment['role_id']),))
+            for row in cur.fetchall():
+                owned=permissions().get(row['code'])
+                if not owned or (owned['scope']!='all' and row['data_scope']=='all') or (owned['scope']=='own' and row['data_scope']=='branch'):
+                    raise AdminRejected('Không được gán quyền rộng hơn quyền của người quản trị.')
+                if owned['scope']=='branch' and row['data_scope']=='branch' and assignment.get('scope_branch_id')!=owned['branch']:
+                    raise AdminRejected('Không được gán quyền ngoài chi nhánh được quản trị.')
     if replace:cur.execute('DELETE FROM user_roles WHERE user_id=%s',(user_id,))
     for assignment in roles:
         expiry=assignment.get('expires_at') or None

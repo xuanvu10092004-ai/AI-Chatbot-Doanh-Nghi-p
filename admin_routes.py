@@ -3,6 +3,7 @@ from mysql.connector import IntegrityError
 from db import cursor
 from security import require_permission
 from admin_service import mutate,AdminRejected
+from dashboard_service import scope_filter
 
 
 def register_admin(app):
@@ -17,8 +18,9 @@ def register_admin(app):
     @require_permission('user:manage')
     def users_list():
         search='%'+request.args.get('q','')+'%'
+        where,params=scope_filter('user:manage','home_branch_id','id')
         with cursor() as cur:
-            cur.execute('SELECT id,email,full_name,home_branch_id,is_active,must_change_password,locked_until FROM users WHERE email LIKE %s OR full_name LIKE %s ORDER BY id LIMIT 100',(search,search));rows=cur.fetchall()
+            cur.execute('SELECT id,email,full_name,home_branch_id,is_active,must_change_password,locked_until FROM users WHERE '+where+' AND (email LIKE %s OR full_name LIKE %s) ORDER BY id LIMIT 100',(*params,search,search));rows=cur.fetchall()
             cur.execute('SELECT user_id,role_id,scope_branch_id,expires_at FROM user_roles ORDER BY user_id,role_id');grants=cur.fetchall()
             for row in rows:row['roles']=[r for r in grants if r['user_id']==row['id']]
         return jsonify(rows=rows)
@@ -29,7 +31,8 @@ def register_admin(app):
         with cursor() as cur:
             cur.execute('SELECT * FROM roles ORDER BY priority,id');rows=cur.fetchall()
             cur.execute('SELECT role_id,permission_id,data_scope FROM role_permissions');grants=cur.fetchall()
-            for row in rows:row['permissions']=[r for r in grants if r['role_id']==row['id']]
+            cur.execute('SELECT id FROM permissions');all_permissions=cur.fetchall()
+            for row in rows:row['permissions']=[{'permission_id':p['id'],'data_scope':'all'} for p in all_permissions] if row['name']=='super_admin' else [r for r in grants if r['role_id']==row['id']]
         return jsonify(rows=rows)
 
     @app.get('/api/admin/permissions')
