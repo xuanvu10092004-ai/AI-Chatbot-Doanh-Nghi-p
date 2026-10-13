@@ -1,4 +1,4 @@
-﻿# Chatbot Honda — Flask + MySQL/MariaDB
+# Chatbot Honda — Flask + MySQL/MariaDB
 
 Ứng dụng tra cứu dữ liệu Honda bằng SQL có kiểm soát quyền và RAG từ `kb_documents`. Dữ liệu Honda đi kèm là **dữ liệu mô phỏng**, không phải bảng giá thị trường.
 
@@ -23,7 +23,7 @@ CHATBOT_RO_PASSWORD=choose-your-local-password
 FLASK_SECRET_KEY=choose-a-random-session-secret
 APP_ENV=dev
 GROQ_API_KEY=
-GROQ_MODEL=llama-3.3-70b-versatile
+GROQ_MODEL=openai/gpt-oss-20b
 ```
 
 Mật khẩu root rỗng chỉ áp dụng cho cấu hình XAMPP cục bộ hiện tại. `db.py` đọc `.env` từ thư mục dự án, không phụ thuộc thư mục chạy lệnh. Khóa Groq cần lấy từ tài khoản thật; không dùng khóa giả.
@@ -56,9 +56,17 @@ Backend lấy user từ phiên đăng nhập. Chỉ dev cho phép header `X-Demo
 
 ## Dữ liệu, quyền và giới hạn
 
+Giao diện dev có mục **Tài khoản thử nghiệm**, mặc định là Khách. Muốn hỏi tồn kho NT01, chọn **Bán hàng NT01**; muốn tra toàn hệ thống, chọn **Quản trị**. Production không hiển thị lựa chọn này và bỏ qua header demo.
+
+Tên xe có thể viết “AB160”, “Air Blade 160”, “SH Mode 125”, “shmode125”. Giá “bao nhiêu” được phân biệt với số phiên bản “bao nhiêu”. “Tồn kho còn bao nhiêu” cộng số xe trong phạm vi được cấp quyền. Câu hỏi tiếp nối như “màu nào?” giữ tên xe đang trao đổi.
+
+Có thể hỏi “xe ga dưới 50 triệu”, “so sánh Vision 110 và Lead 125”, “tổng tồn kho theo chi nhánh”. Các câu này cần Groq; nếu chưa có khóa/dịch vụ lỗi, chatbot yêu cầu làm rõ hoặc thử lại. AI không đảm bảo trả được câu ngoài dữ liệu hoặc quyền; thiếu dữ liệu thì nói rõ, không thay mẫu xe người dùng hỏi bằng mẫu khác. Bộ dữ liệu này có Air Blade 160, không có Air Blade 125.
+
+SQL trả số liệu qua `answer_renderer.py`, bảo toàn chữ số và định dạng tiền VNĐ. Truy vấn nâng cao được Groq tạo rồi kiểm tra và tham số hóa (`engine=groq-sql`); truy vấn cố định trả `engine=database`. RAG vẫn dùng Groq diễn đạt từ bằng chứng và nguồn tài liệu (`engine=groq`).
+
 - SQL dùng tài khoản `chatbot_ro@localhost`, chỉ SELECT năm view AI và EXECUTE hàm phạm vi chi nhánh. Không đọc bảng gốc, không ghi.
 - Backend tính whitelist theo registry + quyền của từng user; kiểm tra intent trước truy xuất. SQL được kiểm tra bằng AST sqlglot, giới hạn 100 dòng.
-- Các câu hỏi phổ biến dùng truy vấn tham số hóa trong `query_plans.py`. Pipeline hiện tại không gọi LLM để sinh SQL tùy ý.
+- Các câu hỏi phổ biến dùng truy vấn tham số hóa trong `query_planner.py`. Câu phức tạp dùng Groq sinh SELECT với schema giới hạn theo intent và quyền; backend kiểm tra AST và bind literal thành tham số trước khi chạy bằng tài khoản chỉ đọc.
 - `schema_context.py` dựng schema theo whitelist từ metadata và `ai_data_dictionary`. View không hỗ trợ COMMENT riêng nên mô tả tiếng Việt được lưu bằng dictionary.
 - Phạm vi chi nhánh đặt vào `@ai_branch`, view lọc qua `fn_session_branch()`; backend reset biến khi trả connection về pool.
 - MariaDB dùng timeout `max_statement_time=5` giây, FULLTEXT thường và tìm RAG bằng LIKE có tham số. MySQL dùng `MAX_EXECUTION_TIME=5000` mili giây và FULLTEXT ngram. Chưa kiểm chứng nhánh MySQL 8 trên môi trường này.
