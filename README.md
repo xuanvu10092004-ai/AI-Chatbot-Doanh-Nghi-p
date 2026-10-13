@@ -52,3 +52,31 @@ Chạy file `app.py` để bật server Flask:
 python app.py
 ```
 Hệ thống sẽ chạy Web Server cục bộ và tự động mở trình duyệt web của bạn.
+
+## MySQL Honda Chatbot
+
+Yêu cầu MySQL 8.0.16+ và Python 3.13+. Cài dependency:
+
+```powershell
+python -m pip install -r requirements.txt
+```
+
+Tạo `.env` từ `.env.example` và điền `DB_HOST`, `DB_PORT`, `DB_USER`,
+`DB_PASSWORD`, `DB_NAME=honda_chatbot`, `CHATBOT_RO_PASSWORD` và tùy chọn
+`GROQ_API_KEY`. Không commit `.env`.
+
+Khởi tạo lại schema, seed và các extension theo thứ tự:
+
+```powershell
+python init_db.py --reset
+```
+
+Chạy test:
+
+```powershell
+python -m pytest -q
+```
+
+Các test cần MySQL thật sẽ tự skip nếu server chưa chạy; test Groq tự skip khi
+thiếu `GROQ_API_KEY`. Các module Opportunity, Quote và Booking trả HTTP 501 cho
+đến khi có schema-extension chính thức.
