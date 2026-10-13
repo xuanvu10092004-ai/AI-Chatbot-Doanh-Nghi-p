@@ -16,7 +16,7 @@ def client(monkeypatch):
     monkeypatch.setenv('APP_ENV', 'dev')
     monkeypatch.delenv('GROQ_API_KEY', raising=False)
     app.config.update(TESTING=True)
-    return app.test_client()
+    return app.test_client().login(None)
 
 
 @pytest.mark.parametrize('body', [None, [], {'question': None}, {'question': 3}, {}, {'question': '  '}])
@@ -42,7 +42,7 @@ def test_cost_denied_before_retrieval(client, monkeypatch, user):
     def forbidden(*args, **kwargs):
         pytest.fail('SQL retrieval must not run for a denied question')
     monkeypatch.setattr('sql_service._execute_text_to_sql', forbidden)
-    response = client.post('/chat', json={'question': 'Giá vốn SH 160i?'}, headers={'X-Demo-User-Id': user} if user else {})
+    response = client.post_as(int(user) if user else None, '/chat', json={'question': 'Giá vốn SH 160i?'})
     assert response.status_code == 200
     data = response.get_json()
     assert data['answer'] == 'Tôi không thể hỗ trợ yêu cầu này.'
@@ -52,7 +52,7 @@ def test_cost_denied_before_retrieval(client, monkeypatch, user):
 
 
 def test_sales_scope_and_pool_reset(client):
-    data = client.post('/chat', json={'question': 'Tồn kho tại NT02'}, headers={'X-Demo-User-Id': '3'}).get_json()
+    data = client.post_as(3, '/chat', json={'question': 'Tồn kho tại NT02'}).get_json()
     assert data['answer'] == 'Không tìm thấy dữ liệu phù hợp.'
     rows = _execute_text_to_sql('SELECT branch_code FROM v_ai_inventory', allowed_views=permitted_views(3), scope_branch_ids=[1])
     assert len(rows) == 28 and {r['branch_code'] for r in rows} == {'NT01'}
@@ -163,7 +163,7 @@ def test_standard_answers_against_base_sql(question, oracle, params, key, client
         assert [r[key] for r in actual] == [next(iter(r.values())) for r in expected]
     else:
         assert actual == expected
-    response = client.post('/chat', json={'question': question}, headers={'X-Demo-User-Id': '1'})
+    response = client.post_as(1, '/chat', json={'question': question})
     assert response.status_code == 200
     answer = response.get_json()['answer']
     for row in expected:

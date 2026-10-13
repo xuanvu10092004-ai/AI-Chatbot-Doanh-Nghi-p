@@ -3,9 +3,9 @@ from __future__ import annotations
 import os
 from typing import Any
 
-from flask import Flask, jsonify, render_template, request, session
+from flask import Flask, jsonify, render_template, request, session, g, redirect
 
-from access_control import create_session, record_message, resolve_user_id, resume_session, read_history
+from access_control import create_session, record_message, resume_session, read_history
 from ai_service import generate_answer
 from database_service import (
     SchemaExtensionRequired,
@@ -20,17 +20,41 @@ from sql_service import SchemaExtensionRequired as SQLSchemaExtensionRequired
 from mysql.connector import Error as DatabaseError
 from question_language import resolve_followup
 from answer_renderer import QueryEvidence
+from security import initialize_request,permissions,navigation,csrf_token,require_permission
+from auth_routes import register_auth
 
 
 app = Flask(__name__)
 secret_key = os.getenv("FLASK_SECRET_KEY")
 if secret_key:
     app.secret_key = secret_key
+else:
+    raise RuntimeError('FLASK_SECRET_KEY is required')
+app.config.update(SESSION_COOKIE_HTTPONLY=True,SESSION_COOKIE_SAMESITE='Lax',SESSION_COOKIE_SECURE=os.getenv('APP_ENV')!='dev')
+app.before_request(initialize_request)
+register_auth(app)
+
+@app.after_request
+def security_headers(response):
+    response.headers['Content-Security-Policy']="default-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'"
+    response.headers['X-Frame-Options']='DENY'
+    response.headers['X-Content-Type-Options']='nosniff'
+    response.headers['Cache-Control']='no-store'
+    return response
+
+@app.context_processor
+def shell_context():
+    return dict(csrf_token=csrf_token,current_user=g.user,menu=navigation() if g.user or session.get('guest') else [],identity=' · '.join(r['name']+' — '+(r['branch_code'] or 'Toàn hệ thống') for r in g.roles) if g.user else 'Khách',can=lambda code:code in permissions())
 
 
 @app.route("/")
 def home():
-    return render_template("index.html", demo_mode=os.getenv('APP_ENV') == 'dev')
+    return redirect(g.roles[0]['landing_path'] if g.roles else '/chat')
+
+@app.get('/chat')
+@require_permission('kb:public:read')
+def chat_page():
+    return render_template('index.html',demo_mode=False)
 
 
 @app.route("/api/dashboard", methods=["GET"])
@@ -58,12 +82,7 @@ def potential_customers():
 
 
 def _current_user_id() -> int | None:
-    session_user_id = session.get("user_id") if app.secret_key else None
-    return resolve_user_id(
-        session_user_id,
-        request.headers.get("X-Demo-User-Id"),
-        os.getenv("APP_ENV", "prod"),
-    )
+    return g.user['id'] if g.user else None
 
 
 def _legacy_not_implemented(module: str):
@@ -88,7 +107,8 @@ def bookings():
     return _legacy_not_implemented("Booking")
 
 
-@app.route("/chat", methods=["POST"])
+@app.route("/chat", methods=["POST"],endpoint='chat_api')
+@require_permission('kb:public:read')
 def chat():
     data = request.get_json(silent=True)
     if not isinstance(data, dict) or not isinstance(data.get('question'), str) or not data['question'].strip():
@@ -140,7 +160,7 @@ def chat():
             "session_id": session_id,
             "engine": engine,
             "access_denied": denied,
-            "demo_mode": os.getenv('APP_ENV') == 'dev',
+            "rows": context.rows if isinstance(context,QueryEvidence) else [],
         })
     except (SchemaExtensionRequired, SQLSchemaExtensionRequired) as exc:
         message = str(exc)

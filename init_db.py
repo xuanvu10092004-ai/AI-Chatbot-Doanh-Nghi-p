@@ -247,6 +247,7 @@ def main() -> int:
             cur.execute("REVOKE ALL PRIVILEGES, GRANT OPTION FROM 'honda_app'@'localhost'")
             cur.execute("GRANT SELECT,INSERT,UPDATE,DELETE ON honda_chatbot.* TO 'honda_app'@'localhost'")
             cur.execute("GRANT EXECUTE ON FUNCTION honda_chatbot.fn_session_branch TO 'honda_app'@'localhost'")
+            cur.execute("GRANT EXECUTE ON FUNCTION honda_chatbot.fn_session_user TO 'honda_app'@'localhost'")
         counts = verify_counts(connection)
     except Exception as exc:
         if connection is not None and connection.is_connected():

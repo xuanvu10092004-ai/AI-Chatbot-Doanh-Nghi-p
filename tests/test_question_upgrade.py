@@ -68,6 +68,7 @@ def test_live_mode_sql_does_not_rewrite_numbers(monkeypatch):
         pytest.fail('The answer model must not rewrite SQL values')
     monkeypatch.setattr('app.generate_answer', forbidden)
     with app.test_client() as client:
+        client.login(None)
         response = client.post('/chat', json={'question': 'giá ab 160 bao nhiêu'})
         assert response.status_code == 200
         with cursor() as cur:
@@ -81,6 +82,7 @@ def test_followup_keeps_model_without_reusing_permissions(monkeypatch):
     monkeypatch.delenv('GROQ_API_KEY', raising=False)
     monkeypatch.setenv('APP_ENV', 'dev')
     with app.test_client() as client:
+        client.login(None)
         first = client.post('/chat', json={'question': 'thông tin SH Mode 125'}).get_json()
         followup = client.post('/chat', json={'question': 'màu nào?'}).get_json()
         assert followup['session_id'] == first['session_id']
@@ -91,19 +93,21 @@ def test_followup_keeps_model_without_reusing_permissions(monkeypatch):
 
 def test_dev_identity_is_visible_but_absent_in_prod(monkeypatch):
     with app.test_client() as client:
+        client.login(None)
         monkeypatch.setenv('APP_ENV', 'dev')
-        assert 'id="demoUser"' in client.get('/').get_data(as_text=True)
+        assert 'id="demoUser"' not in client.get('/chat').get_data(as_text=True)
         monkeypatch.setenv('APP_ENV', 'prod')
-        assert 'id="demoUser"' not in client.get('/').get_data(as_text=True)
+        assert 'id="demoUser"' not in client.get('/chat').get_data(as_text=True)
 
 
 def test_screenshot_questions_through_api(monkeypatch):
     monkeypatch.setenv('APP_ENV', 'dev')
     monkeypatch.delenv('GROQ_API_KEY', raising=False)
     with app.test_client() as client:
+        client.login(None)
         stock = client.post('/chat', json={'question': 'hàng tồn kho còn bao nhiêu'}).get_json()
         assert stock['access_denied'] is True
-        stock = client.post('/chat', json={'question': 'hàng tồn kho còn bao nhiêu'}, headers={'X-Demo-User-Id': '3'}).get_json()
+        stock = client.post_as(3, '/chat', json={'question': 'hàng tồn kho còn bao nhiêu'}).get_json()
         assert 'total_stock' in stock['answer'] and not stock['access_denied']
         price = client.post('/chat', json={'question': 'giá ab 125 bao nhiêu'}).get_json()
         assert price['answer'] == 'Không tìm thấy dữ liệu phù hợp.'
@@ -153,6 +157,7 @@ def test_llm_cannot_expand_guest_rights(monkeypatch):
     monkeypatch.setenv('GROQ_API_KEY', 'test-key')
     monkeypatch.setattr(ai_service, 'client', SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=completion))))
     with app.test_client() as client:
+        client.login(None)
         result = client.post('/chat', json={'question': 'So sánh các mẫu xe'}).get_json()
         assert result['answer'] == 'Tôi không thể hỗ trợ yêu cầu này.'
         with cursor() as cur:

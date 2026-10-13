@@ -36,7 +36,7 @@ def _format_rows(rows: list[dict[str, Any]], generated: bool = False) -> str:
     return QueryEvidence("\n".join(lines), rows, generated)
 
 
-def _execute_text_to_sql(sql: str, params: tuple[Any, ...] = (), *, allowed_views=None, scope_branch_ids=None) -> list[dict[str, Any]]:
+def _execute_text_to_sql(sql: str, params: tuple[Any, ...] = (), *, allowed_views=None, scope_branch_ids=None, own_user_id=None) -> list[dict[str, Any]]:
     validated = validate_sql(sql, frozenset({'v_ai_products'} if allowed_views is None else allowed_views))
     if scope_branch_ids is not None and len(scope_branch_ids) != 1:
         raise ValueError("ambiguous_branch_scope")
@@ -45,6 +45,7 @@ def _execute_text_to_sql(sql: str, params: tuple[Any, ...] = (), *, allowed_view
     try:
         db_cursor = connection.cursor(dictionary=True)
         db_cursor.execute("SET @ai_branch = %s", (scope_branch_ids[0] if scope_branch_ids else None,))
+        db_cursor.execute('SET @ai_user = %s',(own_user_id,))
         db_cursor.execute("SELECT VERSION() AS version")
         version = db_cursor.fetchone()['version']
         if 'MariaDB' in version:
@@ -57,6 +58,7 @@ def _execute_text_to_sql(sql: str, params: tuple[Any, ...] = (), *, allowed_view
         if db_cursor is not None:
             try:
                 db_cursor.execute("SET @ai_branch = NULL")
+                db_cursor.execute('SET @ai_user = NULL')
             finally:
                 db_cursor.close()
         connection.close()
@@ -112,5 +114,5 @@ def answer_sql_question(
     except Exception:
         return 'Chưa phân tích được câu hỏi lúc này. Bạn hãy thử lại hoặc nêu rõ mẫu xe và điều kiện.'
     rows = _execute_text_to_sql(sql, params, allowed_views=allowed_views,
-                                scope_branch_ids=authorization['scope_branch_ids'])
+                                scope_branch_ids=authorization['scope_branch_ids'],own_user_id=authorization['own_user_id'])
     return _format_rows(rows, generated)

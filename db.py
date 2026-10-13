@@ -65,6 +65,7 @@ def get_connection(role: str = "app") -> MySQLConnection:
         try:
             with connection.cursor() as cur:
                 cur.execute('SET @ai_branch = NULL')
+                cur.execute('SET @ai_user = NULL')
                 cur.execute('SELECT VERSION()')
                 version = cur.fetchone()[0]
                 if 'MariaDB' in version:
