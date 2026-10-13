@@ -1,3 +1,6 @@
+# Pytest không thu thập script chạy thủ công này như một test function.
+__test__ = False
+
 # ==========================================================
 # Tên file: test_sql.py
 # Mục đích của file: Script kiểm thử tự động toàn bộ pipeline xử lý Text-to-SQL độc lập.

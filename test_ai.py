@@ -20,6 +20,15 @@
 #   [In nhật ký kiểm thử chi tiết và trả về kết quả]
 # ==========================================================
 
+import os
+
+import pytest
+
+pytestmark = pytest.mark.skipif(
+    not os.getenv("GROQ_API_KEY"),
+    reason="GROQ_API_KEY is not configured",
+)
+
 from routing import route_question          # Phân loại SQL hay RAG
 from sql_service import answer_sql_question # Lấy dữ liệu thật từ database
 from rag_service import search_documents    # Tìm tài liệu thật từ bảng documents

@@ -23,7 +23,6 @@
 
 import os
 from dotenv import load_dotenv
-from groq import Groq
 
 # ---------------------------------------------------------
 # Bước 1: Nạp cấu hình từ biến môi trường
@@ -47,7 +46,7 @@ MODEL   = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
 # - Bước này đang làm gì: Tạo instance client Groq với API Key tương ứng.
 # - Vì sao cần bước này: Duy trì kết nối kết nối HTTP/REST API tới máy chủ Groq.
 # ---------------------------------------------------------
-client = Groq(api_key=API_KEY)
+client = None
 
 
 # ==========================================================
@@ -75,6 +74,15 @@ def generate_answer(question, context):
     Returns:
         str: Câu trả lời bằng tiếng Việt từ model AI.
     """
+
+    if not API_KEY:
+        raise RuntimeError("GROQ_API_KEY chưa được cấu hình")
+
+    global client
+    if client is None:
+        from groq import Groq
+
+        client = Groq(api_key=API_KEY)
 
     # ---------------------------------------------------------
     # Bước 1 trong hàm: Xây dựng Prompt (Lập trình lời mồi)
