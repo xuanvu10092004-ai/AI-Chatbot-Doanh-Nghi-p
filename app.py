@@ -23,6 +23,7 @@ from answer_renderer import QueryEvidence
 from security import initialize_request,permissions,navigation,csrf_token,require_permission
 from auth_routes import register_auth
 from dashboard_routes import register_dashboard
+from admin_routes import register_admin
 
 
 app = Flask(__name__)
@@ -35,6 +36,7 @@ app.config.update(SESSION_COOKIE_HTTPONLY=True,SESSION_COOKIE_SAMESITE='Lax',SES
 app.before_request(initialize_request)
 register_auth(app)
 register_dashboard(app)
+register_admin(app)
 
 @app.after_request
 def security_headers(response):

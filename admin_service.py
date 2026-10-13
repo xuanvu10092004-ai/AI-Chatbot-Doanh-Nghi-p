@@ -1,0 +1,125 @@
+"""Thay đổi RBAC được serialize, audit và version trong cùng transaction."""
+from datetime import datetime
+from flask import g
+from werkzeug.security import generate_password_hash
+from db import cursor
+from security import audit,permissions
+
+
+class AdminRejected(ValueError):pass
+
+
+def bool_value(value):
+    if value not in (True,False,0,1):raise AdminRejected('Giá trị bật/tắt không hợp lệ.')
+    return bool(value)
+
+
+def validate_password(password):
+    if not isinstance(password,str) or len(password)<10 or len(password)>256:raise AdminRejected('Mật khẩu cần 10–256 ký tự.')
+    return generate_password_hash(password)
+
+
+def check_invariants(cur,actor,had_manage):
+    cur.execute("SELECT COUNT(DISTINCT user_id) AS n FROM v_user_permissions WHERE role_name='super_admin'")
+    if cur.fetchone()['n']<1:raise AdminRejected('Không được xóa hoặc hạ quyền quản trị viên cuối cùng.')
+    cur.execute('SELECT is_active FROM users WHERE id=%s',(actor,))
+    if not cur.fetchone()['is_active']:raise AdminRejected('Không được tự khóa tài khoản.')
+    if had_manage:
+        cur.execute("SELECT 1 FROM v_user_permissions WHERE user_id=%s AND permission_code='rbac:manage' LIMIT 1",(actor,))
+        if not cur.fetchone():raise AdminRejected('Không được tự gỡ quyền quản trị RBAC.')
+    cur.execute("""SELECT vp.user_id FROM v_user_permissions vp WHERE vp.data_scope='branch'
+      AND NOT EXISTS(SELECT 1 FROM v_user_permissions allp WHERE allp.user_id=vp.user_id AND allp.permission_code=vp.permission_code AND allp.data_scope='all')
+      GROUP BY vp.user_id HAVING COUNT(DISTINCT vp.scope_branch_id)>1 LIMIT 1""")
+    if cur.fetchone():raise AdminRejected('Chưa hỗ trợ một tài khoản bị giới hạn tại nhiều chi nhánh.')
+
+
+def mutate(kind,target_id,data,operation='save'):
+    actor=g.user['id'];had_manage='rbac:manage' in permissions()
+    with cursor() as cur:
+        cur.execute('SELECT version FROM rbac_meta WHERE id=1 FOR UPDATE');cur.fetchone()
+        before=None;after=None
+        if kind=='role':
+            if target_id:
+                cur.execute('SELECT * FROM roles WHERE id=%s',(target_id,));before=cur.fetchone()
+                if not before:raise AdminRejected('Không tìm thấy vai trò.')
+                if before['name']=='super_admin':raise AdminRejected('Vai trò super_admin được bảo vệ và luôn có tất cả quyền.')
+                if operation=='delete':
+                    cur.execute('SELECT COUNT(*) AS n FROM user_roles WHERE role_id=%s',(target_id,));used=cur.fetchone()['n']
+                    if before['is_system'] or used:raise AdminRejected('Vai trò hệ thống hoặc đang được sử dụng không được xóa.')
+                    cur.execute('DELETE FROM role_permissions WHERE role_id=%s',(target_id,));cur.execute('DELETE FROM roles WHERE id=%s',(target_id,))
+                else:
+                    name=data.get('name',before['name'])
+                    if before['is_system'] and name!=before['name']:raise AdminRejected('Không được đổi tên vai trò hệ thống.')
+                    landing=data.get('landing_path',before['landing_path'])
+                    if landing not in {'/dashboard','/chat','/customers','/inventory'}:raise AdminRejected('Trang đích không hợp lệ.')
+                    cur.execute('UPDATE roles SET name=%s,description=%s,is_active=%s,landing_path=%s,priority=%s WHERE id=%s',(name,data.get('description',before['description']),bool_value(data.get('is_active',before['is_active'])),landing,int(data.get('priority',before['priority'])),target_id))
+            else:
+                name=data.get('name','').strip()
+                if not name or len(name)>50:raise AdminRejected('Tên vai trò không hợp lệ.')
+                landing=data.get('landing_path','/dashboard')
+                if landing not in {'/dashboard','/chat','/customers','/inventory'}:raise AdminRejected('Trang đích không hợp lệ.')
+                cur.execute('INSERT INTO roles(name,description,landing_path,priority) VALUES(%s,%s,%s,%s)',(name,data.get('description',''),landing,int(data.get('priority',100))));target_id=cur.lastrowid
+                if data.get('clone_id'):
+                    cur.execute('INSERT INTO role_permissions(role_id,permission_id,data_scope) SELECT %s,permission_id,data_scope FROM role_permissions WHERE role_id=%s',(target_id,int(data['clone_id'])))
+            if operation!='delete' and 'permissions' in data:
+                if not isinstance(data['permissions'],list):raise AdminRejected('Danh sách quyền không hợp lệ.')
+                cur.execute('SELECT permission_id,data_scope FROM role_permissions WHERE role_id=%s',(target_id,));old_permissions=cur.fetchall()
+                if before:before['permissions']=old_permissions
+                cur.execute('DELETE FROM role_permissions WHERE role_id=%s',(target_id,))
+                for grant in data['permissions']:
+                    if grant.get('data_scope') not in {'all','branch','own'}:raise AdminRejected('Phạm vi quyền không hợp lệ.')
+                    cur.execute('INSERT INTO role_permissions(role_id,permission_id,data_scope) VALUES(%s,%s,%s)',(target_id,int(grant['permission_id']),grant['data_scope']))
+            if operation!='delete':
+                cur.execute('SELECT * FROM roles WHERE id=%s',(target_id,));after=cur.fetchone()
+                cur.execute('SELECT permission_id,data_scope FROM role_permissions WHERE role_id=%s',(target_id,));after['permissions']=cur.fetchall()
+        elif kind=='user':
+            if target_id:
+                cur.execute('SELECT id,email,full_name,home_branch_id,is_active,must_change_password FROM users WHERE id=%s',(target_id,));before=cur.fetchone()
+                if not before:raise AdminRejected('Không tìm thấy tài khoản.')
+                if 'locked_until' in data and target_id==actor:raise AdminRejected('Không được tự khóa tài khoản.')
+                cur.execute('UPDATE users SET full_name=%s,home_branch_id=%s,is_active=%s WHERE id=%s',(data.get('full_name',before['full_name']),data.get('home_branch_id',before['home_branch_id']),bool_value(data.get('is_active',before['is_active'])),target_id))
+                if data.get('unlock'):
+                    cur.execute('UPDATE users SET failed_login_count=0,locked_until=NULL WHERE id=%s',(target_id,))
+                if data.get('lock'):
+                    if target_id==actor:raise AdminRejected('Không được tự khóa tài khoản.')
+                    cur.execute('UPDATE users SET locked_until=DATE_ADD(NOW(),INTERVAL 15 MINUTE) WHERE id=%s',(target_id,))
+                if data.get('password'):
+                    cur.execute('UPDATE users SET password_hash=%s,must_change_password=TRUE,password_updated_at=NOW() WHERE id=%s',(validate_password(data['password']),target_id))
+            else:
+                email=data.get('email','').strip().casefold();name=data.get('full_name','').strip()
+                if '@' not in email or len(email)>255 or not name:raise AdminRejected('Email và họ tên không hợp lệ.')
+                cur.execute("INSERT INTO users(email,full_name,user_type,home_branch_id,password_hash,must_change_password,password_updated_at) VALUES(%s,%s,'staff',%s,%s,TRUE,NOW())",(email,name,data.get('home_branch_id'),validate_password(data.get('password'))));target_id=cur.lastrowid
+            if 'roles' in data:
+                set_roles(cur,target_id,data['roles'])
+            cur.execute('SELECT id,email,full_name,home_branch_id,is_active,must_change_password,locked_until FROM users WHERE id=%s',(target_id,));after=cur.fetchone()
+        elif kind=='assignment':
+            cur.execute('SELECT role_id,scope_branch_id,expires_at FROM user_roles WHERE user_id=%s',(target_id,));before=cur.fetchall()
+            if operation=='delete':cur.execute('DELETE FROM user_roles WHERE user_id=%s AND role_id=%s',(target_id,int(data['role_id'])))
+            else:set_roles(cur,target_id,data.get('roles'),replace=False)
+            cur.execute('SELECT role_id,scope_branch_id,expires_at FROM user_roles WHERE user_id=%s',(target_id,));after=cur.fetchall()
+        elif kind=='permission':
+            cur.execute('SELECT id,code,description FROM permissions WHERE id=%s',(target_id,));before=cur.fetchone()
+            if not before:raise AdminRejected('Không tìm thấy quyền.')
+            cur.execute('UPDATE permissions SET description=%s WHERE id=%s',(data.get('description',''),target_id));after={**before,'description':data.get('description','')}
+        else:raise AdminRejected('Thao tác không hợp lệ.')
+        check_invariants(cur,actor,had_manage)
+        audit(cur,operation+'_'+kind,kind,target_id,before,after,actor=actor)
+        cur.execute('UPDATE rbac_meta SET version=version+1 WHERE id=1')
+    return target_id
+
+
+def set_roles(cur,user_id,roles,replace=True):
+    if not isinstance(roles,list):raise AdminRejected('Danh sách vai trò không hợp lệ.')
+    for assignment in roles:
+        cur.execute('SELECT name FROM roles WHERE id=%s',(int(assignment['role_id']),));role=cur.fetchone()
+        if not role:raise AdminRejected('Vai trò không tồn tại.')
+        if role['name']=='super_admin':
+            cur.execute("SELECT 1 FROM v_user_permissions WHERE user_id=%s AND role_name='super_admin' LIMIT 1",(g.user['id'],))
+            if not cur.fetchone():raise AdminRejected('Chỉ super_admin có thể gán super_admin.')
+    if replace:cur.execute('DELETE FROM user_roles WHERE user_id=%s',(user_id,))
+    for assignment in roles:
+        expiry=assignment.get('expires_at') or None
+        if expiry:
+            try:expiry=datetime.fromisoformat(expiry)
+            except (ValueError,TypeError):raise AdminRejected('Ngày hết hạn không hợp lệ.')
+        cur.execute('INSERT INTO user_roles(user_id,role_id,scope_branch_id,expires_at,granted_by) VALUES(%s,%s,%s,%s,%s) ON DUPLICATE KEY UPDATE scope_branch_id=VALUES(scope_branch_id),expires_at=VALUES(expires_at),granted_by=VALUES(granted_by)',(user_id,int(assignment['role_id']),assignment.get('scope_branch_id'),expiry,g.user['id']))
