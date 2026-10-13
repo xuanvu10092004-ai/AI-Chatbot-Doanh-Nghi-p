@@ -77,14 +77,28 @@
             </div>
 
             <div class="card-body">
+                {% if demo_mode %}
+                <div class="mb-3">
+                    <label for="demoUser" class="form-label">Tài khoản thử nghiệm</label>
+                    <select id="demoUser" class="form-select">
+                        <option value="">Khách — thông tin xe và tài liệu công khai</option>
+                        <option value="3">Bán hàng NT01 — khách hàng, tồn kho và đơn hàng NT01</option>
+                        <option value="4">Bán hàng NT02 — khách hàng, tồn kho và đơn hàng NT02</option>
+                        <option value="5">Kỹ thuật NT01 — tồn kho và tài liệu kỹ thuật</option>
+                        <option value="6">Kế toán — đơn hàng và giá vốn</option>
+                        <option value="1">Quản trị — dữ liệu toàn hệ thống</option>
+                    </select>
+                    <small class="text-muted">Chọn tài khoản có quyền phù hợp để thử dữ liệu nội bộ. Chế độ này chỉ có trong môi trường dev.</small>
+                </div>
+                {% endif %}
 
                 <!-- Khu vực hiển thị tin nhắn (id="chatMessages")
                      script.js sẽ thêm các div .user-message và .bot-message vào đây -->
                 <div id="chatMessages" class="chat-messages mb-3">
                     <!-- Tin nhắn chào mừng mặc định từ bot khi trang vừa mở -->
                     <div class="bot-message">
-                        Xin chào! Tôi là trợ lý AI doanh nghiệp. Bạn có thể hỏi về khách hàng, kho, báo giá, cơ hội bán
-                        hàng hoặc tài liệu nội bộ.
+                        Xin chào! Bạn có thể hỏi giá, thông số xe Honda, so sánh xe và tài liệu được phép truy cập.
+                        Ví dụ: “giá AB 160”, “thông tin SH Mode 125”, “xe ga dưới 50 triệu”.
                     </div>
                 </div>
 
@@ -94,7 +108,7 @@
                      - Phím Enter cũng kích hoạt sendQuestion() (xem script.js) -->
                 <div class="input-group">
                     <input type="text" id="questionInput" class="form-control" placeholder="Nhập câu hỏi của bạn...">
-                    <button class="btn btn-primary" onclick="sendQuestion()">Gửi</button>
+                    <button id="sendButton" class="btn btn-primary" onclick="sendQuestion()">Gửi</button>
                 </div>
 
             </div>
