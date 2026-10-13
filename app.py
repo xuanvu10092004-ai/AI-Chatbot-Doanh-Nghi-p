@@ -24,6 +24,7 @@ from security import initialize_request,permissions,navigation,csrf_token,requir
 from auth_routes import register_auth
 from dashboard_routes import register_dashboard
 from admin_routes import register_admin
+from business_routes import register_business
 
 
 app = Flask(__name__)
@@ -37,10 +38,11 @@ app.before_request(initialize_request)
 register_auth(app)
 register_dashboard(app)
 register_admin(app)
+register_business(app)
 
 @app.after_request
 def security_headers(response):
-    response.headers['Content-Security-Policy']="default-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'"
+    response.headers['Content-Security-Policy']="default-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
     response.headers['X-Frame-Options']='DENY'
     response.headers['X-Content-Type-Options']='nosniff'
     response.headers['Cache-Control']='no-store'
@@ -71,19 +73,15 @@ def dashboard():
 @app.route("/api/low-stock", methods=["GET"])
 @require_permission('inventory:read')
 def low_stock():
-    try:
-        return jsonify(get_low_stock_products())
-    except Exception as exc:
-        return jsonify({"error": str(exc)}), 500
+    from business_routes import records
+    return jsonify(records('inventory',low_stock=True))
 
 
 @app.route("/api/potential-customers", methods=["GET"])
 @require_permission('customer:read')
 def potential_customers():
-    try:
-        return jsonify(get_potential_customers())
-    except Exception as exc:
-        return jsonify({"error": str(exc)}), 500
+    from business_routes import records
+    return jsonify(records('customers'))
 
 
 def _current_user_id() -> int | None:
@@ -98,16 +96,19 @@ def _legacy_not_implemented(module: str):
 
 
 @app.route("/api/opportunities", methods=["GET", "POST"])
+@require_permission('order:read')
 def opportunities():
     return _legacy_not_implemented("Opportunity")
 
 
 @app.route("/api/quotes", methods=["GET", "POST"])
+@require_permission('order:read')
 def quotes():
     return _legacy_not_implemented("Quote")
 
 
 @app.route("/api/bookings", methods=["GET", "POST"])
+@require_permission('kb:public:read')
 def bookings():
     return _legacy_not_implemented("Booking")
 
