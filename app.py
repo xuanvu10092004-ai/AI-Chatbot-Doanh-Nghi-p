@@ -18,6 +18,8 @@ from routing import route_question
 from sql_service import answer_sql_question
 from sql_service import SchemaExtensionRequired as SQLSchemaExtensionRequired
 from mysql.connector import Error as DatabaseError
+from question_language import resolve_followup
+from answer_renderer import QueryEvidence
 
 
 app = Flask(__name__)
@@ -28,7 +30,7 @@ if secret_key:
 
 @app.route("/")
 def home():
-    return render_template("index.html")
+    return render_template("index.html", demo_mode=os.getenv('APP_ENV') == 'dev')
 
 
 @app.route("/api/dashboard", methods=["GET"])
@@ -105,17 +107,21 @@ def chat():
             if app.secret_key:
                 session['chat_session_id'] = session_id
         history = read_history(session_id)
+        retrieval_question = resolve_followup(question, history)
         record_message(session_id, "user", question)
-        route = route_question(question)
+        route = route_question(retrieval_question)
         if route["type"] == "SQL":
-            context = answer_sql_question(question, user_id, session_id)
+            context = answer_sql_question(retrieval_question, user_id, session_id)
         else:
             context = search_documents(question, user_id, session_id)
         denied = context == "Tôi không thể hỗ trợ yêu cầu này."
-        no_evidence = context.startswith(('Không tìm thấy', 'Chưa tìm thấy'))
+        no_evidence = context.startswith(('Không tìm thấy', 'Chưa tìm thấy', 'Cần làm rõ:', 'Chưa phân tích được'))
         engine = 'database'
         if denied or no_evidence:
             answer = context
+        elif isinstance(context, QueryEvidence) and os.getenv('GROQ_API_KEY'):
+            answer = context.display
+            engine = context.engine
         elif not os.getenv('GROQ_API_KEY') and os.getenv('APP_ENV') == 'dev':
             answer = context
         else:
@@ -133,6 +139,8 @@ def chat():
             "module": route["module"],
             "session_id": session_id,
             "engine": engine,
+            "access_denied": denied,
+            "demo_mode": os.getenv('APP_ENV') == 'dev',
         })
     except (SchemaExtensionRequired, SQLSchemaExtensionRequired) as exc:
         message = str(exc)

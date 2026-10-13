@@ -7,7 +7,7 @@ from db import cursor
 
 
 INTENT_RULES = (
-    ("ask_cost_margin", ("giá vốn", "gia von", "biên lợi nhuận", "bien loi nhuan")),
+    ("ask_cost_margin", ("giá vốn", "gia von", "biên lợi nhuận", "bien loi nhuan", "giá nhập", "giá mua vào")),
     ("ask_stock", ("tồn kho", "ton kho", "còn hàng", "con hang", "kho hàng", "kho hang")),
     ("ask_order_status", ("đơn hàng", "don hang", "đơn của", "don cua")),
     ("ask_order_status", ("doanh thu", "thuần")),
@@ -39,9 +39,12 @@ def resolve_user_id(session_user_id: int | None, demo_header: str | None, app_en
 
 
 def detect_intent(question: str) -> str:
-    normalized = question.casefold()
+    from question_language import normalize
+    normalized = normalize(question)
     for intent_code, keywords in INTENT_RULES:
-        if any(keyword in normalized for keyword in keywords):
+        if any(normalize(keyword) in normalized for keyword in keywords):
+            if intent_code == 'ask_tech_procedure' and 'thong so' in normalized:
+                return 'ask_price_list'
             return intent_code
     return "ask_price_list"
 
@@ -107,6 +110,7 @@ def authorize_intent(session_id: int, user_id: int | None, intent_code: str) -> 
             """,
             (session_id, user_id, intent["intent_id"], "allowed" if allowed else "denied", reason),
         )
+        audit_id = int(db_cursor.lastrowid)
 
         db_cursor.execute(
             """
@@ -125,12 +129,18 @@ def authorize_intent(session_id: int, user_id: int | None, intent_code: str) -> 
         scopes = [row["scope_branch_id"] for row in db_cursor.fetchall()]
 
     return {
+        "audit_id": audit_id,
         "allowed": allowed,
         "intent_id": int(intent["intent_id"]),
         "intent_code": intent_code,
         "scope_branch_ids": None if user_id is None or any(scope is None for scope in scopes) else sorted(set(scopes)),
         "denied_message": "Tôi không thể hỗ trợ yêu cầu này.",
     }
+
+
+def mark_audit_denied(audit_id: int, reason: str) -> None:
+    with cursor() as cur:
+        cur.execute("UPDATE chatbot_audit_log SET decision = 'denied', reason = %s WHERE id = %s", (reason, audit_id))
 
 
 def permitted_views(user_id: int | None) -> frozenset[str]:

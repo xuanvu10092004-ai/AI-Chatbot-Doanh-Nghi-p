@@ -25,6 +25,7 @@
 # ==========================================================
 
 import unicodedata
+from question_language import wants_sql
 
 
 # ==========================================================
@@ -380,7 +381,7 @@ def route_question(question):
         question_type = 'SQL'
     elif intent in {'ask_promotion', 'ask_sales_policy', 'ask_tech_procedure', 'ask_finance_procedure', 'ask_hr_policy'}:
         question_type = 'RAG'
-    elif any(word in question.casefold() for word in ('giá', 'gia', 'phiên bản', 'phân khúc', 'mẫu xe')):
+    elif wants_sql(question) or any(word in question.casefold() for word in ('giá', 'gia', 'phiên bản', 'phân khúc', 'mẫu xe')):
         question_type = 'SQL'
     else:
         question_type = classify_question(question)

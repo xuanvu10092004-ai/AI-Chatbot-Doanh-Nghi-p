@@ -21,8 +21,7 @@ def validate_sql(sql: str, allowed_views: frozenset[str], timeout_ms: int = 5000
     if ";" in candidate.rstrip().rstrip(";"):
         raise ValueError("exactly_one_statement_required")
     safe = guard(candidate, set(allowed_views))
-    for name in markers:
-        safe = safe.replace(":" + name, "%s")
+    safe = re.sub(r':__honda_bind_\d+\b', '%s', safe)
     limit = re.search(r"LIMIT (\d+)", safe)
     timeout_ms = max(1, min(int(timeout_ms), 5000))
     safe = re.sub(r"^SELECT\b", f"SELECT /*+ MAX_EXECUTION_TIME({timeout_ms}) */", safe, count=1)

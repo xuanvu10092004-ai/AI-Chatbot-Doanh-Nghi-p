@@ -1,0 +1,71 @@
+"""Truy vấn cố định cho câu phổ biến; câu phức tạp chuyển sang bộ sinh SQL."""
+import re
+from question_language import normalize, product_pattern
+
+
+class NeedsGeneratedQuery(ValueError):
+    pass
+
+
+def plan_query(question: str, intent: str) -> tuple[str, tuple]:
+    q = normalize(question)
+    if any(w in q for w in ('so sanh', 'trung binh', 'theo thang', 'theo ngay', 'sap xep', 'dau tien', 'gan nhat', 'top ', 'duoi ', 'tren ', 'tu ', 'den ')):
+        raise NeedsGeneratedQuery()
+    count = any(w in q for w in ('bao nhieu', 'tong so', 'may phien ban', 'how many'))
+    price = any(w in q for w in ('gia', 'bao nhieu tien', 'bao tien'))
+    branch = re.search(r'\b(nt01|nt02|cr01)\b', q)
+    branch_code = branch.group(1).upper() if branch else None
+    pattern = product_pattern(question)
+    if intent == 'ask_customer_info':
+        if 'da mua' in q:
+            return 'SELECT COUNT(*) AS purchased_customers FROM v_ai_customers WHERE customer_status = %s', ('Đã mua',)
+        if 'tra gop' in q:
+            return 'SELECT COUNT(*) AS installment_customers FROM v_ai_customers WHERE payment_preference = %s', ('Trả góp',)
+        if count:
+            return 'SELECT COUNT(*) AS customers FROM v_ai_customers', ()
+        if any(w in q for w in ('tiem nang', 'tu van', 'ngung lien he')):
+            status = 'Tiềm năng' if 'tiem nang' in q else 'Đang tư vấn' if 'tu van' in q else 'Ngừng liên hệ'
+            return 'SELECT customer_id, full_name, customer_status, home_branch_code FROM v_ai_customers WHERE customer_status = %s', (status,)
+        raise NeedsGeneratedQuery()
+    if intent == 'ask_order_status':
+        aggregate = 'SUM(net_amount) AS net_revenue' if 'doanh thu' in q else 'COUNT(DISTINCT order_id) AS orders' if count else '*'
+        sql = f'SELECT {aggregate} FROM v_ai_orders'
+        return (sql + ' WHERE branch_code = %s', (branch_code,)) if branch_code else (sql, ())
+    if intent == 'ask_stock':
+        conditions, params = [], []
+        if branch_code:
+            conditions.append('branch_code = %s'); params.append(branch_code)
+        if pattern:
+            conditions.append('model_name LIKE %s'); params.append(pattern)
+        empty = 'het hang' in q or 'bang 0' in q
+        if empty:
+            conditions.append('quantity = 0')
+        if empty and count:
+            aggregate = 'COUNT(*) AS empty_inventory_rows'
+        elif count and ('dong' in q or 'ban ghi' in q):
+            aggregate = 'COUNT(*) AS inventory_rows'
+        elif count or 'tong ton' in q:
+            aggregate = 'SUM(quantity) AS total_stock'
+        else:
+            aggregate = 'branch_code, model_name, variant_name, quantity'
+        sql = f'SELECT {aggregate} FROM v_ai_inventory'
+        return sql + (' WHERE ' + ' AND '.join(conditions) if conditions else ''), tuple(params)
+    view = 'v_ai_product_costs' if intent == 'ask_cost_margin' else 'v_ai_products'
+    if 'phan khuc' in q and count:
+        return 'SELECT segment, COUNT(*) AS variants FROM v_ai_products GROUP BY segment ORDER BY segment', ()
+    if 'cao nhat' in q or 'dat nhat' in q or 're nhat' in q:
+        direction = 'ASC' if 're nhat' in q else 'DESC'
+        condition = ' WHERE model_name LIKE %s' if pattern else ''
+        return f'SELECT model_name, variant_name, list_price FROM v_ai_products{condition} ORDER BY list_price {direction} LIMIT 1', (pattern,) if pattern else ()
+    if pattern:
+        if count and not price and 'thong tin' not in q:
+            return 'SELECT COUNT(*) AS variants FROM v_ai_products WHERE model_name LIKE %s', (pattern,)
+        return f'SELECT * FROM {view} WHERE model_name LIKE %s ORDER BY list_price', (pattern,)
+    for synonym, segment in (('xe ga', 'tay_ga'), ('tay ga', 'tay_ga'), ('xe so', 'xe_so'), ('xe con', 'con_tay')):
+        if synonym in q:
+            return 'SELECT model_name, variant_name, list_price FROM v_ai_products WHERE segment = %s ORDER BY model_name, list_price', (segment,)
+    if count and not price:
+        return 'SELECT COUNT(*) AS variants FROM v_ai_products', ()
+    if q in ('gia xe', 'bang gia', 'gia cac mau xe', 'danh sach xe', 'danh sach mau xe'):
+        return f'SELECT * FROM {view} ORDER BY model_name, list_price', ()
+    raise NeedsGeneratedQuery()

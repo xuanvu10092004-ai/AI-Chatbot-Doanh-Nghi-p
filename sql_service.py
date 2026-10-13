@@ -3,7 +3,10 @@ from __future__ import annotations
 from typing import Any
 
 from access_control import authorize_intent, create_session, detect_intent, permitted_views
-from query_plans import plan_query
+from query_plans import plan_query, NeedsGeneratedQuery
+from llm_sql import generate_query, QueryClarification
+from sql_guard import SqlRejected
+from answer_renderer import QueryEvidence
 from db import get_connection
 from sql_safety import validate_sql
 
@@ -23,14 +26,14 @@ class SchemaExtensionRequired(RuntimeError):
     """Raised when a legacy module has no table in the Honda schema."""
 
 
-def _format_rows(rows: list[dict[str, Any]]) -> str:
+def _format_rows(rows: list[dict[str, Any]], generated: bool = False) -> str:
     if not rows:
         return "Không tìm thấy dữ liệu phù hợp."
     lines = [f"Tìm thấy {len(rows)} bản ghi:"]
     for row in rows:
         values = " | ".join(f"{key}: {value}" for key, value in row.items())
         lines.append(values)
-    return "\n".join(lines)
+    return QueryEvidence("\n".join(lines), rows, generated)
 
 
 def _execute_text_to_sql(sql: str, params: tuple[Any, ...] = (), *, allowed_views=None, scope_branch_ids=None) -> list[dict[str, Any]]:
@@ -85,7 +88,29 @@ def answer_sql_question(
             "Opportunity, Quote và Booking cần schema-extension; chưa được tự thiết kế bảng."
         )
 
-    sql, params = plan_query(question, intent_code)
-    rows = _execute_text_to_sql(sql, params, allowed_views=permitted_views(user_id),
+    intent_views = {
+        'ask_price_list': {'v_ai_products'},
+        'ask_stock': {'v_ai_products', 'v_ai_inventory'},
+        'ask_customer_info': {'v_ai_products', 'v_ai_customers'},
+        'ask_order_status': {'v_ai_products', 'v_ai_orders'},
+        'ask_cost_margin': {'v_ai_products', 'v_ai_product_costs'},
+    }
+    allowed_views = permitted_views(user_id) & intent_views.get(intent_code, set())
+    generated = False
+    try:
+        try:
+            sql, params = plan_query(question, intent_code)
+        except NeedsGeneratedQuery:
+            sql, params = generate_query(question, frozenset(allowed_views))
+            generated = True
+    except QueryClarification as exc:
+        return 'Cần làm rõ: ' + str(exc)
+    except (SqlRejected, ValueError):
+        from access_control import mark_audit_denied
+        mark_audit_denied(authorization['audit_id'], 'SQL bị chặn bởi whitelist hoặc validator')
+        return authorization['denied_message']
+    except Exception:
+        return 'Chưa phân tích được câu hỏi lúc này. Bạn hãy thử lại hoặc nêu rõ mẫu xe và điều kiện.'
+    rows = _execute_text_to_sql(sql, params, allowed_views=allowed_views,
                                 scope_branch_ids=authorization['scope_branch_ids'])
-    return _format_rows(rows)
+    return _format_rows(rows, generated)
