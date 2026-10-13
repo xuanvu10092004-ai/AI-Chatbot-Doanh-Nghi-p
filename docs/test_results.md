@@ -1,35 +1,45 @@
-# Kết quả kiểm thử Honda AI Chatbot
+# Ket qua kiem thu Honda AI Chatbot
 
-Ngày ghi nhận: 2026-10-13
+Ngay ghi nhan gan nhat: **13/10/2026**.
 
-## Tổng hợp
+## Tong hop
 
-| Nhóm | Kết quả | Ghi chú |
+| Nhom | Ket qua | Ghi chu |
 |---|---:|---|
-| Validator SQL | Đạt | 8 passed, chạy không cần MySQL |
-| Groq API | Skip | Thiếu `GROQ_API_KEY` |
-| Kiểm thử MySQL/RBAC | Blocked | MySQL từ chối kết nối `127.0.0.1:3306` |
+| Validator SQL | Dat | 8 passed, khong can MySQL |
+| Groq API | Skip | Thieu `GROQ_API_KEY` |
+| MySQL/RBAC | Blocked | MySQL tu choi ket noi `127.0.0.1:3306` |
+| Parser/OCR/RAG da dinh dang | Chua chay | Hang muc tuan 05-07 |
+| Hoi quy 6 module | Mot phan | CRM/Warehouse/AI Chat co nen tang; Opportunity/Quote/Booking con phu thuoc schema-extension |
 
-## Bộ câu hỏi chuẩn
+## Bo cau hoi chuan
 
-Các đáp án được tính bằng SQL trực tiếp trong `tests/test_honda_mysql.py`, không hardcode kết quả. Chưa thể chạy do MySQL chưa khả dụng.
+Dap an tinh bang SQL truc tiep trong `tests/test_honda_mysql.py`, khong hardcode. Chua the chay do MySQL chua kha dung.
 
-| # | Câu hỏi | SQL kỳ vọng | Kết quả |
+| # | Cau hoi | View/dieu kien ky vong | Ket qua |
 |---:|---|---|---|
-| 1 | SH 160i giá bao nhiêu? | `v_ai_products` theo `model_name` | Blocked |
-| 2 | Giá niêm yết SH 160i | `MIN(list_price)` từ `v_ai_products` | Blocked |
-| 3 | Có bao nhiêu phiên bản xe? | `COUNT(*)` từ `v_ai_products` | Blocked |
-| 4 | Có bao nhiêu sản phẩm trong kho? | `COUNT(*)` từ `v_ai_inventory` | Blocked |
-| 5 | Tồn kho tại chi nhánh NT01 | `COUNT(*)` lọc `branch_code` | Blocked |
-| 6 | Có bao nhiêu khách hàng? | `COUNT(*)` từ `v_ai_customers` | Blocked |
-| 7 | Có bao nhiêu khách hàng đã mua? | `COUNT(*)` lọc `customer_status` | Blocked |
-| 8 | Có bao nhiêu đơn hàng? | `COUNT(DISTINCT order_id)` từ `v_ai_orders` | Blocked |
-| 9 | Đơn hàng tại NT02 | `COUNT(DISTINCT order_id)` lọc `branch_code` | Blocked |
-| 10 | Các mẫu xe tay ga | `COUNT(*)` lọc `segment = 'tay_ga'` | Blocked |
+| 1 | SH 160i gia bao nhieu? | `v_ai_products` theo `model_name` | Blocked |
+| 2 | Gia niem yet SH 160i | `MIN(list_price)` tu `v_ai_products` | Blocked |
+| 3 | Co bao nhieu phien ban xe? | `COUNT(*)` tu `v_ai_products` | Blocked |
+| 4 | Co bao nhieu san pham trong kho? | `COUNT(*)` tu `v_ai_inventory` | Blocked |
+| 5 | Ton kho tai NT01 | `branch_code = 'NT01'` | Blocked |
+| 6 | Co bao nhieu khach hang? | `COUNT(*)` tu `v_ai_customers` | Blocked |
+| 7 | Co bao nhieu khach hang da mua? | `customer_status = 'Da mua'` | Blocked |
+| 8 | Co bao nhieu don hang? | `COUNT(DISTINCT order_id)` tu `v_ai_orders` | Blocked |
+| 9 | Don hang tai NT02 | `branch_code = 'NT02'` | Blocked |
+| 10 | Cac mau xe tay ga | `segment = 'tay_ga'` | Blocked |
 
-## Quyền cần chạy lại khi MySQL hoạt động
+## Ca quyen can chay lai khi MySQL hoat dong
 
-- Guest hỏi giá vốn: phải bị từ chối và có audit `denied`.
-- Sales user 3 hỏi tồn kho: phải được phép.
-- Kỹ thuật viên user 5 hỏi giá vốn: phải bị từ chối.
-- Guest đọc tài liệu danh mục sales: phải bị từ chối.
+- Guest hoi gia von: `denied` va co audit.
+- Sales user 3 hoi ton kho: `allowed` trong pham vi duoc cap.
+- Ky thuat vien user 5 hoi gia von: `denied`.
+- Guest doc tai lieu danh muc sales: `denied`.
+- User co `scope_branch_id` khong doc duoc chi nhanh ngoai pham vi.
+
+## Kiem chung tiep theo
+
+1. Khoi dong MySQL va tao `.env` hop le, khong ghi mat khau vao repository.
+2. Chay `python init_db.py --reset` de ap dung schema, view, user doc va index.
+3. Chay `python -m pytest -q` va cap nhat bang nay bang ket qua thuc te.
+4. Bo sung test PDF/DOCX/XLSX, OCR, preview-confirm-save, RAG co nguon va hoi quy 6 module theo tuan 05-10.

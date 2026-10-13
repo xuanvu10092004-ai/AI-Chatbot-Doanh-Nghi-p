@@ -1,68 +1,88 @@
-# Báo Cáo Triển Khai Chi Tiết: AI Chatbot Doanh Nghiệp
+# Ke hoach trien khai chi tiet: AI Chatbot Doanh Nghiep
 
-Dưới đây là tài liệu trình bày chi tiết từng bước mà nhóm đã thực hiện để xây dựng, tích hợp và triển khai hệ thống AI Chatbot hỗ trợ doanh nghiệp (CRM & Warehouse).
+Tieu tai lieu nay chuyen ke hoach trong `Ke_Hoach_Thuc_Tap.xlsx` thanh lo trinh ky thuat co dau ra kiem chung duoc. Thoi gian: **12/10/2026 - 03/01/2027**.
 
----
+## 1. Nguyen tac
 
-## Bước 1: Thiết kế Cơ sở Dữ liệu & Khởi tạo Schema (`init_db.py`)
-- **Mục tiêu:** Xây dựng nền tảng lưu trữ dữ liệu (Database) cục bộ, nhẹ và dễ quản lý cho ứng dụng.
-- **Công nghệ sử dụng:** SQLite3.
-- **Chi tiết triển khai:**
-  - Định nghĩa kiến trúc CSDL với 6 bảng cốt lõi phục vụ 3 nhóm nghiệp vụ chính:
-    1. **CRM & Bán hàng:** `customers` (Khách hàng), `opportunities` (Cơ hội kinh doanh), `quotes` (Báo giá).
-    2. **Kho hàng:** `inventory` (Sản phẩm & Tồn kho).
-    3. **AI & Tri thức:** `documents` (Lưu tài liệu chính sách cho RAG), `chat_logs` (Lưu lịch sử hội thoại).
-  - Bật tính năng kiểm tra khóa ngoại (`PRAGMA foreign_keys = ON`) để đảm bảo tính toàn vẹn dữ liệu giữa khách hàng, báo giá và sản phẩm.
+1. Ke thua 6 module, khong viet lai toan bo neu chua co ly do ky thuat.
+2. Kiem tra quyen o backend/API, khong chi an nut tren giao dien.
+3. Tach tiep nhan -> trich xuat -> xac thuc/duyet -> ghi DB.
+4. RAG gioi han theo quyen, luu nguon va noi ro khi khong du bang chung.
+5. Khong dua API key, mat khau hay du lieu nhay cam vao ma nguon/log.
 
-## Bước 2: Chuẩn bị Dữ liệu & Xây dựng Pipeline ETL (`import_excel_to_db.py`)
-- **Mục tiêu:** Tự động hóa quá trình nạp dữ liệu mẫu ban đầu từ file Excel vào Database.
-- **Công nghệ sử dụng:** Pandas.
-- **Chi tiết triển khai:**
-  - Khởi tạo file dữ liệu mẫu `data_ai_chatbot_doanh_nghiep.xlsx` với các sheet tương ứng cấu trúc bảng.
-  - Xây dựng luồng ETL (Extract - Transform - Load):
-    - **Dọn dẹp CSDL cũ:** Script tự động xóa dữ liệu cũ theo thứ tự nghiêm ngặt (bảng con xóa trước, bảng cha xóa sau) để tránh lỗi Foreign Key, đồng thời reset chỉ số ID tự tăng.
-    - **Làm sạch dữ liệu:** Xóa các dòng rỗng, ánh xạ tên cột tiếng Việt có chứa chú thích sang tên cột chuẩn trong CSDL, chuyển đổi các ô giá trị `NaN` thành `NULL`.
-    - **Nạp dữ liệu:** Đẩy dữ liệu vào SQLite một cách tự động.
+## 2. Nen tang ky thuat
 
-## Bước 3: Phát triển Module Nhận dạng Ý định (Routing & Classifier)
-- **Mục tiêu:** Xác định luồng xử lý chính xác dựa trên câu hỏi của người dùng (Tra cứu CSDL hay Tra cứu Văn bản).
-- **Chi tiết triển khai:**
-  - File `routing.py` thực hiện xử lý ngôn ngữ tự nhiên cơ bản: chuyển chữ thường, loại bỏ dấu tiếng Việt để chuẩn hóa đầu vào.
-  - Dựa vào bộ từ khóa (keywords matching) để phân loại:
-    - Nhóm **SQL (Truy vấn Data):** Các từ khóa như "kho", "tồn", "doanh thu", "khách hàng", "báo giá"...
-    - Nhóm **RAG (Tra cứu Tài liệu):** Các từ khóa như "chính sách", "quy định", "hướng dẫn"...
+- Flask va MySQL Honda la nen tang chay hien tai.
+- `schema_context.py` tao context tu metadata/comment cua `v_ai_*`.
+- `sql_safety.py` chan SQL khong phai mot cau `SELECT`, view ngoai whitelist, comment, `SLEEP`, `INTO OUTFILE`; dong thoi gioi han dong/thoi gian.
+- `db.py` tach pool ung dung va pool doc cho text-to-SQL.
+- RBAC/audit dung `v_user_permissions`, `v_user_kb_access`, `chatbot_intents`, `chatbot_audit_log`.
+- Test validator da co; test MySQL/RBAC can MySQL that.
 
-## Bước 4: Xây dựng Module Truy xuất Ngữ cảnh (Retrieval Services)
-- **Mục tiêu:** Dựa vào ý định đã phân loại, trích xuất đúng thông tin làm ngữ cảnh (context) cho LLM.
-- **Chi tiết triển khai:**
-  - **Dịch vụ truy vấn CSDL (`sql_service.py`):** Viết các hàm thực thi mã SQL tổng hợp (như đếm số khách VIP, lọc hàng sắp hết).
-  - **Dịch vụ truy vấn Tài liệu (`rag_service.py`):** Xây dựng công cụ tìm kiếm mô phỏng kỹ thuật RAG. Tách câu hỏi thành các từ khóa, loại bỏ "từ dừng" (stopwords), và dùng lệnh `LIKE` tìm kiếm nội dung/tiêu đề tài liệu trong bảng `documents`.
+## 3. Lo trinh theo tuan
 
-## Bước 5: Tích hợp Mô hình Ngôn ngữ Lớn LLM (`ai_service.py`)
-- **Mục tiêu:** Sinh ra câu trả lời tự nhiên, thân thiện và chính xác dựa trên Context thu thập được.
-- **Công nghệ sử dụng:** Groq API (Mô hình Llama-3).
-- **Chi tiết triển khai:**
-  - Cấu hình API Key và tên Model thông qua biến môi trường (file `.env`).
-  - Xây dựng System Prompt với vai trò "Trợ lý AI Doanh nghiệp chuyên nghiệp".
-  - Định nghĩa nguyên tắc nghiêm ngặt cho LLM: **Chỉ được trả lời dựa trên Context cung cấp, không tự bịa thông tin (No Hallucination)**.
+### Tuan 01: Khao sat va chot pham vi
 
-## Bước 6: Phát triển Web Backend API (`app.py`)
-- **Mục tiêu:** Giao tiếp giữa Giao diện người dùng và các Core Services của hệ thống.
-- **Công nghệ sử dụng:** Flask.
-- **Chi tiết triển khai:**
-  - Tạo RESTful API cho Dashboard: `/api/dashboard`, `/api/low-stock`, `/api/potential-customers`.
-  - Thiết lập API `/chat` (POST request): Nhận câu hỏi, gọi luồng Routing -> Retrieval -> Generator, và trả về JSON kết quả.
-  - Tích hợp logic tự động mở trình duyệt web khi chạy app.
+- **Vu:** ra soat backend, database, API, AI/RAG, dependency; ghi loi va rui ro.
+- **Thuong:** ra soat giao dien, nghiep vu, tai tai lieu va man hinh nang cap.
+- **Dau ra:** hien trang, backlog uu tien, danh sach giu/sua/bo sung va test hoi quy.
 
-## Bước 7: Xây dựng Giao diện Người dùng (Frontend)
-- **Mục tiêu:** Tạo ra một Dashboard trực quan và Cửa sổ Chat tương tác thời gian thực.
-- **Công nghệ sử dụng:** HTML, CSS, JavaScript (Fetch API).
-- **Chi tiết triển khai:**
-  - Render giao diện tĩnh bằng thư mục `templates/` và `static/`.
-  - Viết mã JS bất đồng bộ để gọi API điền dữ liệu vào các thẻ thống kê.
-  - Lập trình giao diện Chat ( bong bóng chat, hiệu ứng typing, tự động cuộn trang) mang lại trải nghiệm người dùng hiện đại.
+### Tuan 02: Thiet ke kien truc
 
-## Bước 8: Kiểm thử Độc lập (Unit Testing)
-- **Mục tiêu:** Đảm bảo các logic hoạt động trơn tru trước khi ráp vào hệ thống Web.
-- **Chi tiết triển khai:**
-  - Viết script `test_sql.py` và `test_ai.py` để mô phỏng các câu hỏi và kiểm tra độ chính xác của SQL query cũng như tốc độ, chất lượng phản hồi từ Groq API.
+- Thiet ke du lieu, RBAC, quy trinh tai lieu va co che ghi co kiem soat.
+- **Vu:** API, users/roles/permissions, documents, extraction jobs/logs va lien ket nghiep vu.
+- **Thuong:** wireframe dang nhap, quan tri tai khoan, upload, preview va kho tri thuc.
+- **Dau ra:** so do, wireframe, quy uoc API va phan cong.
+
+### Tuan 03-04: Dang nhap va nguoi dung
+
+- **Vu:** API dang nhap/thoat, bam mat khau, session/token, middleware quyen va audit.
+- **Thuong:** giao dien dang nhap, trang thai tai khoan, dieu huong, gan vai tro va thong bao loi.
+- **Dau ra:** vai tro mau duoc test o ca UI va API; truy cap trai quyen bi tu choi.
+
+### Tuan 05: Tiep nhan tai lieu
+
+- Upload va trich xuat PDF co text, DOCX, XLSX.
+- **Vu:** parser, chuan hoa, metadata, trang thai va loi file.
+- **Thuong:** danh sach tai lieu, tien do, loi va preview.
+- **Dau ra:** file mau duoc kiem tra dinh dang va dung luong.
+
+### Tuan 06: OCR va AI nhap lieu
+
+- OCR anh/PDF scan, anh xa schema, kiem tra truong bat buoc/kieu du lieu.
+- Nguoi co quyen preview, sua va xac nhan truoc khi ghi DB; luu nguon, log, do khong chac chan.
+- **Dau ra:** ban ghi cho duyet, khong ghi truc tiep du lieu khong hop le.
+
+### Tuan 07: Kho tri thuc va RAG
+
+- Chunking/embedding, luu vector, truy xuat top-k va ket noi LLM.
+- Gioi han theo `v_user_kb_access`, tra id/tieu de/trang/doan neu co.
+- **Dau ra:** cau tra loi co nguon; ca khong co bang chung phai noi ro.
+
+### Tuan 08-09: Tich hop 6 module
+
+- Tich hop Chat, CRM, Opportunity, Quote, Warehouse, Dashboard voi intent va quyen.
+- AI chi ho tro thao tac; giao dich nhay cam phai co quyen va xac nhan.
+- **Dau ra:** 6 module co luong co ban, khong ghi du lieu ngoai quy trinh.
+
+### Tuan 10: Kiem thu va on dinh
+
+- Test tich hop, hoi quy, RBAC, parser/OCR, RAG, tai file, du lieu sai va AI thieu chac chan.
+- **Vu:** API, bao mat, du lieu bien, log, backup va phuc hoi.
+- **Thuong:** end-to-end, responsive, thong bao loi va kha nang su dung.
+- **Dau ra:** bao cao test, danh sach loi/trang thai, khong con loi nghiem trong.
+
+### Tuan 11-12: Dong goi va nghiem thu
+
+- Chuan hoa `.env`, huong dan chay, sao luu, kien truc, database, API, AI, anh va slide.
+- Sua loi cuoi, quay demo, ra soat ma nguon/cau hinh/du lieu, ban giao.
+- **Dau ra:** ban phat hanh, video demo, bao cao/slide, gioi han va huong phat trien.
+
+## 4. Checklist nghiem thu
+
+- [ ] Dang nhap va quyen duoc kiem tra o backend/API.
+- [ ] PDF text, PDF scan/anh, Word va Excel co luong xu ly va bao loi.
+- [ ] AI tao du lieu co preview, sua va xac nhan truoc ghi DB.
+- [ ] RAG co nguon; thieu bang chung thi khong tu khang dinh.
+- [ ] Sau nang cap, 6 module co luong chinh.
+- [ ] Co bao cao test, huong dan chay, cau hinh khong chua API key va slide demo.

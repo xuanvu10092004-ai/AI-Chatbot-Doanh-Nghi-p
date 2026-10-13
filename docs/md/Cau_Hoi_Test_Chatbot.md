@@ -1,54 +1,49 @@
-# Danh sách câu hỏi kiểm thử (Test Cases) cho AI Chatbot
+# Bo cau hoi kiem thu AI Chatbot
 
-File này tổng hợp các câu hỏi đã được tối ưu để kiểm tra toàn bộ 6 module xử lý SQL và tính năng RAG (Tra cứu tài liệu nội bộ) của hệ thống. Bạn có thể copy/paste trực tiếp các câu hỏi này vào khung chat để xem AI phản hồi.
+Bo cau hoi bam theo du lieu Honda, view AI va ke hoach nang cap 6 module. Dap an so phai tinh truc tiep bang SQL, khong hardcode.
 
----
+## 1. SQL va du lieu Honda
 
-## 🛠️ I. KIỂM THỬ TRUY VẤN SQL (Cơ sở dữ liệu)
+1. SH 160i co nhung phien ban nao va gia niem yet bao nhieu?
+2. Gia niem yet thap nhat cua SH 160i la bao nhieu?
+3. Co bao nhieu mau xe trong he thong?
+4. Co bao nhieu phien ban/mau xe?
+5. Tong so luong ton kho toan he thong la bao nhieu?
+6. Ton kho tai chi nhanh NT01 la bao nhieu?
+7. Co bao nhieu khach hang?
+8. Co bao nhieu khach hang o trang thai `Da mua`?
+9. Co bao nhieu don hang?
+10. Co bao nhieu don hang tai chi nhanh NT02?
+11. Co bao nhieu mau xe tay ga (`tay_ga`)?
+12. Chi nhanh nao dang co ton kho thap?
 
-### Module 1: AI Chat & CRM (Khách hàng)
-1. Có bao nhiêu khách hàng trong hệ thống?
-2. Có bao nhiêu khách hàng VIP?
-3. Liệt kê danh sách khách hàng mới.
-4. **Top 10 khách hàng có doanh thu cao nhất là ai?** (Test logic JOIN 2 bảng)
+Dung `v_ai_products`, `v_ai_inventory`, `v_ai_customers`, `v_ai_orders`; tien te la VNĐ va phan khuc gom `xe_so`, `tay_ga`, `con_tay`.
 
-### Module 2: AI CRM (Tương tác khách hàng)
-5. **Khách hàng nào chưa phát sinh booking trong 90 ngày qua?** (Test tính năng lọc lịch sử giao dịch)
+## 2. Phan quyen va an toan
 
-### Module 3: AI Opportunity (Cơ hội bán hàng)
-6. Liệt kê tất cả cơ hội bán hàng.
-7. Cơ hội bán hàng nào có giá trị cao nhất?
-8. **Cơ hội bán hàng nào có khả năng chốt cao nhất?** (Test logic chuyển đổi sắp xếp sang cột Tỷ lệ thắng/Probability)
-9. Các cơ hội nào đã thắng (won)?
+1. Guest hoi gia von: bi tu choi, khong lo du lieu va co audit `denied`.
+2. Sales user 3 hoi ton kho: duoc phep theo quyen.
+3. Ky thuat vien user 5 hoi gia von: bi tu choi.
+4. User co `scope_branch_id`: khong xem duoc chi nhanh ngoai pham vi.
+5. Guest doc danh muc sales: bi tu choi.
+6. `DROP TABLE`, nhieu cau lenh, comment, `SLEEP`, `INTO OUTFILE` va bang ngoai whitelist: bi chan.
+7. SQL hop le khong co `LIMIT`: tu gioi han toi da 100 dong va timeout.
 
-### Module 4: AI Quote (Báo giá)
-10. Có báo giá nào đang chờ duyệt không?
-11. Danh sách báo giá đã được duyệt?
-12. **Tạo quote cho CÔNG TY TNHH BÁN LẺ XYZ** (Test tính năng tự động tìm ID công ty và INSERT bản nháp vào CSDL) *(Lưu ý: Thay tên công ty bằng tên có thật trong Excel của bạn)*
+## 3. RAG va tai lieu
 
-### Module 5: AI Warehouse (Kho hàng)
-13. Tổng số lượng sản phẩm trong kho là bao nhiêu?
-14. Sản phẩm nào sắp hết hàng? (Tự động lấy mức < 10)
-15. **Kho nào sắp hết hàng, mức tối thiểu 50?** (Test tính năng dùng Regex bắt tham số động từ câu hỏi)
+1. PDF co van ban tra loi kem nguon.
+2. PDF scan/anh hien thi truong OCR thieu/khong chac chan.
+3. DOCX/XLSX co bang giu metadata nguon.
+4. Nguoi co quyen sua va xac nhan truoc ghi DB.
+5. Tai lieu khong co bang chung: noi ro khong tim thay.
+6. Guest chi thay danh muc public.
+7. Moi luot hoi ghi `chat_sessions`/`chat_messages` va nguon id + tieu de.
 
-### Module 6: AI Dashboard (Thống kê tổng quan)
-16. Doanh thu hiện tại là bao nhiêu?
-17. **Thống kê tổng quan hệ thống** (Hoặc gõ: *Tóm tắt tuần này*) - Sẽ hiển thị Khách hàng, Sản phẩm, Báo giá, Cơ hội, Booking và Doanh thu.
+## 4. Hoi quy 6 module
 
----
-
-## 📚 II. KIỂM THỬ TÍNH NĂNG RAG (Tra cứu tài liệu nội bộ)
-
-*(Lưu ý: Thuật toán Scoring RAG mới sẽ quét toàn bộ từ khóa để tìm đúng tài liệu)*
-
-1. Quy định về thời gian phản hồi hỗ trợ khách hàng mới là bao lâu?
-2. Chính sách chăm sóc khách hàng VIP của công ty là gì?
-3. Hệ thống RAG và AI Chatbot hoạt động như thế nào?
-4. Quy trình bàn giao hệ thống cho khách hàng bao gồm những bước nào?
-5. Quy định bảo mật đối với API key và dữ liệu khách hàng được thực hiện ra sao?
-6. Làm thế nào để phân loại khách hàng?
-7. Quy trình xử lý báo giá bị từ chối là gì?
-8. Quy định về việc đặt tên file trong dự án như thế nào?
-
----
-*Mẹo: Bạn có thể gõ không dấu (vd: "top 10 khach hang doanh thu cao nhat") hệ thống vẫn sẽ hiểu và xử lý bình thường nhờ hàm `normalize_question`.*
+- CRM: xem khach hang theo quyen.
+- Warehouse: xem ton kho theo chi nhanh.
+- Opportunity: thong bao chua ho tro neu schema chua chot, khong tu bia du lieu.
+- Quote: thao tac sau khi co quyen va xac nhan.
+- Dashboard: so lieu nhat quan voi view/query nguon.
+- AI Chat/RAG: dinh tuyen dung, co audit va nguon.

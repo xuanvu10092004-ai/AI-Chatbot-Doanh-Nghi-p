@@ -1,4 +1,82 @@
-# AI Chatbot Doanh Nghiệp (Enterprise AI Chatbot)
+# AI Chatbot Doanh Nghiep
+
+Ung dung Flask ke thua he thong AI CRM/RAG hien co va nang cap cho du lieu Honda. Muc tieu dot thuc tap la bo sung phan quyen da cap, trich xuat du lieu co kiem soat, doc tai lieu da dinh dang va tich hop an toan voi 6 module AI hien huu.
+
+## Pham vi hien tai
+
+- Du lieu MySQL 8.0.16+ voi san pham, phien ban, ton kho, khach hang va don hang Honda.
+- Text-to-SQL chi truy van cac view `v_ai_*`, khong truy cap bang goc.
+- Validator chi cho phep mot cau `SELECT`, whitelist view, gioi han `LIMIT` va thoi gian chay.
+- RBAC, quyen theo chi nhanh, kiem tra quyen truoc truy xuat va audit.
+- RAG gioi han theo quyen, tra nguon va noi ro khi khong co bang chung.
+- 6 module: CRM, Warehouse, Opportunity, Quote, Dashboard va AI Chat/RAG.
+
+## Cau truc quan trong
+
+- `app.py`: entry point Flask va API.
+- `db.py`: pool MySQL cho ung dung va tai khoan doc rieng cho text-to-SQL.
+- `routing.py`: phan loai module va huong SQL/RAG.
+- `schema_context.py`: tao schema context tu metadata/comment cua `v_ai_*`.
+- `sql_safety.py`: kiem tra SQL do LLM sinh.
+- `sql_service.py`, `rag_service.py`: truy xuat du lieu/tai lieu co kiem soat.
+- `data/schema/extensions/`: view AI, tai khoan doc va index mo rong.
+- `tests/`: test validator va MySQL/RBAC.
+- `docs/md/`: bao cao, ke hoach, thiet ke luong va bo cau hoi.
+
+## Cai dat
+
+Yeu cau Python 3.13+, MySQL 8.0.16+ va tai khoan MySQL co quyen khoi tao schema/view/index/user.
+
+```powershell
+python -m pip install -r requirements.txt
+```
+
+Tao `.env` tu `.env.example` va dien:
+
+```text
+DB_HOST=127.0.0.1
+DB_PORT=3306
+DB_USER=...
+DB_PASSWORD=...
+DB_NAME=honda_chatbot
+CHATBOT_RO_PASSWORD=...
+GROQ_API_KEY=...
+APP_ENV=dev
+```
+
+Khong commit `.env` hoac mat khau vao SQL. Tai khoan text-to-SQL dung `CHATBOT_RO_PASSWORD` va chi co `SELECT` tren cac view `v_ai_*`.
+
+## Khoi tao va chay
+
+```powershell
+python init_db.py --reset
+python app.py
+```
+
+Script ap dung schema chuan, du lieu mau va cac extension theo thu tu `02_ai_views.sql`, `03_chatbot_ro_user.sql`, `04_indexes.sql`.
+
+## Kiem thu
+
+```powershell
+python -m pytest -q
+```
+
+Test validator khong can MySQL. Test MySQL/RBAC se skip hoac ghi nhan blocked khi MySQL chua chay; test Groq tu skip neu thieu `GROQ_API_KEY`. Ket qua gan nhat o [docs/test_results.md](docs/test_results.md).
+
+## Ke hoach thuc tap 12 tuan
+
+Thoi gian: **12/10/2026 - 03/01/2027**.
+
+1. Tuan 01: khao sat he thong cu, chot pham vi va test hoi quy.
+2. Tuan 02: thiet ke kien truc, du lieu, RBAC va quy trinh tai lieu.
+3. Tuan 03-04: dang nhap, phien/token, nguoi dung, vai tro va quyen.
+4. Tuan 05-06: PDF/DOCX/XLSX, OCR anh/PDF scan, preview va xac nhan truoc ghi DB.
+5. Tuan 07: kho tri thuc, chunking/embedding, truy xuat va nguon.
+6. Tuan 08-09: tich hop 6 module, phan quyen truoc truy xuat va ghi co xac nhan.
+7. Tuan 10: kiem thu tich hop, hoi quy, bao mat va du lieu sai.
+8. Tuan 11-12: dong goi demo, bao cao, slide, sua loi va nghiem thu.
+
+Chi tiet phan cong va tieu chi nghiem thu o [docs/md/Bao_cao_Trien_khai_Chi_tiet.md](docs/md/Bao_cao_Trien_khai_Chi_tiet.md).# AI Chatbot Doanh Nghiệp (Enterprise AI Chatbot)
 
 Đây là một ứng dụng Web (Flask) tích hợp Trí tuệ nhân tạo (AI Chatbot) được thiết kế cho các doanh nghiệp để quản lý Quan hệ khách hàng (CRM) và Quản lý Kho hàng (Warehouse). Hệ thống sử dụng mô hình ngôn ngữ lớn (Groq LLM) để phản hồi người dùng thông qua xử lý ngôn ngữ tự nhiên (NLP) kết hợp truy vấn cơ sở dữ liệu (SQL) và truy xuất tài liệu (RAG).
 

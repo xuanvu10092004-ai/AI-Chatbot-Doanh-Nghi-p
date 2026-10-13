@@ -1,101 +1,63 @@
-# B5 - Thiết kế luồng hoạt động hệ thống AI Chatbot Doanh nghiệp
-# Đây là tài liệu thiết kế trước khi code, giúp mình xác định câu hỏi của người dùng sẽ đi qua những bước nào trong hệ thống.
-## 1. Mục tiêu
+# Thiet ke luong AI Chatbot Doanh Nghiep
 
-Bước này dùng để thiết kế luồng xử lý chính của hệ thống trợ lý AI doanh nghiệp.
+## 1. Luong hoi dap co kiem soat quyen
 
-Hệ thống cần xử lý được câu hỏi của người dùng và xác định câu hỏi đó nên lấy dữ liệu từ database hay từ tài liệu nội bộ.
+```text
+Nguoi dung -> UI/Flask API -> session
+           -> intent + v_user_permissions
+           -> audit allowed/denied
+           -> SQL an toan hoac RAG theo quyen
+           -> context co nguon -> Groq LLM
+           -> chat_sessions/chat_messages -> UI
+```
 
----
+Neu bi tu choi, he thong tra loi chung chung, khong xac nhan du lieu co ton tai va khong truy xuat tiep.
 
-## 2. Luồng hoạt động tổng quát
+## 2. Luong text-to-SQL
 
-Người dùng nhập câu hỏi vào giao diện Chatbox.
+1. Xac dinh intent du lieu va kiem tra quyen truoc truy xuat.
+2. Tao schema context tu `information_schema` va comment cua view `v_ai_*`.
+3. Hieu tu dong nghia: `xe ga` -> `tay_ga`, `xe so` -> `xe_so`, `xe con` -> `con_tay`; don vi tien te VNĐ.
+4. Validator chi cho mot cau `SELECT`, view whitelist, khong comment/`;` chen giua/`SLEEP`/`INTO OUTFILE`.
+5. Tu them `LIMIT` toi da 100 va `MAX_EXECUTION_TIME`.
+6. Chay bang `chatbot_ro`; loc `scope_branch_id` neu can.
+7. Ghi audit va tra context; khong dua `password_hash` hoac `cost_price` trai quyen vao context.
 
-Giao diện gửi câu hỏi đến Flask Backend.
+View chinh: `v_ai_products`, `v_ai_inventory`, `v_ai_customers`, `v_ai_orders`; `v_ai_product_costs` chi danh cho `price:cost:read`.
 
-Backend nhận câu hỏi và chuyển sang bộ phân loại câu hỏi.
+## 3. Luong RAG va tai lieu
 
-Bộ phân loại xác định câu hỏi thuộc nhóm SQL hay RAG.
+1. Kiem tra `v_user_kb_access`; guest chi thay danh muc public.
+2. Tai lieu di qua parser/OCR, chunking/embedding va index.
+3. Truy xuat top-k trong pham vi duoc phep, giu id/tieu de/trang/doan.
+4. LLM chi tra loi bang bang chung; khong co bang chung thi noi ro khong tim thay.
+5. Ghi session va message moi luot hoi.
 
-Nếu câu hỏi thuộc nhóm SQL, hệ thống truy vấn dữ liệu từ SQLite.
+## 4. Luong AI nhap du lieu
 
-Nếu câu hỏi thuộc nhóm RAG, hệ thống tìm nội dung liên quan trong bảng documents.
+```text
+Upload PDF/DOCX/XLSX/anh -> kiem tra file -> parser/OCR
+-> chuan hoa schema -> preview/canh bao
+-> nguoi co quyen sua/xac nhan -> ghi DB + log + nguon
+```
 
-Sau đó dữ liệu được gửi cho AI để tạo câu trả lời tự nhiên.
+AI khong duoc ghi thang du lieu nghiep vu chua xac nhan.
 
-Cuối cùng câu trả lời được hiển thị lại trên giao diện Chatbox.
+## 5. Pham vi 6 module
 
----
+- CRM: khach hang theo quyen.
+- Warehouse: ton kho theo san pham/chi nhanh.
+- Opportunity: chi trien khai khi schema nghiep vu duoc chot.
+- Quote: thao tac ghi phai co quyen va xac nhan.
+- Dashboard: thong ke tu du lieu da kiem soat.
+- AI Chat/RAG: dinh tuyen, truy xuat, sinh cau tra loi va nguon.
 
-## 3. Sơ đồ luồng xử lý
+## 6. Tieu chi nghiem thu
 
-User Question
-→ Web Interface
-→ Flask API
-→ Question Routing
-→ SQL hoặc RAG
-→ Retrieve Data
-→ Groq AI
-→ AI Answer
-→ Chatbox UI
+- Khong goi API hoac doc du lieu ngoai quyen.
+- Tai lieu da dinh dang co thong bao loi phu hop.
+- Du lieu trich xuat qua preview-confirm-save.
+- RAG co nguon va co ca khong tim thay bang chung.
+- 6 module co it nhat mot luong end-to-end sau nang cap.
 
----
-
-## 4. Nhóm câu hỏi xử lý bằng SQL
-
-Các câu hỏi SQL là những câu hỏi liên quan đến dữ liệu có cấu trúc trong database.
-
-Ví dụ:
-
-- Có bao nhiêu khách hàng?
-- Khách hàng nào đang ở trạng thái tiềm năng?
-- Khách hàng nào là VIP?
-- Sản phẩm nào sắp hết hàng?
-- Báo giá nào đã được duyệt?
-- Cơ hội bán hàng nào có giá trị cao nhất?
-- Tổng giá trị báo giá là bao nhiêu?
-
-Các câu hỏi này sẽ lấy dữ liệu từ các bảng:
-
-- customers
-- inventory
-- opportunities
-- quotes
-- chat_logs
-
----
-
-## 5. Nhóm câu hỏi xử lý bằng RAG
-
-Các câu hỏi RAG là những câu hỏi cần tìm thông tin trong tài liệu nội bộ.
-
-Ví dụ:
-
-- Chính sách chăm sóc khách hàng mới là gì?
-- Quy định báo giá như thế nào?
-- Khi nào sản phẩm được xem là tồn kho thấp?
-- API key cần được bảo mật như thế nào?
-- RAG trong hệ thống dùng để làm gì?
-- Quy trình bàn giao hệ thống gồm những gì?
-
-Các câu hỏi này sẽ lấy dữ liệu từ bảng:
-
-- documents
-
----
-
-## 6. Kết quả cần đạt
-
-Sau bước B5, nhóm xác định được luồng xử lý chính của hệ thống.
-
-Luồng này sẽ được dùng làm nền tảng để xây dựng các bước tiếp theo như:
-
-- B6: Phân loại câu hỏi SQL hoặc RAG
-- B7: Xây dựng giao diện web
-- B8: Xây dựng backend Flask
-- B9: Viết truy vấn SQL nền tảng
-- B10: Tích hợp Groq API và RAG
-## 7. Hình ảnh sơ đồ luồng
-
-![Sơ đồ luồng xử lý AI Chatbot](docs/images/luong_xu_ly_ai_chatbot.png)
+![So do luong xu ly AI Chatbot](../images/luong_xu_ly_ai_chatbot.png)
