@@ -15,9 +15,9 @@ PROJECT_ROOT = Path(__file__).resolve().parent
 SCHEMA_FILE = PROJECT_ROOT / "data" / "schema" / "honda_chatbot_rbac.sql"
 SEED_FILE = PROJECT_ROOT / "data" / "seed" / "honda_import_data.sql"
 EXPECTED_COUNTS = {
-    "products": 10,
-    "product_variants": 28,
-    "inventory": 84,
+    "products": 11,
+    "product_variants": 31,
+    "inventory": 93,
     "customers": 80,
     "customer_profiles": 80,
     "orders": 30,

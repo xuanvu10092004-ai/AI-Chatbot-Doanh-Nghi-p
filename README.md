@@ -77,6 +77,10 @@ python init_db.py --extensions-only
 
 `schema_migrations` ghi file đã áp dụng và bỏ qua ở lần sau. Extension xác thực là `06_auth_dynamic_rbac.sql` vì số 05 đã được dùng cho thông số sản phẩm. `07_own_scope_views.sql` thêm lọc bản ghi sở hữu cho chatbot.
 
+`08_air_blade_125_seed.sql` bổ sung mẫu **Air Blade 125**, thông số, 3 phiên bản và 9 dòng tồn kho tại NT01/NT02/CR01. Đây là **dữ liệu mô phỏng**; các giá 42.500.000 / 44.500.000 / 46.500.000 VNĐ, giá vốn, thông số và tồn kho được đặt cho thử nghiệm, không phải thông tin thương mại thực tế. File Excel nguồn ban đầu được giữ nguyên; phần bổ sung nằm riêng trong extension và được áp dụng khi khởi tạo hoặc chạy `--extensions-only`. Extension chỉ thêm bản ghi thiếu, không ghi đè giá hoặc số lượng đã được người dùng cập nhật.
+
+Sau bổ sung, bộ dữ liệu mẫu có **11 mẫu xe, 31 phiên bản, 93 dòng tồn kho**; vẫn có 80 khách hàng, 80 hồ sơ và 30 đơn hàng. Có thể hỏi “giá AB 125”, “AB 125 chi nhánh nào còn?” hoặc “so sánh AB 125 và AB 160”. Áp dụng trên máy chủ database bằng `python init_db.py --extensions-only`; các máy cùng kết nối database sẽ thấy dữ liệu mới ngay.
+
 ```powershell
 python init_db.py --reset
 ```
@@ -158,7 +162,7 @@ Chat nhận câu hỏi tồn kho như “SH 160 chi nhánh nào còn?”, giữ 
 python -m pytest -q tests/test_chat_understanding.py tests/test_db_pool.py
 ```
 
-Test trình duyệt tùy chọn nằm trong `tests/test_chat_layout.py`. Cài `playwright` vào môi trường phát triển; test dùng Edge có sẵn trên Windows hoặc Chromium của Playwright (`python -m playwright install chromium`). Test chạy backend cục bộ tạm thời, đăng nhập qua form thật, kiểm tra sáu lượt hỏi trên màn hình 1440×900, 1280×600 và 390×844; ảnh nằm trong `.pytest_cache/chat-layout/`. Không cài Playwright thì riêng module này được skip, các test MySQL vẫn chạy.
+Test trình duyệt tùy chọn nằm trong `tests/test_chat_layout.py`. Cài `playwright` vào môi trường phát triển; test dùng Edge có sẵn trên Windows hoặc Chromium của Playwright (`python -m playwright install chromium`). Test chạy backend cục bộ tạm thời, đăng nhập qua form thật, kiểm tra tám lượt hỏi (gồm tồn kho AB 125 và so sánh AB 125/160) trên màn hình 1440×900, 1280×600 và 390×844; ảnh nằm trong `.pytest_cache/chat-layout/`. Không cài Playwright thì riêng module này được skip, các test MySQL vẫn chạy.
 
 ```powershell
 python -m pip install playwright

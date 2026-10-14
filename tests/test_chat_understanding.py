@@ -62,15 +62,15 @@ def test_comparison_reports_missing_model_without_replacement(auth_client, monke
         pytest.fail('So sánh hai mẫu xe rõ ràng không cần LLM đoán SQL')
     monkeypatch.setattr('sql_service.generate_query', forbidden)
     auth_client.login(None)
-    data = auth_client.post('/chat', json={'question': 'so sánh ab 125 và ab 160'}).get_json()
+    data = auth_client.post('/chat', json={'question': 'so sánh ab 150 và ab 160'}).get_json()
     with cursor() as cur:
         cur.execute('''SELECT p.model_name, pv.variant_name, pv.list_price
                        FROM products p JOIN product_variants pv ON pv.product_id=p.id
-                       WHERE p.model_name IN (%s,%s) ORDER BY p.model_name,pv.list_price''', ('Air Blade 125', 'Air Blade 160'))
+                       WHERE p.model_name IN (%s,%s) ORDER BY p.model_name,pv.list_price''', ('Air Blade 150', 'Air Blade 160'))
         expected = cur.fetchall()
     assert [{'model_name': r['model_name'], 'variant_name': r['variant_name'], 'list_price': int(r['list_price'])} for r in data['rows']] == expected
-    assert 'Air Blade 125' in data['summary'] and 'chưa đủ dữ liệu' in data['summary']
-    assert 'Air Blade 125' in data['answer'] and 'chưa đủ dữ liệu' in data['answer']
+    assert 'Air Blade 150' in data['summary'] and 'chưa đủ dữ liệu' in data['summary']
+    assert 'Air Blade 150' in data['answer'] and 'chưa đủ dữ liệu' in data['answer']
     assert 'không thay thế' in data['summary']
 
 
@@ -100,6 +100,6 @@ def test_branch_followup_keeps_model_and_checks_permission(auth_client):
 
 def test_missing_stock_does_not_claim_inventory_exists(auth_client):
     auth_client.login(1)
-    data = auth_client.post('/chat', json={'question': 'ab 125 chi nhánh nào còn?'}).get_json()
+    data = auth_client.post('/chat', json={'question': 'ab 150 chi nhánh nào còn?'}).get_json()
     assert data['rows'] == []
     assert data['answer'] == 'Không tìm thấy dữ liệu tồn kho phù hợp trong phạm vi bạn được xem. Hãy kiểm tra lại mẫu xe hoặc chi nhánh cần tra cứu.'

@@ -36,7 +36,12 @@ def test_aliases_and_information_use_real_catalog(question, model):
 
 def test_ab125_is_not_replaced_with_ab160():
     query, params = plan_query('giá ab 125 bao nhiêu', 'ask_price_list')
-    assert not _execute_text_to_sql(query, params, allowed_views=permitted_views(None))
+    rows = _execute_text_to_sql(query, params, allowed_views=permitted_views(None))
+    assert len(rows) == 3 and {r['model_name'] for r in rows} == {'Air Blade 125'}
+    with cursor() as cur:
+        cur.execute('SELECT pv.list_price FROM product_variants pv JOIN products p ON p.id=pv.product_id WHERE p.model_name=%s ORDER BY pv.list_price', ('Air Blade 125',))
+        expected = cur.fetchall()
+    assert [r['list_price'] for r in rows] == [r['list_price'] for r in expected]
 
 
 def test_stock_question_counts_motorcycles_not_rows():
@@ -110,7 +115,7 @@ def test_screenshot_questions_through_api(monkeypatch):
         stock = client.post_as(3, '/chat', json={'question': 'hàng tồn kho còn bao nhiêu'}).get_json()
         assert 'total_stock' in stock['answer'] and not stock['access_denied']
         price = client.post('/chat', json={'question': 'giá ab 125 bao nhiêu'}).get_json()
-        assert price['answer'] == 'Không tìm thấy dữ liệu phù hợp.'
+        assert len(price['rows']) == 3 and {r['model_name'] for r in price['rows']} == {'Air Blade 125'}
         info = client.post('/chat', json={'question': 'thông tin sh mode 125'}).get_json()
         assert 'SH Mode 125' in info['answer'] and 'fuel_tank_l' in info['answer']
 
@@ -124,7 +129,7 @@ def test_generated_values_are_bound_not_sql_text():
 
 
 def test_many_literals_keep_sql_order_and_no_marker_prefix_collision():
-    models = ['Air Blade 160', 'Blade 110', 'Future 125 FI', 'Lead 125', 'SH 160i', 'SH Mode 125', 'Vario 160', 'Vision 110', 'Wave Alpha 110', 'Winner X']
+    models = ['Air Blade 125', 'Air Blade 160', 'Blade 110', 'Future 125 FI', 'Lead 125', 'SH 160i', 'SH Mode 125', 'Vario 160', 'Vision 110', 'Wave Alpha 110', 'Winner X']
     literals = ', '.join("'" + name + "'" for name in models)
     original = "SELECT model_name FROM v_ai_products WHERE segment = 'tay_ga' AND list_price < 50000000 AND model_name IN (" + literals + ') ORDER BY model_name'
     sql, params = bind_literals(original, frozenset({'v_ai_products'}))

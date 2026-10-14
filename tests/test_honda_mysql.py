@@ -28,9 +28,9 @@ def fetch_one(connection, query: str, params: tuple = ()):
 
 def test_expected_dataset_counts(mysql_connection):
     checks = {
-        "products": ("SELECT COUNT(DISTINCT product_id) AS n FROM v_ai_products", 10),
-        "product_variants": ("SELECT COUNT(*) AS n FROM v_ai_products", 28),
-        "inventory": ("SELECT COUNT(*) AS n FROM v_ai_inventory", 84),
+        "products": ("SELECT COUNT(DISTINCT product_id) AS n FROM v_ai_products", 11),
+        "product_variants": ("SELECT COUNT(*) AS n FROM v_ai_products", 31),
+        "inventory": ("SELECT COUNT(*) AS n FROM v_ai_inventory", 93),
         "customers": ("SELECT COUNT(*) AS n FROM v_ai_customers", 80),
         "customer_profiles": ("SELECT COUNT(*) AS n FROM customer_profiles", 80),
         "orders": ("SELECT COUNT(DISTINCT order_id) AS n FROM v_ai_orders", 30),

@@ -55,9 +55,9 @@ def test_sales_scope_and_pool_reset(client):
     data = client.post_as(3, '/chat', json={'question': 'Tồn kho tại NT02'}).get_json()
     assert data['answer'] == 'Không tìm thấy dữ liệu phù hợp.'
     rows = _execute_text_to_sql('SELECT branch_code FROM v_ai_inventory', allowed_views=permitted_views(3), scope_branch_ids=[1])
-    assert len(rows) == 28 and {r['branch_code'] for r in rows} == {'NT01'}
+    assert len(rows) == 31 and {r['branch_code'] for r in rows} == {'NT01'}
     rows = _execute_text_to_sql('SELECT branch_code FROM v_ai_inventory', allowed_views=permitted_views(1))
-    assert len(rows) == 84 and {r['branch_code'] for r in rows} == {'NT01', 'NT02', 'CR01'}
+    assert len(rows) == 93 and {r['branch_code'] for r in rows} == {'NT01', 'NT02', 'CR01'}
     with cursor('text_to_sql') as cur:
         cur.execute('SELECT @ai_branch AS scope, @@max_statement_time AS timeout')
         row = cur.fetchone()

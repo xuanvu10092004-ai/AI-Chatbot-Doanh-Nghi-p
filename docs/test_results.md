@@ -199,3 +199,44 @@ Nguyên nhân: “chi nhánh nào còn” chưa được nhận thành intent t�
 Kiểm tra cuối: đặt `PYTHONPATH` tới `.pytest_cache/browser_tools` (Playwright được cài tạm), chạy `python -X utf8 -m pytest -q --tb=short` với mạng cho Groq: **149 passed, 1 failed in 17.61s**, không skip test trình duyệt. Lỗi còn lại là `test_logo_and_formatter_served_locally`: `docs/images/logo.jpg` đã có thay đổi trước nhiệm vụ, khác `static/images/logo.jpg`. Không sửa ảnh hoặc assertion để che lỗi. Các file ảnh và `AGENTS.md` người dùng đã sửa được giữ nguyên.
 
 Ảnh kiểm tra: `.pytest_cache/chat-layout/chat-1440x900.png`, `chat-1280x600.png`, `chat-390x844.png`. Đây là kiểm tra cục bộ trên MariaDB thật, không khẳng định đã kiểm chứng trên máy thành viên khác. Không reset database trong nhiệm vụ sửa chat/giao diện vì không thay schema hay seed.
+
+## Bổ sung Air Blade 125 - 14/10/2026
+
+Đã thêm `data/schema/extensions/08_air_blade_125_seed.sql`: 1 mẫu xe, thông số, 3 phiên bản, 9 dòng tồn kho; không sửa schema chuẩn, không xóa hoặc ghi đè dữ liệu nghiệp vụ. Tất cả giá, giá vốn, thông số và tồn kho bổ sung là **dữ liệu mô phỏng cho thử nghiệm**, không phải thông tin thương mại thực tế. Excel gốc được giữ nguyên; extension là nguồn của phần bổ sung.
+
+| Phiên bản mô phỏng | Giá niêm yết (VNĐ) | Tổng tồn kho (xe) |
+|---|---:|---:|
+| Air Blade 125 - Tiêu chuẩn - Đỏ đen | 42.500.000 | 16 |
+| Air Blade 125 - Đặc biệt - Đen | 44.500.000 | 6 |
+| Air Blade 125 - Thể thao - Xám đen | 46.500.000 | 5 |
+
+Tồn kho mô phỏng theo chi nhánh: NT01=15, NT02=7, CR01=5; tổng=27 xe, 9 dòng, gồm 2 dòng số lượng bằng 0 để kiểm tra câu hỏi “còn xe”.
+
+Kết quả thật khi chạy `python -X utf8 init_db.py --extensions-only`:
+
+```text
+Applied 08_air_blade_125_seed.sql
+MySQL schema and seed completed.
+products: 11 (expected 11)
+product_variants: 31 (expected 31)
+inventory: 93 (expected 93)
+customers: 80 (expected 80)
+customer_profiles: 80 (expected 80)
+orders: 30 (expected 30)
+```
+
+Chạy lại cùng lệnh: migration được bỏ qua, số lượng giữ nguyên. Test còn chạy trực tiếp file SQL hai lần, sau khi chủ động chỉnh một số lượng tồn kho, để xác nhận không trùng bản ghi và không ghi đè cập nhật. `python -X utf8 check_db.py` xác nhận cùng các số lượng trên và 89 tài khoản đang hoạt động.
+
+| Kiểm thử | Kết quả |
+|---|---|
+| Mẫu AB 125, thông số và 3 phiên bản | Đạt |
+| Guest hỏi giá AB 125, đối chiếu SQL gốc | Đạt, không lộ giá vốn |
+| Admin/sales NT01/sales NT02 hỏi AB 125 chi nhánh nào còn | Đạt, chỉ trả lượng >0 và đúng phạm vi chi nhánh |
+| So sánh AB 125 và AB 160 | Đạt, 6 phiên bản của 2 mẫu, giá đối chiếu SQL gốc, không còn báo thiếu AB 125 |
+| Không có dữ liệu AB 150 | Đạt, giữ kiểm tra không bịa bằng mẫu còn thiếu; không xóa test âm tính |
+| Chạy lại seed và bảo toàn số lượng đã cập nhật | Đạt |
+| Edge ở 1440×900, 1280×600, 390×844; 8 lượt hỏi/kích thước | Đạt, gồm tồn kho AB 125 và bảng so sánh AB 125/160 |
+
+Kiểm tra cuối, với Playwright tạm trong `PYTHONPATH` và quyền kết nối mạng cho Groq: `python -X utf8 -m pytest -q --tb=short` → **156 passed, 1 failed in 19.58s**. Lỗi duy nhất vẫn là `test_logo_and_formatter_served_locally`: ảnh nguồn khác ảnh được phục vụ, đã có trước nhiệm vụ này; không thay ảnh hoặc nới assertion để cho qua.
+
+Không chạy `--reset` trên database dùng chung: nhiệm vụ là bổ sung dữ liệu, không xóa dữ liệu hiện tại. Extension sẽ được áp dụng tự động sau seed khi người dùng chủ động khởi tạo lại bằng `init_db.py`. Các số lượng kỳ vọng và test được cập nhật đúng bộ dữ liệu 11/31/93; số khách hàng/đơn hàng không thay đổi.

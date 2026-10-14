@@ -48,9 +48,10 @@ def test_messages_keep_all_text_and_tables_scroll(chat_server, width, height):
             page.get_by_role('button', name='Đăng nhập', exact=True).click()
             page.wait_for_url('**/dashboard')
             page.goto(chat_server + '/chat')
-            questions = ['ab 125 chi nhánh nào còn?', 'sh 160 chi nhánh nào còn',
-                         'so sánh ab 125 và ab 160', 'thông tin SH Mode 125',
-                         'thông tin SH 160i', 'so sánh Vision 110 và Lead 125']
+            questions = ['ab 150 chi nhánh nào còn?', 'sh 160 chi nhánh nào còn',
+                         'so sánh ab 150 và ab 160', 'thông tin SH Mode 125',
+                         'thông tin SH 160i', 'so sánh Vision 110 và Lead 125',
+                         'ab 125 chi nhánh nào còn?', 'so sánh ab 125 và ab 160']
             for question in questions:
                 page.get_by_label('Câu hỏi', exact=True).fill(question)
                 with page.expect_response(lambda response: response.url.endswith('/chat') and response.request.method == 'POST') as pending:
@@ -65,12 +66,12 @@ def test_messages_keep_all_text_and_tables_scroll(chat_server, width, height):
             assert len(measurements) == 1 + 2 * len(questions)
             assert all(row['height'] >= row['content'] - 1 for row in measurements), measurements
             assert all(row['shrink'] == '0' for row in measurements)
-            assert any('Air Blade 125' in row['text'] and 'chưa đủ dữ liệu' in row['text'] for row in measurements)
+            assert any('Air Blade 150' in row['text'] and 'chưa đủ dữ liệu' in row['text'] for row in measurements)
             assert page.locator('#chatMessages').evaluate('(node) => node.scrollHeight > node.clientHeight')
             assert page.evaluate('document.documentElement.scrollWidth <= innerWidth'), 'Trang bị tràn ngang'
-            assert page.locator('.table-scroll').count() == 5
+            assert page.locator('.table-scroll').count() == 7
             assert page.locator('.table-scroll thead tr').last.locator('th').first.inner_text() == 'Mẫu xe'
-            assert page.locator('.table-hint').count() == 5
+            assert page.locator('.table-hint').count() == 7
             assert page.locator('.table-scroll').evaluate_all('nodes => nodes.every(n => n.scrollHeight <= n.clientHeight + 1)')
             if width == 390:
                 assert page.locator('.table-scroll').evaluate_all('nodes => nodes.every(n => n.scrollWidth > n.clientWidth)')

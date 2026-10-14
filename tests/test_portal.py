@@ -22,7 +22,7 @@ def test_menu_role_visibility(auth_client):
 def test_business_api_scope_pagination_and_sort(auth_client):
     auth_client.login(3)
     data=auth_client.get('/api/inventory?size=5').get_json()
-    assert len(data['rows'])==5 and data['total']==28
+    assert len(data['rows'])==5 and data['total']==31
     assert {row['branch_code'] for row in data['rows']}=={'NT01'}
     assert auth_client.get('/api/inventory?branch=NT02').get_json()['total']==0
     assert auth_client.get('/api/inventory?sort=quantity;DROP').status_code==400
