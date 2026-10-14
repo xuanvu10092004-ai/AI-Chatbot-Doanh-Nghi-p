@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import os
+import time
+from threading import Lock
 from pathlib import Path
 from contextlib import contextmanager
 from typing import Any, Iterator
@@ -9,11 +11,13 @@ import mysql.connector
 from dotenv import load_dotenv
 from mysql.connector import MySQLConnection
 from mysql.connector.pooling import MySQLConnectionPool
+from mysql.connector.errors import PoolError
 
 
 load_dotenv(Path(__file__).resolve().parent / '.env')
 _APP_POOL: MySQLConnectionPool | None = None
 _TEXT_SQL_POOL: MySQLConnectionPool | None = None
+_POOL_LOCK = Lock()
 
 
 def _required(name: str) -> str:
@@ -35,6 +39,11 @@ def _base_config() -> dict[str, Any]:
 
 
 def _pool(role: str) -> MySQLConnectionPool:
+    with _POOL_LOCK:
+        return _get_or_create_pool(role)
+
+
+def _get_or_create_pool(role: str) -> MySQLConnectionPool:
     global _APP_POOL, _TEXT_SQL_POOL
     if role == "app" and _APP_POOL is not None:
         return _APP_POOL
@@ -60,7 +69,18 @@ def _pool(role: str) -> MySQLConnectionPool:
 def get_connection(role: str = "app") -> MySQLConnection:
     if role not in {"app", "text_to_sql"}:
         raise ValueError("role phải là app hoặc text_to_sql")
-    connection = _pool(role).get_connection()
+    pool = _pool(role)
+    # Dashboard tải nhiều API cùng lúc; chờ kết nối được trả về thay vì làm
+    # request chat đang đến đồng thời thất bại ngay khi cả 5 kết nối bận.
+    deadline = time.monotonic() + 5
+    while True:
+        try:
+            connection = pool.get_connection()
+            break
+        except PoolError:
+            if time.monotonic() >= deadline:
+                raise
+            time.sleep(0.02)
     if role == 'text_to_sql':
         try:
             with connection.cursor() as cur:
