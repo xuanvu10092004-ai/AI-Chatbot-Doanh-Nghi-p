@@ -27,6 +27,7 @@ from auth_routes import register_auth
 from dashboard_routes import register_dashboard
 from admin_routes import register_admin
 from business_routes import register_business
+from document_routes import register_documents, document_request_limits
 
 
 app = Flask(__name__)
@@ -36,11 +37,13 @@ if secret_key:
 else:
     raise RuntimeError('FLASK_SECRET_KEY is required')
 app.config.update(SESSION_COOKIE_HTTPONLY=True,SESSION_COOKIE_SAMESITE='Lax',SESSION_COOKIE_SECURE=os.getenv('APP_ENV')!='dev',MAX_CONTENT_LENGTH=65536)
+app.before_request(document_request_limits)
 app.before_request(initialize_request)
 register_auth(app)
 register_dashboard(app)
 register_admin(app)
 register_business(app)
+register_documents(app)
 
 @app.after_request
 def security_headers(response):

@@ -12,3 +12,4 @@ database.db
 .pytest_cache_local/
 .venv/
 .preview-profile/
+instance/documents/
