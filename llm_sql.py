@@ -20,6 +20,8 @@ Không truy cập bảng gốc, view ngoài schema, biến phiên, hàm tùy ch�
 không DDL/DML. Không đoán cột hoặc giá trị. Giới hạn ngoài cùng <=100 dòng.
 Giá và ngân sách đơn vị VNĐ; 50 triệu = 50000000. Giá bao nhiêu: lấy list_price,
 không COUNT. Tồn kho bao nhiêu: SUM(quantity), không COUNT số dòng.
+Sắp hết hàng: quantity > 0 AND quantity < 5 (còn 1–4 xe).
+Hết hàng: quantity = 0. Từ 5 xe trở lên là còn hàng.
 Tính doanh thu từ net_amount; nếu chưa biết cấu trúc/gom nhóm hãy hỏi lại.
 Tên viết tắt AB = Air Blade, shmode = SH Mode; giữ dung tích xe người hỏi yêu cầu:
 AB 125 không được đổi thành Air Blade 160. So sánh mẫu xe lấy các phiên bản của

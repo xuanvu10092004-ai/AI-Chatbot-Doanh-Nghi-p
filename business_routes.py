@@ -2,6 +2,7 @@ from flask import request,render_template,jsonify
 from db import cursor
 from security import require_permission
 from dashboard_service import scope_filter
+from inventory_policy import LOW_STOCK_THRESHOLD
 
 
 def records(kind,low_stock=False):
@@ -19,7 +20,7 @@ def records(kind,low_stock=False):
         columns='b.code AS branch_code,p.model_name,pv.variant_name,i.quantity,pv.list_price,i.updated_at'
         searchable=['p.model_name','pv.variant_name','b.code']
         sort_map={'name':'p.model_name','quantity':'i.quantity','price':'pv.list_price'}
-        if low_stock:where+=' AND i.quantity<%s';params+=(10,)
+        if low_stock:where+=' AND i.quantity>0 AND i.quantity<%s';params+=(LOW_STOCK_THRESHOLD,)
     if request.args.get('branch'):
         where+=' AND b.code=%s';params+=(request.args['branch'],)
     if request.args.get('q'):

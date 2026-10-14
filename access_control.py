@@ -11,7 +11,7 @@ INTENT_RULES = (
     ("ask_stock", ("tồn kho", "ton kho", "còn hàng", "con hang", "kho hàng", "kho hang")),
     ("ask_order_status", ("đơn hàng", "don hang", "đơn của", "don cua")),
     ("ask_order_status", ("doanh thu", "thuần")),
-    ("ask_stock", ("hết hàng", "het hang", "trong kho")),
+    ("ask_stock", ("hết hàng", "het hang", "trong kho", "sắp hết", "tồn thấp")),
     ("ask_customer_info", ("khách hàng", "khach hang", "customer")),
     ("ask_sales_policy", ("chiết khấu", "chiet khau", "kịch bản tư vấn", "kich ban tu van")),
     ("ask_tech_procedure", ("kỹ thuật", "ky thuat", "pgm-fi", "bảo dưỡng", "bao duong")),

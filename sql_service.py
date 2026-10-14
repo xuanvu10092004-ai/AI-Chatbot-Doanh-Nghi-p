@@ -120,6 +120,11 @@ def answer_sql_question(
     if not rows and intent_code == 'ask_stock' and asks_available_stock(question):
         return 'Không tìm thấy dữ liệu tồn kho phù hợp trong phạm vi bạn được xem. Hãy kiểm tra lại mẫu xe hoặc chi nhánh cần tra cứu.'
     summary = None
+    from inventory_policy import asks_low_stock
+    if intent_code == 'ask_stock' and asks_low_stock(question):
+        summary = 'Sắp hết hàng là còn 1–4 xe theo phiên bản và chi nhánh; số lượng 0 là hết hàng.'
+        if not rows:
+            return 'Không tìm thấy phiên bản còn 1–4 xe trong phạm vi bạn được xem.'
     if rows:
         if intent_code == 'ask_stock' and asks_available_stock(question):
             summary = 'Các phiên bản còn xe tại những chi nhánh dưới đây, trong phạm vi bạn được xem.'

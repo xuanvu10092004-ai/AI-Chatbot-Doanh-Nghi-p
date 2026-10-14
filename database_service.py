@@ -39,6 +39,7 @@ def get_dashboard_stats() -> dict[str, int]:
 
 
 def get_low_stock_products(limit: int = 5) -> list[dict[str, Any]]:
+    from inventory_policy import LOW_STOCK_THRESHOLD
     bounded_limit = max(1, min(int(limit), 100))
     with cursor("app") as db_cursor:
         db_cursor.execute(
@@ -46,11 +47,11 @@ def get_low_stock_products(limit: int = 5) -> list[dict[str, Any]]:
             SELECT branch_code, branch_name, model_name, variant_name, color,
                    quantity, list_price
             FROM v_ai_inventory
-            WHERE quantity < %s
+            WHERE quantity > 0 AND quantity < %s
             ORDER BY quantity ASC, model_name, variant_name
             LIMIT %s
             """,
-            (10, bounded_limit),
+            (LOW_STOCK_THRESHOLD, bounded_limit),
         )
         return list(db_cursor.fetchall())
 

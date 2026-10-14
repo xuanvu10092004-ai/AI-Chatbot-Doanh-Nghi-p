@@ -1,6 +1,7 @@
 """Truy vấn cố định cho câu phổ biến; câu phức tạp chuyển sang bộ sinh SQL."""
 import re
 from question_language import normalize, product_pattern, product_patterns, asks_available_stock
+from inventory_policy import asks_low_stock, LOW_STOCK_THRESHOLD
 
 
 class NeedsGeneratedQuery(ValueError):
@@ -47,8 +48,11 @@ def plan_query(question: str, intent: str) -> tuple[str, tuple]:
             conditions.append('branch_code = %s'); params.append(branch_code)
         if pattern:
             conditions.append('model_name LIKE %s'); params.append(pattern)
-        empty = 'het hang' in q or 'bang 0' in q
-        if empty:
+        low = asks_low_stock(question)
+        empty = not low and ('het hang' in q or 'bang 0' in q)
+        if low:
+            conditions.append('quantity > 0 AND quantity < %s'); params.append(LOW_STOCK_THRESHOLD)
+        elif empty:
             conditions.append('quantity = 0')
         elif asks_available_stock(question):
             conditions.append('quantity > 0')
