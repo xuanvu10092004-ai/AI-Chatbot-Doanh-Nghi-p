@@ -17,7 +17,7 @@ python -m pip install -r requirements.txt
 Tạo `.env` theo `.env.example`. Không commit bí mật.
 
 - `DB_HOST`, `DB_PORT`, `DB_NAME=honda_chatbot`: địa chỉ database.
-- `DB_USER=honda_app`, `DB_PASSWORD`: tài khoản ứng dụng. `APP_DB_PASSWORD` phải trùng `DB_PASSWORD`.
+- `DB_USER=admin_nt`, `DB_PASSWORD`: tài khoản ứng dụng. `APP_DB_PASSWORD` phải trùng `DB_PASSWORD`. Script khởi tạo tạo/cập nhật đúng tài khoản `DB_USER`, chỉ cấp SELECT/INSERT/UPDATE/DELETE.
 - `ADMIN_DB_USER`, `ADMIN_DB_PASSWORD`: tài khoản có quyền khởi tạo schema/user, chỉ dùng bởi `init_db.py`.
 - `CHATBOT_RO_USER=chatbot_ro`, `CHATBOT_RO_PASSWORD`: tài khoản SQL chatbot, chỉ đọc view AI.
 - `DEMO_ACCOUNT_PASSWORD`: mật khẩu chung cho demo id 1–9, ít nhất 10 ký tự, không hiển thị trên UI/log. Xem giá trị cục bộ trong `.env`.
@@ -25,6 +25,42 @@ Tạo `.env` theo `.env.example`. Không commit bí mật.
 - `APP_ENV=dev`: cookie dev trên HTTP; production dùng cookie Secure và cần HTTPS.
 - `ALLOW_GUEST_CHAT=true`: cho phép nút vào chat công khai. Đặt false để tắt.
 - `GROQ_API_KEY`, `GROQ_MODEL=openai/gpt-oss-20b`: khóa thật và model; không cần khóa để chạy các test cục bộ.
+
+### Cấu hình máy của thành viên nhóm
+
+Mỗi máy cài MySQL/MariaDB, cài dependencies rồi sao chép `.env.example` thành `.env`. Đặt `DB_USER=admin_nt`, điền mật khẩu nhóm đã thống nhất vào cả `DB_PASSWORD` và `APP_DB_PASSWORD`. Điền `ADMIN_DB_USER`/`ADMIN_DB_PASSWORD` theo tài khoản quản trị MySQL thực tế của máy đó; không mặc định các máy có cùng mật khẩu root. Điền đầy đủ các biến bí mật còn lại, gồm mật khẩu chatbot, demo và khóa phiên. `.env` được Git bỏ qua; trao đổi bí mật riêng, không đưa vào source.
+
+```powershell
+python init_db.py --create-if-missing
+python check_db.py
+python app.py
+```
+
+Nếu database đã tồn tại và chỉ cần cập nhật tài khoản kết nối, chạy `python init_db.py --extensions-only`, rồi khởi động lại ứng dụng. Không dùng `--reset` để đổi mật khẩu vì lệnh này xóa dữ liệu.
+
+`DB_HOST=127.0.0.1` nghĩa là mỗi máy dùng database riêng. Cùng source và cùng tài khoản không tự đồng bộ dữ liệu. Muốn dữ liệu thay đổi được chia sẻ ngay, cần một MySQL dùng chung: đặt cùng `DB_HOST` trỏ tới máy chủ đó, quản trị viên cấp quyền kết nối cho đúng địa chỉ máy backend và cấu hình mạng/firewall. Script hiện tạo tài khoản `localhost`, phù hợp chạy backend và MySQL trên cùng máy; không tự mở MySQL ra mạng. Khi chạy test có thay đổi dữ liệu, dùng database phát triển riêng.
+
+### Dùng máy chủ của nhóm trong LAN
+
+Máy chủ hiện tại: `192.168.10.160:3306`, mạng `192.168.10.0/24` (IP có thể đổi khi chuyển Wi-Fi; nên đặt DHCP reservation trên router). Giữ `DB_HOST=127.0.0.1` trong `.env` máy chủ. Sau khi khởi tạo, cấp tài khoản cho LAN bằng:
+
+```powershell
+python scripts/configure_shared_mysql.py --network 192.168.10.0/24
+```
+
+Script chạy lại được, cập nhật mật khẩu từ `.env`, cấp quyền ứng dụng và quyền đọc view riêng cho chatbot. Khi đổi mật khẩu, chạy lại cả `init_db.py --extensions-only` và script trên để cập nhật tài khoản local/LAN.
+
+Máy bạn cùng mạng Wi-Fi/LAN đặt `DB_HOST=192.168.10.160`, `DB_PORT=3306`, `DB_NAME=honda_chatbot`, `DB_USER=admin_nt`, điền mật khẩu nhóm vào `DB_PASSWORD` và `APP_DB_PASSWORD`. Nhận riêng `CHATBOT_RO_PASSWORD` và `DEMO_ACCOUNT_PASSWORD` từ máy chủ; tự tạo `FLASK_SECRET_KEY` cục bộ. Không chia sẻ tài khoản quản trị MySQL. Chỉ chạy `python check_db.py` rồi `python app.py` trên máy bạn; mọi lệnh khởi tạo/migration/reset chỉ chạy trên máy chủ. Khởi động lại backend sau khi sửa `.env`.
+
+MySQL máy chủ phải lắng nghe địa chỉ LAN. Nếu Windows Firewall chặn, mở PowerShell quản trị trên máy chủ và thêm quy tắc giới hạn LAN:
+
+```powershell
+New-NetFirewallRule -DisplayName 'MySQL nhom de tai LAN' -Direction Inbound -Action Allow -Protocol TCP -LocalAddress 192.168.10.160 -LocalPort 3306 -RemoteAddress 192.168.10.0/24 -Profile Private
+```
+
+Quy tắc mẫu chỉ áp dụng mạng Private. Wi-Fi hiện đang là Public; chưa có quy tắc mới được tạo. Cần chủ máy xác nhận đây là LAN tin cậy và quyết định cấu hình profile/quy tắc trước khi mở kết nối từ máy khác.
+
+Máy chủ cần bật và MySQL đang chạy. Từ máy bạn kiểm tra `Test-NetConnection 192.168.10.160 -Port 3306`; sau đó `python check_db.py`. Ngoài LAN cần VPN hoặc máy chủ được triển khai riêng; không chuyển tiếp cổng MySQL ra Internet. `admin_nt` là tài khoản kết nối database; đăng nhập website vẫn dùng email và mật khẩu trong `users`.
 
 ## Khởi tạo và chạy
 

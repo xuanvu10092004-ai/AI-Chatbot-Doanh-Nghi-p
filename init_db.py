@@ -248,11 +248,16 @@ def main() -> int:
         app_password=os.getenv('APP_DB_PASSWORD')
         if not app_password:
             raise RuntimeError('APP_DB_PASSWORD is required')
+        if app_password != os.environ['DB_PASSWORD']:
+            raise RuntimeError('APP_DB_PASSWORD phải trùng DB_PASSWORD')
+        app_user = os.environ['DB_USER']
+        if not app_user or app_user == config['user'] or app_user in {'root', 'chatbot_ro'}:
+            raise RuntimeError('DB_USER phải là tài khoản ứng dụng riêng, khác tài khoản quản trị và chatbot_ro')
         with connection.cursor() as cur:
-            cur.execute("CREATE USER IF NOT EXISTS 'honda_app'@'localhost' IDENTIFIED BY %s",(app_password,))
-            cur.execute("ALTER USER 'honda_app'@'localhost' IDENTIFIED BY %s",(app_password,))
-            cur.execute("REVOKE ALL PRIVILEGES, GRANT OPTION FROM 'honda_app'@'localhost'")
-            cur.execute("GRANT SELECT,INSERT,UPDATE,DELETE ON honda_chatbot.* TO 'honda_app'@'localhost'")
+            cur.execute("CREATE USER IF NOT EXISTS %s@'localhost' IDENTIFIED BY %s", (app_user, app_password))
+            cur.execute("ALTER USER %s@'localhost' IDENTIFIED BY %s", (app_user, app_password))
+            cur.execute("REVOKE ALL PRIVILEGES, GRANT OPTION FROM %s@'localhost'", (app_user,))
+            cur.execute("GRANT SELECT,INSERT,UPDATE,DELETE ON honda_chatbot.* TO %s@'localhost'", (app_user,))
         counts = verify_counts(connection)
     except Exception as exc:
         if connection is not None and connection.is_connected():

@@ -52,7 +52,7 @@ def test_app_database_user_has_no_ddl():
     from mysql.connector import Error
     import pytest
     with cursor() as c:
-        c.execute('SELECT CURRENT_USER() AS who');assert c.fetchone()['who']=='honda_app@localhost'
+        c.execute('SELECT CURRENT_USER() AS who');assert c.fetchone()['who']==f"{os.environ['DB_USER']}@localhost"
         with pytest.raises(Error) as error:c.execute('CREATE TABLE forbidden_test_table(id INT)')
         assert error.value.errno==1142
 

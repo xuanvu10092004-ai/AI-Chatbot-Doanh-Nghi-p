@@ -168,3 +168,13 @@ Skill/tài nguyên người dùng cung cấp được đưa vào Git như tài l
 9. Opportunity/Quote/Booking vẫn chưa có schema; không tự tạo. Câu chatbot ngoài dữ liệu/quyền hoặc mơ hồ không được bịa câu trả lời.
 
 Các quyết định trên được ghi rõ để người dùng xem xét; không cần khởi động lại để thay đổi RBAC trong giao diện quản trị.
+# Cập nhật kết nối MySQL dùng chung - 14/10/2026
+
+- `python -X utf8 init_db.py --extensions-only`: thành công, products=10, product_variants=28, inventory=84, customers=80, customer_profiles=80, orders=30.
+- `python -X utf8 check_db.py`: thành công bằng tài khoản `admin_nt`, 89 tài khoản ứng dụng.
+- `python -X utf8 scripts/configure_shared_mysql.py --network 192.168.10.0/24`: chạy hai lần thành công.
+- Kết nối TCP tới `192.168.10.160:3306` ngay từ máy chủ: `admin_nt@192.168.10.0/255.255.255.0` đọc 30 đơn; `chatbot_ro@192.168.10.0/255.255.255.0` đọc 28 dòng view sản phẩm. Chưa thử từ máy thành viên.
+- `python -X utf8 -m pytest -q --tb=short` với quyền truy cập mạng: **131 passed, 1 failed in 12.89s**. Lỗi `test_logo_and_formatter_served_locally`: ảnh `docs/images/logo.jpg` đã có thay đổi từ trước, khác ảnh `static/images/logo.jpg`. Không sửa ảnh hoặc assertion trong nhiệm vụ cấu hình MySQL.
+- Lần chạy trong sandbox: 126 passed, 6 failed; 5 lỗi gọi Groq do socket bị chặn, chạy lại có mạng đã đạt cả 5.
+- Không chạy reset vì nhiệm vụ hiện tại là đổi tài khoản và chia sẻ database đang có dữ liệu. Không khẳng định toàn bộ test đã đạt.
+- Wi-Fi máy chủ là Public. Auto-review từ chối tạo quy tắc firewall mở TCP 3306 trên Private/Public cho LAN; chưa thay đổi firewall, cần chủ máy duyệt rõ phạm vi trước khi hoàn tất kết nối máy khác.
