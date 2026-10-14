@@ -1,0 +1,151 @@
+[
+  {
+    "file": "text.pdf",
+    "text": "Dữ liệu mô phỏng\nQuy trình kiểm tra tài liệu.\nChỉ lưu nội dung đã đối chiếu.",
+    "tables": []
+  },
+  {
+    "file": "table.pdf",
+    "text": "Bảng dữ liệu mô phỏng",
+    "tables": [
+      [
+        [
+          "Mã",
+          "Tên",
+          "Số lượng"
+        ],
+        [
+          "SP01",
+          "Xe mẫu",
+          "3"
+        ],
+        [
+          "SP02",
+          "Phụ kiện",
+          "7"
+        ]
+      ]
+    ]
+  },
+  {
+    "file": "columns.pdf",
+    "text": "CỘT TRÁI\nBước một kiểm tra file.\nBước hai xác nhận nội dung.\nCỘT PHẢI\nGhi chú kiểm tra bảng.\nKhông tự đoán dữ liệu thiếu.",
+    "tables": [],
+    "needs_review": true
+  },
+  {
+    "file": "scan.pdf",
+    "pdf_type": "scan_or_empty",
+    "needs_review": true
+  },
+  {
+    "file": "mixed.pdf",
+    "text": "Dữ liệu mô phỏng\nQuy trình kiểm tra tài liệu.\nChỉ lưu nội dung đã đối chiếu.",
+    "tables": [],
+    "pdf_type": "mixed",
+    "needs_review": true
+  },
+  {
+    "file": "encrypted.pdf",
+    "error": "unreadable_file"
+  },
+  {
+    "file": "large.pdf",
+    "text": "Trang 1: dữ liệu mô phỏng kiểm thử tài liệu lớn.\nTrang 2: dữ liệu mô phỏng kiểm thử tài liệu lớn.\nTrang 3: dữ liệu mô phỏng kiểm thử tài liệu lớn.\nTrang 4: dữ liệu mô phỏng kiểm thử tài liệu lớn.\nTrang 5: dữ liệu mô phỏng kiểm thử tài liệu lớn.\nTrang 6: dữ liệu mô phỏng kiểm thử tài liệu lớn.\nTrang 7: dữ liệu mô phỏng kiểm thử tài liệu lớn.\nTrang 8: dữ liệu mô phỏng kiểm thử tài liệu lớn.\nTrang 9: dữ liệu mô phỏng kiểm thử tài liệu lớn.\nTrang 10: dữ liệu mô phỏng kiểm thử tài liệu lớn.\nTrang 11: dữ liệu mô phỏng kiểm thử tài liệu lớn.\nTrang 12: dữ liệu mô phỏng kiểm thử tài liệu lớn.\nTrang 13: dữ liệu mô phỏng kiểm thử tài liệu lớn.\nTrang 14: dữ liệu mô phỏng kiểm thử tài liệu lớn.\nTrang 15: dữ liệu mô phỏng kiểm thử tài liệu lớn.\nTrang 16: dữ liệu mô phỏng kiểm thử tài liệu lớn.\nTrang 17: dữ liệu mô phỏng kiểm thử tài liệu lớn.\nTrang 18: dữ liệu mô phỏng kiểm thử tài liệu lớn.\nTrang 19: dữ liệu mô phỏng kiểm thử tài liệu lớn.\nTrang 20: dữ liệu mô phỏng kiểm thử tài liệu lớn.\nTrang 21: dữ liệu mô phỏng kiểm thử tài liệu lớn.\nTrang 22: dữ liệu mô phỏng kiểm thử tài liệu lớn.\nTrang 23: dữ liệu mô phỏng kiểm thử tài liệu lớn.\nTrang 24: dữ liệu mô phỏng kiểm thử tài liệu lớn.\nTrang 25: dữ liệu mô phỏng kiểm thử tài liệu lớn.\nTrang 26: dữ liệu mô phỏng kiểm thử tài liệu lớn.\nTrang 27: dữ liệu mô phỏng kiểm thử tài liệu lớn.\nTrang 28: dữ liệu mô phỏng kiểm thử tài liệu lớn.\nTrang 29: dữ liệu mô phỏng kiểm thử tài liệu lớn.\nTrang 30: dữ liệu mô phỏng kiểm thử tài liệu lớn.\nTrang 31: dữ liệu mô phỏng kiểm thử tài liệu lớn.\nTrang 32: dữ liệu mô phỏng kiểm thử tài liệu lớn.\nTrang 33: dữ liệu mô phỏng kiểm thử tài liệu lớn.\nTrang 34: dữ liệu mô phỏng kiểm thử tài liệu lớn.\nTrang 35: dữ liệu mô phỏng kiểm thử tài liệu lớn.\nTrang 36: dữ liệu mô phỏng kiểm thử tài liệu lớn.\nTrang 37: dữ liệu mô phỏng kiểm thử tài liệu lớn.\nTrang 38: dữ liệu mô phỏng kiểm thử tài liệu lớn.\nTrang 39: dữ liệu mô phỏng kiểm thử tài liệu lớn.\nTrang 40: dữ liệu mô phỏng kiểm thử tài liệu lớn.\nTrang 41: dữ liệu mô phỏng kiểm thử tài liệu lớn.\nTrang 42: dữ liệu mô phỏng kiểm thử tài liệu lớn.\nTrang 43: dữ liệu mô phỏng kiểm thử tài liệu lớn.\nTrang 44: dữ liệu mô phỏng kiểm thử tài liệu lớn.\nTrang 45: dữ liệu mô phỏng kiểm thử tài liệu lớn.\nTrang 46: dữ liệu mô phỏng kiểm thử tài liệu lớn.\nTrang 47: dữ liệu mô phỏng kiểm thử tài liệu lớn.\nTrang 48: dữ liệu mô phỏng kiểm thử tài liệu lớn.\nTrang 49: dữ liệu mô phỏng kiểm thử tài liệu lớn.\nTrang 50: dữ liệu mô phỏng kiểm thử tài liệu lớn.\nTrang 51: dữ liệu mô phỏng kiểm thử tài liệu lớn.\nTrang 52: dữ liệu mô phỏng kiểm thử tài liệu lớn.\nTrang 53: dữ liệu mô phỏng kiểm thử tài liệu lớn.\nTrang 54: dữ liệu mô phỏng kiểm thử tài liệu lớn.\nTrang 55: dữ liệu mô phỏng kiểm thử tài liệu lớn.\nTrang 56: dữ liệu mô phỏng kiểm thử tài liệu lớn.\nTrang 57: dữ liệu mô phỏng kiểm thử tài liệu lớn.\nTrang 58: dữ liệu mô phỏng kiểm thử tài liệu lớn.\nTrang 59: dữ liệu mô phỏng kiểm thử tài liệu lớn.\nTrang 60: dữ liệu mô phỏng kiểm thử tài liệu lớn.\nTrang 61: dữ liệu mô phỏng kiểm thử tài liệu lớn.\nTrang 62: dữ liệu mô phỏng kiểm thử tài liệu lớn.\nTrang 63: dữ liệu mô phỏng kiểm thử tài liệu lớn.\nTrang 64: dữ liệu mô phỏng kiểm thử tài liệu lớn.\nTrang 65: dữ liệu mô phỏng kiểm thử tài liệu lớn.\nTrang 66: dữ liệu mô phỏng kiểm thử tài liệu lớn.\nTrang 67: dữ liệu mô phỏng kiểm thử tài liệu lớn.\nTrang 68: dữ liệu mô phỏng kiểm thử tài liệu lớn.\nTrang 69: dữ liệu mô phỏng kiểm thử tài liệu lớn.\nTrang 70: dữ liệu mô phỏng kiểm thử tài liệu lớn.\nTrang 71: dữ liệu mô phỏng kiểm thử tài liệu lớn.\nTrang 72: dữ liệu mô phỏng kiểm thử tài liệu lớn.\nTrang 73: dữ liệu mô phỏng kiểm thử tài liệu lớn.\nTrang 74: dữ liệu mô phỏng kiểm thử tài liệu lớn.\nTrang 75: dữ liệu mô phỏng kiểm thử tài liệu lớn.\nTrang 76: dữ liệu mô phỏng kiểm thử tài liệu lớn.\nTrang 77: dữ liệu mô phỏng kiểm thử tài liệu lớn.\nTrang 78: dữ liệu mô phỏng kiểm thử tài liệu lớn.\nTrang 79: dữ liệu mô phỏng kiểm thử tài liệu lớn.\nTrang 80: dữ liệu mô phỏng kiểm thử tài liệu lớn.",
+    "tables": []
+  },
+  {
+    "file": "too_many_pages.pdf",
+    "error": "page_limit"
+  },
+  {
+    "file": "table.docx",
+    "text": "Dữ liệu mô phỏng\nQuy trình kiểm tra tài liệu.\nChỉ lưu nội dung đã đối chiếu.",
+    "tables": [
+      [
+        [
+          "Mã",
+          "Tên",
+          "Số lượng"
+        ],
+        [
+          "SP01",
+          "Xe mẫu",
+          "3"
+        ],
+        [
+          "SP02",
+          "Phụ kiện",
+          "7"
+        ]
+      ]
+    ]
+  },
+  {
+    "file": "merged.docx",
+    "needs_review": true
+  },
+  {
+    "file": "table.xlsx",
+    "text": "",
+    "tables": [
+      [
+        [
+          "Mã",
+          "Tên",
+          "Số lượng"
+        ],
+        [
+          "SP01",
+          "Xe mẫu",
+          "3"
+        ],
+        [
+          "SP02",
+          "Phụ kiện",
+          "7"
+        ]
+      ],
+      [
+        [
+          "Ngày",
+          "Số tiền"
+        ],
+        [
+          "14/10/2026 00:00:00",
+          "42500000"
+        ]
+      ]
+    ],
+    "needs_review": true
+  },
+  {
+    "file": "formula.xlsx",
+    "needs_review": true
+  },
+  {
+    "file": "large.xlsx",
+    "table_rows": 2001,
+    "needs_review": true
+  },
+  {
+    "file": "too_many_rows.xlsx",
+    "error": "cell_limit"
+  },
+  {
+    "file": "corrupt.pdf",
+    "error": "unreadable_file"
+  },
+  {
+    "file": "wrong_extension.pdf",
+    "error": "format_mismatch"
+  },
+  {
+    "file": "corrupt.docx",
+    "error": "corrupt_file"
+  },
+  {
+    "file": "empty.xlsx",
+    "error": "file_size"
+  }
+]
