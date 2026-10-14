@@ -166,6 +166,8 @@ PDF scan hoặc trang trắng không có chữ được đánh dấu thiếu vă
 
 Bộ **18 mẫu** PDF/DOCX/XLSX (bảng, hai cột, scan mờ/lệch, hỗn hợp, mã hóa, file hỏng, tài liệu lớn/vượt giới hạn) nằm trong `data/samples/documents/`, đáp án trong `manifest.json`. Xem [báo cáo đo độ chính xác và giới hạn](docs/document_extraction_report.md).
 
+`.gitattributes` giữ PDF/DOCX/XLSX/PPTX ở chế độ binary để Git không đổi xuống dòng và làm hỏng file khi clone trên máy khác.
+
 ```powershell
 python -m pip install -r requirements-dev.txt
 python scripts/generate_document_samples.py
