@@ -37,5 +37,12 @@ Tự chạy và dán kết quả thật: `python init_db.py --reset`, `python -m
 - Không còn câu SQL nối chuỗi từ dữ liệu người dùng.
 - `git status` sạch, mỗi hạng mục một commit.
 
+## Quy tắc giao diện và xác thực
+- Danh tính người dùng chỉ lấy từ phiên đăng nhập phía server. Không có header hay ô chọn tài khoản giả trong giao diện.
+- Ẩn nút trên giao diện chỉ là UX. Mọi trang và API đều phải kiểm tra quyền ở backend.
+- Không dùng CDN bên ngoài: thư viện JS/CSS đặt trong `static/vendor/`.
+- Tiền tệ hiển thị theo `vi-VN` (ví dụ 96.500.000 ₫), ngày theo dd/MM/yyyy. Mọi chữ hiển thị bằng tiếng Việt.
+- Không dùng logo, hình ảnh hay tên thương hiệu có bản quyền của Honda. Giao diện ghi rõ "Dữ liệu mô phỏng".
+
 # BÁO CÁO CUỐI
 Danh sách file thêm/sửa, kết quả test thật, phần nào chưa làm được và vì sao. Không `git push`.
