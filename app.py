@@ -21,6 +21,7 @@ from sql_service import SchemaExtensionRequired as SQLSchemaExtensionRequired
 from mysql.connector import Error as DatabaseError
 from question_language import resolve_followup
 from answer_renderer import QueryEvidence
+from text_formatting import normalize_dashes
 from security import initialize_request,permissions,navigation,csrf_token,require_permission
 from auth_routes import register_auth
 from dashboard_routes import register_dashboard
@@ -51,7 +52,7 @@ def security_headers(response):
 
 @app.context_processor
 def shell_context():
-    return dict(csrf_token=csrf_token,current_user=g.user,menu=navigation() if g.user or session.get('guest') else [],identity=' · '.join(r['name']+' — '+(r['branch_code'] or 'Toàn hệ thống') for r in g.roles) if g.user else 'Khách',can=lambda code:code in permissions())
+    return dict(csrf_token=csrf_token,current_user=g.user,menu=navigation() if g.user or session.get('guest') else [],identity=' · '.join(r['name']+' - '+(r['branch_code'] or 'Toàn hệ thống') for r in g.roles) if g.user else 'Khách',can=lambda code:code in permissions())
 
 
 @app.route("/")
@@ -159,6 +160,8 @@ def chat():
                 answer = "Dịch vụ AI chưa sẵn sàng. Vui lòng thử lại sau."
                 record_message(session_id, 'bot', answer)
                 return jsonify(answer=answer, error='ai-unavailable', session_id=session_id), 503
+        # Chuẩn hóa trước khi lưu: API và lịch sử những lượt sau dùng cùng dấu '-'.
+        answer = normalize_dashes(str(answer))
         record_message(session_id, "bot", answer)
         return jsonify({
             "answer": answer,
@@ -168,7 +171,7 @@ def chat():
             "engine": engine,
             "access_denied": denied,
             "rows": context.rows if isinstance(context,QueryEvidence) else [],
-            "sources": [{'id':int(i),'title':title} for i,title in re.findall(r'\[Nguồn id=(\d+) \| tiêu đề=([^\]]+)\]',str(context))],
+            "sources": [{'id':int(i),'title':normalize_dashes(title)} for i,title in re.findall(r'\[Nguồn id=(\d+) \| tiêu đề=([^\]]+)\]',str(context))],
         })
     except (SchemaExtensionRequired, SQLSchemaExtensionRequired) as exc:
         message = str(exc)

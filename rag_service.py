@@ -15,6 +15,9 @@ def extract_keywords(question: str) -> list[str]:
         "những", "một", "hay", "hoặc", "tôi", "bạn", "hãy", "cần", "muốn",
         "biết", "xem", "tìm", "về", "theo", "đến",
         "tài", "liệu", "thủ", "tục", "hướng", "dẫn", "chính", "sách",
+        # 'Chương trình' là cụm dẫn nhập, không phải chủ đề truy xuất.
+        # Giữ lại 'khuyến mãi' để tránh khớp nhầm 'quy trình' kỹ thuật.
+        "chương", "trình",
     }
     words = [word for word in re.findall(r"[\wÀ-ỹ-]+", question.casefold()) if len(word) >= 3]
     return [word for word in words if word not in stopwords] or [question]
