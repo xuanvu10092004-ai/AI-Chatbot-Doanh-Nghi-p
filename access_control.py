@@ -23,9 +23,11 @@ INTENT_RULES = (
 
 
 def detect_intent(question: str) -> str:
-    from question_language import normalize
+    from question_language import normalize, asks_available_stock
     normalized = normalize(question)
     for intent_code, keywords in INTENT_RULES:
+        if intent_code == 'ask_stock' and asks_available_stock(question):
+            return 'ask_stock'
         if any(normalize(keyword) in normalized for keyword in keywords):
             if intent_code == 'ask_tech_procedure' and 'thong so' in normalized:
                 return 'ask_price_list'

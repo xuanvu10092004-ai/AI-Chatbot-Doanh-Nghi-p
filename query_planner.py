@@ -1,6 +1,6 @@
 """Truy vấn cố định cho câu phổ biến; câu phức tạp chuyển sang bộ sinh SQL."""
 import re
-from question_language import normalize, product_pattern
+from question_language import normalize, product_pattern, product_patterns, asks_available_stock
 
 
 class NeedsGeneratedQuery(ValueError):
@@ -9,6 +9,16 @@ class NeedsGeneratedQuery(ValueError):
 
 def plan_query(question: str, intent: str) -> tuple[str, tuple]:
     q = normalize(question)
+    patterns = product_patterns(question)
+    simple_comparison = not any(term in q for term in (
+        'trung binh', 'thap nhat', 'cao nhat', 'min(', 'max(', 'moi mau',
+        'duoi ', 'tren ', 'sap xep', 'chi lay', 'khong lay', 'abs', 'cbs',
+    ))
+    if 'so sanh' in q and len(patterns) >= 2 and intent == 'ask_price_list' and simple_comparison:
+        conditions = ' OR '.join('model_name LIKE %s' for _ in patterns)
+        return ('SELECT model_name, variant_name, list_price, engine_cc, fuel_consumption_l100km, '
+                'fuel_tank_l, weight_kg, brake_type, warranty FROM v_ai_products WHERE ('
+                + conditions + ') ORDER BY model_name, list_price'), tuple(patterns)
     if any(w in q for w in ('so sanh', 'trung binh', 'theo thang', 'theo ngay', 'sap xep', 'dau tien', 'gan nhat', 'top ', 'duoi ', 'tren ', 'tu ', 'den ')):
         raise NeedsGeneratedQuery()
     count = any(w in q for w in ('bao nhieu', 'tong so', 'may phien ban', 'how many'))
@@ -40,6 +50,8 @@ def plan_query(question: str, intent: str) -> tuple[str, tuple]:
         empty = 'het hang' in q or 'bang 0' in q
         if empty:
             conditions.append('quantity = 0')
+        elif asks_available_stock(question):
+            conditions.append('quantity > 0')
         if empty and count:
             aggregate = 'COUNT(*) AS empty_inventory_rows'
         elif count and ('dong' in q or 'ban ghi' in q):
@@ -47,7 +59,7 @@ def plan_query(question: str, intent: str) -> tuple[str, tuple]:
         elif count or 'tong ton' in q:
             aggregate = 'SUM(quantity) AS total_stock'
         else:
-            aggregate = 'branch_code, model_name, variant_name, quantity'
+            aggregate = 'branch_code, branch_name, model_name, variant_name, quantity'
         sql = f'SELECT {aggregate} FROM v_ai_inventory'
         return sql + (' WHERE ' + ' AND '.join(conditions) if conditions else ''), tuple(params)
     view = 'v_ai_product_costs' if intent == 'ask_cost_margin' else 'v_ai_products'

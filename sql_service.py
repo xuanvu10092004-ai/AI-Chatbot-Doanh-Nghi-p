@@ -26,14 +26,14 @@ class SchemaExtensionRequired(RuntimeError):
     """Raised when a legacy module has no table in the Honda schema."""
 
 
-def _format_rows(rows: list[dict[str, Any]], generated: bool = False) -> str:
+def _format_rows(rows: list[dict[str, Any]], generated: bool = False, summary: str | None = None) -> str:
     if not rows:
         return "Không tìm thấy dữ liệu phù hợp."
-    lines = [f"Tìm thấy {len(rows)} bản ghi:"]
+    lines = ([summary] if summary else []) + [f"Tìm thấy {len(rows)} bản ghi:"]
     for row in rows:
         values = " | ".join(f"{key}: {value}" for key, value in row.items())
         lines.append(values)
-    return QueryEvidence("\n".join(lines), rows, generated)
+    return QueryEvidence("\n".join(lines), rows, generated, summary)
 
 
 def _execute_text_to_sql(sql: str, params: tuple[Any, ...] = (), *, allowed_views=None, scope_branch_ids=None, own_user_id=None) -> list[dict[str, Any]]:
@@ -115,4 +115,22 @@ def answer_sql_question(
         return 'Chưa phân tích được câu hỏi lúc này. Bạn hãy thử lại hoặc nêu rõ mẫu xe và điều kiện.'
     rows = _execute_text_to_sql(sql, params, allowed_views=allowed_views,
                                 scope_branch_ids=authorization['scope_branch_ids'],own_user_id=authorization['own_user_id'])
-    return _format_rows(rows, generated)
+    from question_language import normalize, product_patterns, asks_available_stock
+    patterns = product_patterns(question)
+    if not rows and intent_code == 'ask_stock' and asks_available_stock(question):
+        return 'Không tìm thấy dữ liệu tồn kho phù hợp trong phạm vi bạn được xem. Hãy kiểm tra lại mẫu xe hoặc chi nhánh cần tra cứu.'
+    summary = None
+    if rows:
+        if intent_code == 'ask_stock' and asks_available_stock(question):
+            summary = 'Các phiên bản còn xe tại những chi nhánh dưới đây, trong phạm vi bạn được xem.'
+        if 'so sanh' in normalize(question) and len(patterns) >= 2:
+            import re
+            missing = [pattern.strip('%').replace('%', ' ') for pattern in patterns
+                       if not any(re.search('.*'.join(re.escape(normalize(part)) for part in pattern.split('%')),
+                                            normalize(str(row.get('model_name', '')))) for row in rows)]
+            summary = 'So sánh thông số và giá niêm yết theo từng phiên bản có dữ liệu.'
+            if missing:
+                summary = ('Chưa tìm thấy dữ liệu cho ' + ', '.join(missing)
+                                    + ' trong phạm vi tra cứu; chưa đủ dữ liệu để so sánh đầy đủ. '
+                                    + 'Bảng dưới chỉ hiển thị các mẫu đã tìm thấy, không thay thế mẫu xe bạn hỏi.')
+    return _format_rows(rows, generated, summary)

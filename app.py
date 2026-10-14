@@ -171,6 +171,7 @@ def chat():
             "engine": engine,
             "access_denied": denied,
             "rows": context.rows if isinstance(context,QueryEvidence) else [],
+            "summary": context.summary if isinstance(context, QueryEvidence) else None,
             "sources": [{'id':int(i),'title':normalize_dashes(title)} for i,title in re.findall(r'\[Nguồn id=(\d+) \| tiêu đề=([^\]]+)\]',str(context))],
         })
     except (SchemaExtensionRequired, SQLSchemaExtensionRequired) as exc:

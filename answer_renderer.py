@@ -45,13 +45,14 @@ def render_rows(rows: list[dict]) -> str:
                 continue
             lines.append(f'{LABELS.get(key, key)}: {display_value(key, value)}')
         blocks.append('\n'.join(lines))
-    return 'Kết quả từ dữ liệu Honda mô phỏng:\n\n' + '\n\n'.join(blocks)
+    return 'Kết quả từ dữ liệu mô phỏng:\n\n' + '\n\n'.join(blocks)
 
 
 class QueryEvidence(str):
-    def __new__(cls, text: str, rows: list[dict], generated: bool = False):
+    def __new__(cls, text: str, rows: list[dict], generated: bool = False, summary: str | None = None):
         instance = super().__new__(cls, text)
         instance.rows = rows
-        instance.display = render_rows(rows)
+        instance.display = (summary + '\n\n' if summary else '') + render_rows(rows)
         instance.engine = 'groq-sql' if generated else 'database'
+        instance.summary = summary or f'Tìm thấy {len(rows)} dòng kết quả trong dữ liệu được phép truy cập.'
         return instance
