@@ -18,7 +18,7 @@
     const table=node('table'),head=node('thead'),tr=node('tr'),body=node('tbody');
     ['Tiêu đề','File','Danh mục / chi nhánh','Trạng thái','Ngày tải','Thao tác'].forEach(label=>{const th=node('th',label);th.scope='col';tr.append(th);});head.append(tr);
     for(const row of data.rows){const line=node('tr');
-      [row.title,row.original_name,row.category_name+' / '+(row.branch_code||'Toàn hệ thống'),statuses[row.status],new Date(row.created_at).toLocaleDateString('vi-VN')].forEach(value=>line.append(node('td',value)));
+      [row.title,row.original_name,row.category_name+' / '+(row.branch_code||'Toàn hệ thống'),row.category_code==='customers'&&row.customer_synced?'Đã đồng bộ khách hàng':statuses[row.status],new Date(row.created_at).toLocaleDateString('vi-VN')].forEach(value=>line.append(node('td',value)));
       const cell=node('td'),button=node('button','Xem và kiểm tra');button.type='button';button.className='secondary';button.addEventListener('click',()=>open(row.id).catch(error=>tell(error.message,true)));cell.append(button);line.append(cell);body.append(line);
     }
     table.append(head,body);el('documentList').replaceChildren(data.rows.length?table:node('p','Chưa có tài liệu trong phạm vi bạn được xem.'));
@@ -28,6 +28,8 @@
     selected=data;el('documentPreview').hidden=false;el('previewTitle').textContent='Xem trước: '+data.title;
     el('documentMetadata').textContent=statuses[data.status]+' · '+(data.size_bytes/1024).toFixed(1)+' KB · '+data.file_format.toUpperCase()+' · '+(data.branch_code||'Toàn hệ thống');
     el('downloadDocument').href='/api/documents/'+data.id+'/file';
+    el('customerImportLink').hidden=data.category_code!=='customers';el('customerImportLink').href='/customer-input?document_id='+data.id;
+    el('documentReview').hidden=data.category_code==='customers';
     const warnings=el('extractionWarnings');warnings.replaceChildren();
     if(data.error_message)warnings.append(node('p',data.error_message));
     const extracted=data.extraction;
@@ -46,7 +48,7 @@
     el('reviewTitle').value=data.title;el('reviewContent').value=data.review_content??extracted?.text??'';el('reviewNotes').value=data.review_notes||'';el('reviewConfirmed').checked=false;
     const editable=['ready','needs_review'].includes(data.status);
     ['reviewTitle','reviewContent','reviewNotes','reviewConfirmed','saveDocumentReview'].forEach(id=>el(id).disabled=!editable);
-    el('publishDocument').disabled=!data.reviewed_at||data.status!=='ready';el('retryDocument').hidden=!['failed','uploaded','processing'].includes(data.status);
+    el('publishDocument').disabled=data.category_code==='customers'||!data.reviewed_at||data.status!=='ready';el('retryDocument').hidden=!['failed','uploaded','processing'].includes(data.status);
     el('reviewNotes').required=data.status==='needs_review';
   }
   async function open(id){render(await api('/api/documents/'+id));el('documentPreview').scrollIntoView({block:'start',behavior:'smooth'});}
@@ -69,7 +71,8 @@
   el('refreshDocuments').addEventListener('click',()=>refresh().catch(error=>tell(error.message,true)));
   el('chooseDocumentFile').addEventListener('click',()=>el('documentFile').click());
   el('documentFile').addEventListener('change',()=>{el('documentFileName').textContent=el('documentFile').files[0]?.name||'Chưa chọn file';});
+  el('documentCategory').addEventListener('change',()=>{el('customerTemplateLink').hidden=el('documentCategory').selectedOptions[0]?.dataset.categoryCode!=='customers';});
   el('documentPrevious').addEventListener('click',()=>{page--;refresh().catch(error=>tell(error.message,true));});
   el('documentNext').addEventListener('click',()=>{page++;refresh().catch(error=>tell(error.message,true));});
-  api('/api/documents/lookups').then(data=>{for(const category of data.categories){const option=node('option',category.name);option.value=category.id;el('documentCategory').append(option);}if(data.all_branches){const option=node('option','Toàn hệ thống');option.value='';el('documentBranch').append(option);}for(const branch of data.branches){const option=node('option',branch.code+' · '+branch.name);option.value=branch.id;el('documentBranch').append(option);}return refresh();}).catch(error=>tell(error.message,true));
+  api('/api/documents/lookups').then(data=>{for(const category of data.categories){const option=node('option',category.name);option.value=category.id;option.dataset.categoryCode=category.category_code;el('documentCategory').append(option);}if(data.all_branches){const option=node('option','Toàn hệ thống');option.value='';el('documentBranch').append(option);}for(const branch of data.branches){const option=node('option',branch.code+' · '+branch.name);option.value=branch.id;el('documentBranch').append(option);}return refresh();}).catch(error=>tell(error.message,true));
 })();

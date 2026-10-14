@@ -9,6 +9,7 @@
     <input id="documentTitle" name="title" maxlength="255" required>
     <label for="documentCategory">Danh mục <span aria-hidden="true">*</span></label>
     <select id="documentCategory" name="category_id" required><option value="">Chọn danh mục</option></select>
+    <p><a id="customerTemplateLink" href="/api/customer-input/template" hidden>Tải mẫu danh sách khách hàng</a></p>
     <label for="documentBranch">Phạm vi chi nhánh</label>
     <select id="documentBranch" name="branch_id"></select>
     <label for="documentFile">File PDF, DOCX hoặc XLSX <span aria-hidden="true">*</span></label>
@@ -26,6 +27,7 @@
 <section id="documentPreview" class="panel" hidden aria-labelledby="previewTitle">
   <h2 id="previewTitle">Xem trước nội dung</h2>
   <p id="documentMetadata"></p><a id="downloadDocument">Tải file gốc để đối chiếu</a>
+  <p><a id="customerImportLink" class="secondary" hidden>Kiểm tra và đồng bộ khách hàng</a></p>
   <div id="extractionWarnings" class="document-warnings" role="status"></div>
   <div id="extractionBlocks"></div>
   <form id="documentReview">

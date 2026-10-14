@@ -1,0 +1,7 @@
+{% extends 'base.html' %}{% block content %}
+<h1>Đơn hàng / Xuất hóa đơn</h1>
+<p class="muted">Dữ liệu mô phỏng. Đơn chờ duyệt hoặc đã duyệt xuất phiếu xác nhận; đơn đã thanh toán hoặc giao xe xuất hóa đơn bán hàng mô phỏng.</p>
+{% if can('customer:write') %}<p><a href="/customer-input?quick=1">Thêm nhanh khách đã đồng ý mua xe</a></p>{% endif %}
+<section class="panel"><form id="orderFilters" class="customer-fields"><label>Tên / email khách<input id="orderSearch" maxlength="200"></label><label>Trạng thái<select id="orderStatus"><option value="">Tất cả</option>{% for code,label in statuses.items() %}<option value="{{ code }}">{{ label }}</option>{% endfor %}</select></label><button>Lọc đơn hàng</button></form>
+<p id="orderFeedback" role="status"></p><div id="orderList" class="table-scroll" tabindex="0" data-can-export="{{ 'true' if can('invoice:export') else 'false' }}"></div><p class="table-hint">Cuộn ngang bảng để xem số tiền và nút xuất PDF.</p><button type="button" id="orderPrevious" class="secondary">Trang trước</button><button type="button" id="orderNext" class="secondary">Trang sau</button></section>
+{% endblock %}{% block scripts %}<script src="/static/orders.js" defer></script>{% endblock %}

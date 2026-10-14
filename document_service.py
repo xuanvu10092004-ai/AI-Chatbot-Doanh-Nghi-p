@@ -75,7 +75,7 @@ def _scope():
 
 def _load(cur, document_id, lock=False):
     where, params = _scope()
-    cur.execute('SELECT d.*,c.name AS category_name,b.code AS branch_code FROM document_uploads d '
+    cur.execute("SELECT d.*,c.name AS category_name,c.code AS category_code,b.code AS branch_code,EXISTS(SELECT 1 FROM customer_input_batches cb WHERE cb.document_id=d.id AND cb.status='committed') AS customer_synced FROM document_uploads d "
                 'JOIN kb_categories c ON c.id=d.category_id JOIN permissions p ON p.id=c.required_permission_id '
                 'LEFT JOIN branches b ON b.id=d.branch_id WHERE d.id=%s AND ' + where
                 + (' FOR UPDATE' if lock else ''), (document_id, *params))
@@ -91,7 +91,7 @@ def _load(cur, document_id, lock=False):
 
 def public_row(row, detail=False):
     keys = ('id', 'title', 'original_name', 'file_format', 'size_bytes', 'sha256', 'status',
-            'category_id', 'category_name', 'branch_id', 'branch_code', 'created_at', 'updated_at',
+            'category_id', 'category_name', 'category_code', 'customer_synced', 'branch_id', 'branch_code', 'created_at', 'updated_at',
             'error_code', 'error_message', 'reviewed_at', 'published_doc_id', 'version')
     result = {key: row.get(key) for key in keys}
     if detail:
@@ -117,7 +117,7 @@ def list_documents(page=1):
     with cursor() as cur:
         cur.execute('SELECT COUNT(*) AS n' + source + where, (*params, *category_params))
         total = cur.fetchone()['n']
-        cur.execute('SELECT d.*,c.name AS category_name,b.code AS branch_code' + source + where
+        cur.execute("SELECT d.*,c.name AS category_name,c.code AS category_code,b.code AS branch_code,EXISTS(SELECT 1 FROM customer_input_batches cb WHERE cb.document_id=d.id AND cb.status='committed') AS customer_synced" + source + where
                     + ' ORDER BY d.id DESC LIMIT %s OFFSET %s', (*params, *category_params, 25, (page - 1) * 25))
         rows = [public_row(row) for row in cur.fetchall()]
     return {'rows': rows, 'total': total, 'page': page, 'size': 25}
@@ -214,6 +214,8 @@ def save_review(document_id, data):
         raise DocumentError('Ghi chú hiệu đính tối đa 2.000 ký tự.')
     with cursor() as cur:
         row = _load(cur, document_id, True)
+        if row['category_code']=='customers':
+            raise DocumentError('Dùng luồng kiểm tra và đồng bộ khách hàng để hiệu đính danh sách này.')
         if row['status'] not in {'ready', 'needs_review'} or data.get('version') != row['version']:
             raise DocumentError('Bản nháp đã thay đổi hoặc không thể hiệu đính. Hãy tải lại tài liệu.', 409)
         title, _, _ = check_metadata(data.get('title'), row['category_id'], row['branch_id'])
@@ -228,6 +230,8 @@ def save_review(document_id, data):
 def publish_document(document_id, data):
     with cursor() as cur:
         row = _load(cur, document_id, True)
+        if row['category_code']=='customers':
+            raise DocumentError('Dùng luồng kiểm tra và đồng bộ khách hàng; danh sách khách hàng không đưa vào kho tri thức.')
         if row['status'] != 'ready' or not row['reviewed_at'] or not row['review_content'] or data.get('version') != row['version']:
             raise DocumentError('Chỉ xuất bản bản đã hiệu đính và xác nhận; hãy tải lại nếu bản nháp đã thay đổi.', 409)
         title, category_id, branch_id = check_metadata(row['title'], row['category_id'], row['branch_id'])

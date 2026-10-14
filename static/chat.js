@@ -3,15 +3,32 @@ const form=document.getElementById('chatForm');
 form.addEventListener('submit',async event=>{
   event.preventDefault();const input=document.getElementById('questionInput'),button=document.getElementById('sendButton'),messages=document.getElementById('chatMessages');
   const question=input.value.trim();if(!question||button.disabled)return;
+  const confirmation=form.customerConfirmation||{};delete form.customerConfirmation;
   const add=(text,kind)=>{const node=document.createElement('div');node.className='message '+kind;node.textContent=text;messages.append(node);return node;};
   add(question,'user-message');input.value='';button.disabled=true;const bot=add('Đang tra cứu…','bot-message');
   messages.scrollTop=messages.scrollHeight;
   bot.setAttribute('aria-busy','true');
   try{
-    const response=await fetch('/chat',{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':document.querySelector('meta[name="csrf-token"]').content},body:JSON.stringify({question})});
+    const response=await fetch('/chat',{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':document.querySelector('meta[name="csrf-token"]').content},body:JSON.stringify({question,...confirmation})});
     const data=await response.json();
     // Dựng đậm/nghiêng bằng DOM an toàn, không parse HTML của LLM.
     ChatFormatting.render(bot,data.summary||data.answer||data.message||'Chưa xử lý được yêu cầu.');
+    if(data.customer_draft){
+      const draft=data.customer_draft, row=draft.rows[0];
+      const details=document.createElement('p');details.textContent='Bản nháp khách hàng #'+draft.id+' · '+(row.action==='update'?'Cập nhật hồ sơ':'Thêm mới')+' · '+(draft.valid?'Đủ trường bắt buộc':'Cần bổ sung / sửa thông tin');bot.append(details);
+      const link=document.createElement('a');link.href='/customer-input?batch='+draft.id;link.textContent='Xem và chỉnh đầy đủ thông tin theo Excel';bot.append(link);
+      if(draft.valid){
+        const preview=document.createElement('pre');preview.className='extracted-text';
+        preview.textContent=Object.entries(row.data).filter(([k,v])=>v!==null&&v!=='').map(([k,v])=>(draft.fields[k]||k)+': '+(['birth_date','registered_at'].includes(k)?new Date(v+'T00:00:00').toLocaleDateString('vi-VN'):k==='purchase_amount'?new Intl.NumberFormat('vi-VN',{style:'currency',currency:'VND'}).format(v):v)).join('\n');
+        if(row.age!==undefined)preview.textContent+='\nTuổi: '+row.age;
+        for(const [key,change] of Object.entries(row.changes))preview.textContent+='\nThay đổi '+(draft.fields[key]||key)+': '+(change.before||'(trống)')+' → '+(change.after||'(trống)');
+        if(row.order_action)preview.textContent+='\n'+(row.order_action==='existing'?'Đã nhận diện đơn hiện có.':'Sẽ tạo đơn chờ duyệt, số lượng 1: '+row.variant_name);
+        bot.append(preview);
+        const confirm=document.createElement('button');confirm.type='button';confirm.textContent='Xác nhận lưu khách hàng';
+        confirm.addEventListener('click',()=>{input.value='Xác nhận lưu khách hàng';form.customerConfirmation={customer_batch_id:draft.id,customer_batch_version:draft.version};form.requestSubmit();confirm.disabled=true;});bot.append(confirm);
+      }
+    }
+    if(data.result?.order_ids&&form.dataset.canExport==='true'){for(const id of data.result.order_ids){const p=document.createElement('p'),link=document.createElement('a');link.href='/api/orders/'+id+'/invoice.pdf';link.textContent='Xuất phiếu đơn #'+id+' (PDF mô phỏng)';p.append(link);bot.append(p);}}
     if(data.rows&&data.rows.length){
       const table=document.createElement('table'),head=document.createElement('thead'),hr=document.createElement('tr'),body=document.createElement('tbody');
       const labels={model_name:'Mẫu xe',variant_name:'Phiên bản',list_price:'Giá niêm yết',quantity:'Số xe',total_stock:'Tồn kho',branch_code:'Mã chi nhánh',branch_name:'Tên chi nhánh',color:'Màu',engine_cc:'Dung tích (cc)',segment:'Phân khúc',warranty:'Bảo hành',fuel_tank_l:'Bình xăng (lít)',weight_kg:'Khối lượng (kg)',engine_type:'Động cơ',brake_type:'Phanh',fuel_consumption_l100km:'Lít/100 km',description:'Mô tả',full_name:'Họ tên',customer_status:'Trạng thái',phone:'Điện thoại',email:'Email'};

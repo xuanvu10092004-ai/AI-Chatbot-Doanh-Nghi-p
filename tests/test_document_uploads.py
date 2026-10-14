@@ -88,9 +88,18 @@ def test_upload_permission_enforced_before_parser(auth_client,monkeypatch,user):
     auth_client.login(user)
     def forbidden(*args,**kwargs):pytest.fail('Không được chạy parser nếu không có quyền')
     monkeypatch.setattr('document_service.subprocess.run',forbidden)
-    before=counts();assert upload(auth_client).status_code==403
-    assert auth_client.get('/api/documents').status_code==403
-    assert counts()==before
+    grant=None
+    if user==3:
+        with cursor() as cur:
+            cur.execute("SELECT rp.permission_id,rp.data_scope FROM role_permissions rp JOIN permissions p ON p.id=rp.permission_id WHERE rp.role_id=3 AND p.code='document:manage'");grant=cur.fetchone()
+            if grant:cur.execute('DELETE FROM role_permissions WHERE role_id=3 AND permission_id=%s',(grant['permission_id'],))
+    try:
+        before=counts();assert upload(auth_client).status_code==403
+        assert auth_client.get('/api/documents').status_code==403
+        assert counts()==before
+    finally:
+        if grant:
+            with cursor() as cur:cur.execute('INSERT INTO role_permissions(role_id,permission_id,data_scope) VALUES(3,%s,%s)',(grant['permission_id'],grant['data_scope']))
 
 
 def test_branch_and_category_permissions_and_rag_visibility(auth_client):

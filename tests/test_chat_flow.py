@@ -99,7 +99,9 @@ def test_guest_documents_never_include_sales_or_branch():
     with cursor() as cur:
         cur.execute(query, params)
         ids = {r['id'] for r in cur.fetchall()}
-    assert ids and ids <= {1, 2, 3, 4}
+        cur.execute("SELECT d.id FROM kb_documents d JOIN kb_categories c ON c.id=d.category_id WHERE c.code='public' AND d.branch_id IS NULL")
+        allowed={r['id'] for r in cur.fetchall()}
+    assert ids and ids <= allowed
 
 
 def test_rag_sources_and_no_evidence(client):

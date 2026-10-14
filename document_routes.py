@@ -13,6 +13,8 @@ def document_request_limits():
         request.max_content_length = MAX_BYTES + 1024 * 1024
     elif request.endpoint == 'document_review':
         request.max_content_length = 80 * 1024
+    elif request.endpoint in {'customer_input_stage','customer_input_revise'}:
+        request.max_content_length = 1024 * 1024
 
 
 def register_documents(app):
@@ -33,7 +35,7 @@ def register_documents(app):
     @require_permission('document:manage')
     def document_lookups():
         with cursor() as cur:
-            cur.execute('SELECT c.id,c.name,p.code FROM kb_categories c JOIN permissions p ON p.id=c.required_permission_id ORDER BY c.id')
+            cur.execute('SELECT c.id,c.name,c.code AS category_code,p.code FROM kb_categories c JOIN permissions p ON p.id=c.required_permission_id ORDER BY c.id')
             categories = [row for row in cur.fetchall() if row['code'] in permissions() and permissions()[row['code']]['scope'] != 'own']
             cur.execute('SELECT id,code,name FROM branches ORDER BY id')
             grant = permissions()['document:manage']

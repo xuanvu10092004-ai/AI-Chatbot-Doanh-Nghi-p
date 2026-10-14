@@ -28,6 +28,9 @@ from dashboard_routes import register_dashboard
 from admin_routes import register_admin
 from business_routes import register_business
 from document_routes import register_documents, document_request_limits
+from customer_input_routes import register_customer_input
+from customer_chat import handle_customer_chat
+from sales_routes import register_sales
 
 
 app = Flask(__name__)
@@ -44,6 +47,8 @@ register_dashboard(app)
 register_admin(app)
 register_business(app)
 register_documents(app)
+register_customer_input(app)
+register_sales(app)
 
 @app.after_request
 def security_headers(response):
@@ -140,6 +145,12 @@ def chat():
         history = read_history(session_id)
         retrieval_question = resolve_followup(question, history)
         record_message(session_id, "user", question)
+        confirmation = (data.get('customer_batch_id'), data.get('customer_batch_version')) if 'customer_batch_id' in data else None
+        customer_reply = handle_customer_chat(question, session_id, confirmation)
+        if customer_reply is not None:
+            record_message(session_id, 'bot', customer_reply['answer'])
+            customer_reply['session_id'] = session_id
+            return jsonify(customer_reply)
         route = route_question(retrieval_question)
         if route["type"] == "SQL":
             context = answer_sql_question(retrieval_question, user_id, session_id)
