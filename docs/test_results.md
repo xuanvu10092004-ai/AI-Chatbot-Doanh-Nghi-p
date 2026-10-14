@@ -1,3 +1,75 @@
+# Kiểm chứng logo, câu trả lời và tài khoản - 14/10/2026
+
+Môi trường thực tế: Windows, Python 3.13, MariaDB 10.4.32, Groq dùng cấu hình .env. Không thay đổi schema chuẩn hoặc mật khẩu cấu hình.
+
+## Kết quả lệnh thực tế
+
+```text
+python init_db.py --reset
+Applied 02_ai_views.sql
+Applied 03_chatbot_ro_user.sql
+Applied 04_indexes.sql
+Applied 05_ai_product_details.sql
+Applied 06_auth_dynamic_rbac.sql
+Applied 07_own_scope_views.sql
+MySQL schema and seed completed.
+products: 10 (expected 10)
+product_variants: 28 (expected 28)
+inventory: 84 (expected 84)
+customers: 80 (expected 80)
+customer_profiles: 80 (expected 80)
+orders: 30 (expected 30)
+
+python -m pytest -q --tb=short
+132 passed in 10.42s
+```
+
+Lần chạy đầu trong sandbox: 127 passed, 5 failed do Groq bị chặn mạng (WinError 10013). Xét duyệt tự động ban đầu từ chối gửi payload ra ngoài. Sau khi người dùng cho phép gửi schema view sản phẩm/tồn kho và dữ liệu mô phỏng đến Groq, chạy lại với mạng được phép: toàn bộ 132 test đạt, không skip. Không xóa test hoặc nới assertion.
+
+## Kiểm tra bổ sung
+
+| Hạng mục | Kết quả thực tế |
+|---|---|
+| Logo tại login và chat | HTTP 200, ảnh static khớp từng byte với ảnh gốc |
+| Đậm/nghiêng, tiêu đề, danh sách | DOM có strong/em/ul/ol; không hiện dấu định dạng hoặc nhãn khối md |
+| HTML độc hại trong câu trả lời | Không tạo thẻ script/img/link; không dùng innerHTML |
+| Dấu gạch dài | Chuẩn hóa API, lịch sử bot, tiêu đề nguồn và ô bảng sang - |
+| Khuyến mãi với admin và sales NT01 | Chỉ lấy tài liệu id 5, không lấy quy trình kỹ thuật id 8 hoặc trả góp id 3 |
+| Khuyến mãi với guest | Không truy xuất được tài liệu sales |
+| Cơ sở dữ liệu đăng nhập | users, quyền từ RBAC; quản trị /admin/users được kiểm tra backend |
+| Test Groq thật | Đạt sau khi người dùng cho phép kết nối bên ngoài |
+
+Kiểm thử formatter dùng Node.js với DOM tối thiểu có chặn innerHTML, không phải kiểm thử tương tác trình duyệt hoàn chỉnh. Chưa chụp giao diện mới trong trình duyệt thật. Logo JPG có nền caro sẵn; giữ nguyên ảnh người dùng cung cấp.
+
+## Bộ 10 câu chuẩn
+
+Đáp án dưới đây được tính lại trực tiếp từ bảng gốc và so sánh với truy vấn các view AI. Các câu SQL oracle nằm trong STANDARD_CASES của tests/test_chat_flow.py; không nhập tay đáp án.
+
+| Câu hỏi | Đáp án tính bằng SQL gốc | So với truy vấn AI |
+|---|---|---|
+| SH 160i giá bao nhiêu? | 92.500.000 VNĐ; 96.500.000 VNĐ; 100.500.000 VNĐ | Đạt |
+| Có bao nhiêu khách hàng đã mua xe? | 30 | Đạt |
+| Tổng số đơn hàng? | 30 | Đạt |
+| Tổng tồn kho toàn hệ thống? | 451 | Đạt |
+| Mỗi phân khúc có bao nhiêu phiên bản? | Xe số, 7; Xe ga, 18; Xe côn tay, 3 | Đạt |
+| Mẫu xe nào có giá niêm yết cao nhất? | SH 160i, SH 160i - Thể thao - Đỏ đen, 100.500.000 VNĐ | Đạt |
+| Tổng doanh thu thuần của các đơn? | 1.359.600.000 VNĐ | Đạt |
+| Bao nhiêu khách hàng chọn trả góp? | 42 | Đạt |
+| Có bao nhiêu dòng tồn kho đang hết hàng? | 9 | Đạt |
+| Vision 110 có bao nhiêu phiên bản? | 3 | Đạt |
+
+## File thêm/sửa trong lần này
+
+- Logo/giao diện: docs/images/logo.jpg (ảnh người dùng), static/images/logo.jpg, templates/base.html, templates/login.html, templates/index.html, static/portal.css.
+- Chat/định dạng: static/chat-formatting.js, static/chat.js, text_formatting.py, app.py, ai_service.py, static/admin.js, static/records.js.
+- Truy xuất và kiểm tra database: rag_service.py, check_db.py.
+- Test: tests/chat_formatting_check.js, tests/test_chat_presentation.py.
+- Tài liệu: README.md, docs/account_management.md, docs/test_results.md.
+
+AGENTS.md đã có thay đổi của người dùng trước khi làm; giữ nguyên, không đưa vào commit triển khai. Không git push. Thông tin bí mật .env không xuất vào báo cáo hoặc commit.
+
+---
+
 ﻿# Kết quả nghiệm thu Honda AI Portal M1–M6
 
 Ngày kiểm chứng: 13/10/2026. Môi trường: Windows, Python 3.13, MariaDB 10.4.32 (XAMPP), Groq openai/gpt-oss-20b.
