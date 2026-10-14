@@ -240,3 +240,40 @@ Chạy lại cùng lệnh: migration được bỏ qua, số lượng giữ nguy
 Kiểm tra cuối, với Playwright tạm trong `PYTHONPATH` và quyền kết nối mạng cho Groq: `python -X utf8 -m pytest -q --tb=short` → **156 passed, 1 failed in 19.58s**. Lỗi duy nhất vẫn là `test_logo_and_formatter_served_locally`: ảnh nguồn khác ảnh được phục vụ, đã có trước nhiệm vụ này; không thay ảnh hoặc nới assertion để cho qua.
 
 Không chạy `--reset` trên database dùng chung: nhiệm vụ là bổ sung dữ liệu, không xóa dữ liệu hiện tại. Extension sẽ được áp dụng tự động sau seed khi người dùng chủ động khởi tạo lại bằng `init_db.py`. Các số lượng kỳ vọng và test được cập nhật đúng bộ dữ liệu 11/31/93; số khách hàng/đơn hàng không thay đổi.
+
+## Tải lên và trích xuất PDF/DOCX/XLSX - 14/10/2026
+
+Đã triển khai `/documents` và các API danh sách/tải lên/chi tiết/file gốc/trích xuất lại/hiệu đính/xuất bản. Parser tạo schema chung version 1 gồm block văn bản/bảng, vị trí trang/cột/sheet, metadata, số lượng và cảnh báo. Migration `09_document_uploads.sql` chỉ thêm bảng staging, quyền và menu; không sửa schema chuẩn. File gốc nằm ngoài static và không vào Git.
+
+Tài khoản admin quản lý toàn hệ thống, quản lý chi nhánh có scope branch. Mỗi API kiểm tra session, CSRF, quyền quản lý và quyền danh mục. Scope kiểm tra lại khi xem, tải gốc, sửa hoặc xuất bản; bản nháp chưa được RAG thấy. `kb_documents` chỉ được ghi sau khi title/category/branch/content hợp lệ, đã đối chiếu, phiên bản không bị thay đổi và không còn marker ô lỗi/công thức thiếu kết quả. Người dùng sửa chữ/ô trong bản nội dung và ghi chú đối chiếu; cảnh báo gốc vẫn được giữ.
+
+| Hạng mục kiểm tra | Kết quả thực tế |
+|---|---|
+| Bộ mẫu 18 file có đáp án độc lập | Đã tạo tại `data/samples/documents/` |
+| PDF văn bản/bảng có kẻ đường/hai cột; DOCX đoạn và bảng; XLSX nhiều sheet | Đạt, văn bản/bảng đối chiếu gold và thứ tự block |
+| PDF scan mờ/lệch và PDF hỗn hợp | Đạt phát hiện thiếu lớp văn bản, yêu cầu nhập/đối chiếu, không tạo điểm OCR giả |
+| File hỏng, mã hóa, rỗng, sai đuôi/nội dung, macro, ZIP nén bất thường, XML entity | Đạt phát hiện và báo lỗi; không ghi kho tri thức |
+| PDF 80 trang, XLSX 2.001 dòng | Đạt trích xuất; PDF >200 trang và Excel >10.000 dòng bị từ chối rõ ràng |
+| Excel công thức chưa có cache | Đạt đánh dấu ô thiếu; chưa sửa marker thì không được lưu/đưa vào kho tri thức |
+| Thiếu title/category/content, vượt 10 MB/60.000 byte nội dung, thiếu xác nhận/CSRF, phiên bản cũ | Đạt chặn ghi |
+| Guest/sales/technician/customer gọi API quản lý tài liệu | Đạt từ chối trước parser |
+| Quản lý chi nhánh truy cập file của chi nhánh khác; danh mục bị thu hồi quyền | Đạt từ chối; RAG tài liệu chi nhánh chỉ mở cho người được cấp |
+| Lỗi timeout, nơi lưu file và tên file có đường dẫn | Đạt báo lỗi rõ, không lộ đường dẫn riêng; trạng thái xử lý bỏ dở thử lại được sau 2 phút |
+| Edge headless 1440×900 và 390×844 | Đạt upload → preview bảng → sửa → xác nhận → xuất bản; scan hiển thị thiếu 0% coverage, nút xuất bản khóa; không tràn ngang trang |
+
+Migration: `python -X utf8 init_db.py --extensions-only` thành công và chạy lại bỏ qua file đã áp dụng; chạy trực tiếp `09_document_uploads.sql` hai lần cũng thành công. Số lượng nghiệp vụ giữ nguyên: 11 mẫu xe, 31 phiên bản, 93 tồn kho, 80 khách, 80 hồ sơ, 30 đơn. Không reset/xóa database dùng chung để làm nhiệm vụ tải tài liệu.
+
+Kiểm thử cuối dùng MySQL thật, mạng cho Groq và Playwright tạm trong `PYTHONPATH`:
+
+```text
+python -X utf8 -m pytest -q --tb=short --basetemp=D:/Projects/thuc_tap/project_thuc_tap/.pytest_cache/document-suite-run3
+1 failed, 200 passed in 27.13s
+```
+
+**44 test mới đạt**: parser 23, API 19, trình duyệt 2. Lỗi duy nhất còn lại là `test_logo_and_formatter_served_locally`, đã có trước: ảnh nguồn và ảnh static khác nhau. Không sửa ảnh hoặc assertion để che lỗi. Thư mục tạm nằm trong workspace do quyền thư mục Temp Windows khác giữa sandbox và lượt chạy có mạng.
+
+`python scripts/report_document_accuracy.py` đo 18 mẫu, không có lỗi khác kỳ vọng. Các mẫu được đo chữ đạt recall/precision token 100%; các bảng có gold đạt khớp ô 100%. Chỉ là mẫu tổng hợp kiểm soát; các case scan, công thức/ô gộp hoặc lỗi không bị gán điểm 100%. Xem [báo cáo chi tiết](document_extraction_report.md) về cách đo và giới hạn.
+
+Giới hạn: chưa có OCR tự động, hàng đợi nền hoặc giới hạn RAM cứng Windows; xử lý trong request bằng subprocess timeout 45 giây. Bố cục phức tạp, bảng không đường kẻ, chữ trong ảnh, Word textbox/footnote/ô gộp và cache công thức cần đối chiếu. Backend dùng chung database phải chia sẻ nơi lưu file gốc. Ảnh kiểm tra nằm tại `.pytest_cache/document-ui/documents-1440.png` và `documents-390.png`.
+
+File thêm: `document_parser.py`, `document_service.py`, `document_routes.py`, extension 09, `templates/documents.html`, `static/documents.js`, 18 mẫu và manifest, 2 script tạo mẫu/đo chất lượng, `requirements-dev.txt`, 3 module test, báo cáo trích xuất. File sửa: `app.py`, `requirements.txt`, `.gitignore`, `static/portal.css`, README và báo cáo test này. Các thao tác di chuyển/xóa tài liệu trong `phuong_phap_trien_khai_de_an/` và file mới trong `ke_hoach/` xuất hiện trong lúc thực hiện là thay đổi ngoài nhiệm vụ, được giữ nguyên và không đưa vào commit.

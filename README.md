@@ -152,6 +152,30 @@ python -m pytest -q
 
 Test MySQL dùng database thật; thiếu database/schema là lỗi, không tự skip. Test Groq tự skip khi không có khóa. Các test API đăng nhập qua test client và gửi CSRF thật, không gán user_id trực tiếp vào phiên.
 
+## Tải lên và trích xuất tài liệu
+
+Cài dependencies mới bằng `python -m pip install -r requirements.txt`, chạy `python init_db.py --extensions-only`, rồi khởi động lại backend. Truy cập `/documents` qua mục **Tài liệu**. Migration `09_document_uploads.sql` chỉ thêm bảng metadata/bản nháp và quyền `document:manage`; admin có quyền toàn hệ thống, quản lý chi nhánh có phạm vi chi nhánh. Người quản trị có thể gán quyền qua quản trị RBAC; quyền quản lý tài liệu và quyền danh mục đều được kiểm tra ở backend.
+
+Luồng: chọn tiêu đề/danh mục/chi nhánh/file → tải lên → trích xuất → xem văn bản/bảng và cảnh báo → hiệu đính, ghi chú, xác nhận đối chiếu → lưu bản đã kiểm tra → **Đưa vào kho tri thức**. Bản nháp không được RAG đọc; chỉ bước cuối ghi `kb_documents` và tài liệu tiếp tục chịu bộ lọc `v_user_kb_access`. Không tự nhập bảng trích xuất vào sản phẩm, khách hàng hay đơn hàng. Thiếu trường bắt buộc, vượt giới hạn nội dung, chưa duyệt hoặc bản nháp đã đổi phiên bản thì không ghi kho tri thức.
+
+File PDF/DOCX/XLSX tối đa 10 MB; không nhận DOC/XLS cũ, file ảnh hoặc macro. Kiểm tra chữ ký/cấu trúc thay vì chỉ đuôi file. ZIP có giới hạn giải nén; file gốc lưu bằng tên UUID tại `instance/documents/`, không nằm trong static và được Git bỏ qua. API tải lại file gốc cũng kiểm tra quyền. Cần sao lưu thư mục này cùng database; các máy backend dùng chung database cần cùng nơi lưu file gốc (không chỉ chia sẻ `.env`).
+
+Trạng thái: đã tải lên, đang xử lý, có nội dung, cần kiểm tra, lỗi, đã xuất bản. Parser chạy trong subprocess tối đa 45 giây; luồng hiện xử lý trong request, UI hiển thị đang trích xuất. File lỗi được giữ metadata/lý do và có thể thử lại; trạng thái đang xử lý bị bỏ dở có thể thử lại sau 2 phút. Không có hàng đợi nền hay giới hạn RAM cứng trên Windows.
+
+PDF scan hoặc trang trắng không có chữ được đánh dấu thiếu văn bản; PDF hỗn hợp chỉ trích xuất trang có chữ. **Chưa tích hợp OCR tự động**: cần nhập/đối chiếu thủ công hoặc chia sẻ bản có lớp văn bản. Không tạo điểm tin cậy giả. Văn bản trong ảnh mờ/lệch/nhỏ, thứ tự nhiều cột, ô gộp và công thức Excel không có cache cần được người dùng kiểm tra; cảnh báo gốc vẫn được giữ sau hiệu đính. Nội dung công bố tối đa 60.000 byte UTF-8 vì schema `kb_documents.content` hiện là TEXT.
+
+Bộ **18 mẫu** PDF/DOCX/XLSX (bảng, hai cột, scan mờ/lệch, hỗn hợp, mã hóa, file hỏng, tài liệu lớn/vượt giới hạn) nằm trong `data/samples/documents/`, đáp án trong `manifest.json`. Xem [báo cáo đo độ chính xác và giới hạn](docs/document_extraction_report.md).
+
+```powershell
+python -m pip install -r requirements-dev.txt
+python scripts/generate_document_samples.py
+python -m pytest -q tests/test_document_parser.py tests/test_document_uploads.py
+python scripts/report_document_accuracy.py
+python -m pytest -q tests/test_documents_browser.py
+```
+
+Test giao diện dùng Edge headless trên Windows; cần Playwright. Tất cả API test dùng MySQL thật. Chạy test trên database phát triển; test tạo bản nháp/tài liệu mô phỏng và dọn bản ghi của mình.
+
 Kết quả, bảng route/quyền/scope, ảnh giao diện và giới hạn được ghi trong [docs/test_results.md](docs/test_results.md).
 
 ### Kiểm tra chat và bố cục
