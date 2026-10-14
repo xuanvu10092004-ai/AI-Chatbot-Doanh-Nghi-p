@@ -178,3 +178,24 @@ Các quyết định trên được ghi rõ để người dùng xem xét; khôn
 - Lần chạy trong sandbox: 126 passed, 6 failed; 5 lỗi gọi Groq do socket bị chặn, chạy lại có mạng đã đạt cả 5.
 - Không chạy reset vì nhiệm vụ hiện tại là đổi tài khoản và chia sẻ database đang có dữ liệu. Không khẳng định toàn bộ test đã đạt.
 - Wi-Fi máy chủ là Public. Auto-review từ chối tạo quy tắc firewall mở TCP 3306 trên Private/Public cho LAN; chưa thay đổi firewall, cần chủ máy duyệt rõ phạm vi trước khi hoàn tất kết nối máy khác.
+
+## Sửa hiểu câu hỏi và cắt nội dung chat - 14/10/2026
+
+Nguyên nhân: “chi nhánh nào còn” chưa được nhận thành intent tồn kho; tin nhắn là flex item có thể co chiều cao trong khi `overflow:hidden` cắt nội dung. Giao diện còn ghi đè câu trả lời bằng tiêu đề chung khi có bảng. Kiểm tra trình duyệt cũng phát hiện pool MySQL 5 kết nối trả lỗi ngay khi dashboard tải nhiều API đồng thời.
+
+Đã sửa nhận diện tồn kho và lượt hỏi tiếp, tách đủ các tên xe trong câu so sánh, giải thích khi mẫu xe thiếu dữ liệu, giữ nguyên dung tích được hỏi. Quyền vẫn được kiểm tra trước truy vấn. Tin nhắn giữ nguyên chiều cao; bảng rộng cuộn ngang, cột tên xe/phiên bản đứng trước; giữ lời giải thích và nguồn. Pool chờ tối đa 5 giây khi bận và khởi tạo dưới khóa để tránh tranh chấp giữa các thread.
+
+| Kiểm tra thực tế | Kết quả |
+|---|---|
+| Các biến thể “SH 160 chi nhánh nào còn”, “AB160 đại lý nào còn”, “ở đâu còn xe”, “còn không” | Đạt, nhận intent tồn kho |
+| Tồn kho SH 160i cho admin, sales và kỹ thuật viên | Đạt, đối chiếu trực tiếp JOIN inventory/branches/products/product_variants; lọc đúng chi nhánh |
+| Guest hỏi chi nhánh còn AB 125 | Đạt, từ chối trước SQL và có audit denied |
+| So sánh AB 125 và AB 160 | Đạt, báo thiếu AB 125, giá/phiên bản AB 160 đối chiếu SQL gốc, không tự thay tên xe |
+| So sánh Vision 110 và Lead 125 | Đạt, đủ phiên bản của cả hai mẫu theo SQL gốc |
+| Lượt tiếp “chi nhánh nào còn?” | Đạt, giữ mẫu SH 160i, chỉ thấy NT01 của sales |
+| Pool MySQL đang dùng đủ 5 kết nối | Đạt, request chờ và tiếp tục khi kết nối được trả về |
+| Edge headless 1440×900, 1280×600, 390×844; mỗi kích thước 6 lượt hỏi thật | Đạt, không ép thấp/cắt tin, đủ bảng, không tràn ngang trang, cuộn ngang được trên điện thoại, không lỗi JavaScript |
+
+Kiểm tra cuối: đặt `PYTHONPATH` tới `.pytest_cache/browser_tools` (Playwright được cài tạm), chạy `python -X utf8 -m pytest -q --tb=short` với mạng cho Groq: **149 passed, 1 failed in 17.61s**, không skip test trình duyệt. Lỗi còn lại là `test_logo_and_formatter_served_locally`: `docs/images/logo.jpg` đã có thay đổi trước nhiệm vụ, khác `static/images/logo.jpg`. Không sửa ảnh hoặc assertion để che lỗi. Các file ảnh và `AGENTS.md` người dùng đã sửa được giữ nguyên.
+
+Ảnh kiểm tra: `.pytest_cache/chat-layout/chat-1440x900.png`, `chat-1280x600.png`, `chat-390x844.png`. Đây là kiểm tra cục bộ trên MariaDB thật, không khẳng định đã kiểm chứng trên máy thành viên khác. Không reset database trong nhiệm vụ sửa chat/giao diện vì không thay schema hay seed.
