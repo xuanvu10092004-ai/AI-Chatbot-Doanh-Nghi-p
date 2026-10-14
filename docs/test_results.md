@@ -1,5 +1,52 @@
 # Kiểm chứng logo, câu trả lời và tài khoản - 14/10/2026
 
+## Bổ sung đồng bộ khách hàng, nhập nhanh và chứng từ bán hàng - 14/10/2026
+
+Phần này ghi kết quả của lần nâng cấp mới nhất. Các kết quả bên dưới là lịch sử những lần kiểm chứng trước đó.
+
+Đã thêm `customer_input.py`, `customer_input_routes.py`, `customer_chat.py`, `sales_routes.py`, `inventory_policy.py`; extension `10_customer_input.sql`, `11_sales_invoices.sql`; các trang/script nhập khách và đơn hàng, font Noto Sans cục bộ có giấy phép. Đã nối luồng vào `app.py`, trang tài liệu/chat, chỉnh bộ lập truy vấn, cảnh báo tồn kho, khởi tạo extension, dependency và README. Schema chuẩn không đổi.
+
+| Kiểm chứng | Kết quả |
+|---|---|
+| Excel nguồn có 19 cột, 80 khách, 30 thông tin mua | Đạt ở chế độ đọc/xem trước: nhận diện cập nhật 80 hồ sơ và 30 đơn hiện có; không nhập lại dữ liệu nguồn |
+| XLSX tải từ giao diện, chọn danh mục Thông tin / Danh sách khách hàng | Đạt; mẫu tải xuống đúng tên/thứ tự cột, điện thoại giữ kiểu chữ; file khách chưa được đưa vào RAG |
+| Thêm mới, cập nhật theo mã/email, hiển thị trước/sau và xác nhận | Đạt; phiên bản cũ, hồ sơ thay đổi và xung đột bị chặn; xác nhận lại không tạo trùng |
+| Thiếu trường, ngày sai, email/điện thoại/enum/model/SKU/giá tiền sai, dòng JSON lỗi, trùng trong lô | Đạt; cả lô không ghi khách hoặc đơn khi có lỗi |
+| Customer/guest/kỹ thuật viên, người khác sở hữu nháp, chi nhánh khác, thu hồi quyền | Đạt; backend kiểm tra mỗi lần gọi, không dựa vào nút ẩn |
+| Tạo khách từ chat và nhập nhanh khách mua xe | Đạt; thu thập trường còn thiếu, hỗ trợ nhãn Giá trị mua và nhập từng lượt; chỉ tạo sau xác nhận |
+| Thông tin mua kèm khách | Đạt; tạo đơn pending, quantity=1, approved_by=NULL, không tự thanh toán/giao xe/giảm tồn kho |
+| Kho sắp hết hàng / hết hàng | Đạt đối chiếu SQL thật: 1–4 / 0; kiểm tra biên 0, 1, 4, 5 và scope sales NT01 |
+| PDF từ đơn thật | Đạt đọc lại bằng pdfplumber: tên tiếng Việt đủ dấu, mặt hàng, trạng thái, tiền theo order_items và giảm giá đã lưu |
+| Đơn pending/approved và paid/delivered | Phiếu xác nhận / hóa đơn bán hàng mô phỏng tương ứng; không khẳng định đã thu tiền cho đơn pending |
+| Chặn xuất PDF trái quyền, ngoài chi nhánh, đơn hủy, số tiền sai | Đạt; yêu cầu cả order:read và invoice:export, lấy giao phạm vi hai quyền; xuất thành công có audit |
+| Edge headless 1440×900 và 390×844 | Đạt nhập form/chat/file, nhập nhanh, gợi ý giá, xác nhận, tải PDF và tìm đơn; không lỗi JavaScript/tràn ngang trang |
+| Replay trực tiếp extension 10 và 11, mỗi file 2 lần | Đạt, không lỗi và không nhân đôi permission/menu |
+
+API/trang mới và quyền:
+
+| Tuyến | Quyền và giới hạn |
+|---|---|
+| `/customer-input`, `/api/customer-input`, `/api/customer-input/lookups`, `/api/customer-input/template` | customer:write; chi nhánh được cấp; nháp chỉ chủ sở hữu; nhập từ file còn cần document:manage và quyền danh mục |
+| `/api/customer-input/<id>`, `/api/customer-input/<id>/commit` | Chủ nháp; kiểm tra lại scope; thao tác ghi cần CSRF, version và confirmed=true |
+| `/orders`, `/api/orders` | order:read; all/branch/own theo cấu hình backend; phân trang tối đa 20 dòng |
+| `/api/orders/<id>/invoice.pdf` | order:read + invoice:export; giao scope; không lộ dữ liệu đơn ngoài phạm vi |
+
+Ảnh kiểm thử tại `.pytest_cache/customer-input-ui/category-1440.png` và `category-390.png`. Các khách/đơn thử dùng email riêng và được dọn sau test, không xóa khách/đơn nguồn. PDF tạo trong bộ nhớ, không lưu file chứa thông tin cá nhân trong static.
+
+Lệnh khởi tạo dùng `python -X utf8 init_db.py --extensions-only`: thành công; giữ nguyên 11 products, 31 variants, 93 inventory, 80 customer_profiles và 30 orders sau dọn test. Không chạy `--reset` vì database dùng chung đã có tài liệu và dữ liệu nghiệp vụ cần giữ; thao tác reset sẽ xóa dữ liệu đó.
+
+Kết quả thật lần cuối với MySQL, API LLM đã cấu hình và Playwright trong PYTHONPATH:
+
+```text
+python -X utf8 -m pytest -q --tb=short --basetemp=D:/Projects/thuc_tap/project_thuc_tap/.pytest_cache/sales-full-run2
+FAILED tests/test_chat_presentation.py::test_logo_and_formatter_served_locally
+1 failed, 239 passed in 35.60s
+```
+
+Lỗi duy nhất là ảnh `docs/images/logo.jpg` khác byte so với ảnh `/static/images/logo.jpg`, tồn tại trước lần nâng cấp này. Không xóa test, không nới assertion, không đổi ảnh nhận diện ngoài phạm vi yêu cầu. Vì vậy chưa thể báo toàn bộ bộ kiểm thử pass. Riêng kiểm thử mới khách hàng/tồn kho/bán hàng và trình duyệt đều đạt.
+
+Giới hạn: mỗi dòng một lần mua, số lượng 1; đơn trùng cùng khách/chi nhánh/phiên bản/giá được nhận diện là đơn hiện có. Không suy đoán nhiều lần mua giống hệt nhau. Khách mới có portal chưa kích hoạt. Chưa có quy trình duyệt/thanh toán đơn trong chức năng mới. Chứng từ PDF mô phỏng, chưa tích hợp hóa đơn điện tử thuế và chưa lưu bản hóa đơn bất biến; tải lại phản ánh đơn tại thời điểm tải. Các thay đổi người dùng trong `phuong_phap_trien_khai_de_an/` và `ke_hoach/` được giữ nguyên, không đưa vào commit tính năng.
+
 Môi trường thực tế: Windows, Python 3.13, MariaDB 10.4.32, Groq dùng cấu hình .env. Không thay đổi schema chuẩn hoặc mật khẩu cấu hình.
 
 ## Kết quả lệnh thực tế

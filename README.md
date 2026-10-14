@@ -178,7 +178,47 @@ python -m pytest -q tests/test_documents_browser.py
 
 Test giao diện dùng Edge headless trên Windows; cần Playwright. Tất cả API test dùng MySQL thật. Chạy test trên database phát triển; test tạo bản nháp/tài liệu mô phỏng và dọn bản ghi của mình.
 
+## Đồng bộ khách hàng và thêm khách qua chatbot
+
+Migration `10_customer_input.sql` thêm danh mục **Thông tin / Danh sách khách hàng**, bảng bản nháp và quyền `customer:write`/`order:write`. Admin có scope all; quản lý chi nhánh và sales có scope branch, gồm quyền tải file trong phạm vi chi nhánh. Các trang/API kiểm tra lại quyền mỗi lần gọi. Không đổi schema chuẩn hay cho tài khoản SQL chatbot quyền ghi.
+
+Trong **Tài liệu**, chọn danh mục khách hàng, tải XLSX có sheet `Khach_hang`, bấm **Kiểm tra và đồng bộ khách hàng**. Có thể tải mẫu Excel ngay trong giao diện. Mẫu giữ đúng 19 cột của `data/source/honda_dataset_khach_hang_san_pham.xlsx`; cột Tuổi được tính từ ngày sinh. Luồng đọc riêng sheet khách hàng, tối đa 200 dòng/lần; không đồng bộ các sheet sản phẩm hoặc tồn kho của file này. Danh sách khách hàng được xử lý như dữ liệu nghiệp vụ, không đưa vào RAG công khai.
+
+Trang `/customer-input` hiển thị dòng lỗi, hồ sơ thêm/cập nhật và từng trường trước/sau. Mã KH/email nhận diện hồ sơ hiện có; mã trống được cấp mới. Email và mã KH trỏ tới hai hồ sơ khác nhau, dữ liệu trùng trong file, thiếu trường bắt buộc, ngày/điện thoại/enum/mẫu xe/mã SP/giá trị mua sai hoặc chi nhánh ngoài scope đều chặn lưu. Cả lô được ghi trong một transaction sau xác nhận; một dòng sai thì chưa ghi khách hay đơn nào. Bản nháp có version và snapshot, hồ sơ thay đổi sau xem trước phải kiểm tra lại. Xác nhận lại cùng bản đã xử lý trả kết quả cũ.
+
+Nếu có `Mã SP đã mua`, cần trạng thái Đã mua, giá trị mua nguyên VNĐ dương và quyền `order:write`. Mã SP theo quy ước Excel `SP001` tương ứng variant id 1; mẫu AB 125 cũng có mã trong danh sách chọn. Mỗi dòng biểu diễn tối đa một thông tin mua, số lượng 1; đơn mới có trạng thái **pending / chờ duyệt**, người duyệt trống, ngày tạo là thời điểm đồng bộ. Đơn cùng khách/chi nhánh/variant/đơn giá/số lượng đã tồn tại và chưa bị hủy được nhận diện để tránh nhập trùng. Không suy đoán nhiều lần mua giống nhau từ một dòng; trường hợp đó cần luồng đơn hàng riêng. Bước này chưa giao xe hay thay đổi tồn kho. Hồ sơ mới là customer và tài khoản portal chưa hoạt động; quản trị viên kích hoạt/cấp mật khẩu qua quản trị tài khoản.
+
+Trong **Trợ lý AI**, chọn hoặc nhập **Thêm khách hàng**, cung cấp các trường lần lượt hoặc theo dạng:
+
+```text
+Thêm khách hàng: Họ và tên: Khách mô phỏng; Email: demo@example.test; Số điện thoại: 0901234567; Chi nhánh phụ trách: NT01
+```
+
+Chat đặt ngày đăng ký hiện tại và trạng thái Tiềm năng ở bản nháp; bạn có thể sửa/bổ sung toàn bộ các trường Excel bằng `Tên trường: giá trị`, hoặc mở form đầy đủ từ câu trả lời. Bản hợp lệ hiện thông tin/thay đổi/đơn dự kiến và nút xác nhận gắn đúng id/version. Có thể gõ `Xác nhận lưu khách hàng` hoặc `Hủy thêm khách hàng`. LLM không tự chạy INSERT/UPDATE; công cụ ghi dùng SQL tham số hóa và quyền backend. Mỗi lượt chat lưu lịch sử/audit.
+
+Kiểm thử: `python -m pytest -q tests/test_customer_input.py tests/test_customer_input_browser.py`. Excel nguồn hiện có 80 hồ sơ/30 thông tin mua được kiểm tra ở chế độ xem trước; không tự nhập lại hoặc thay đổi các hồ sơ nguồn trong quá trình test. `init_db.py --extensions-only` cho phép số lượng nghiệp vụ tăng sau đồng bộ; kiểm tra số mẫu cố định chỉ áp dụng lúc chủ động khởi tạo. Seed AB 125 idempotent được kiểm tra lại khi chạy extension để phục hồi phần bổ sung nếu seed Excel gốc đã được nhập lại.
+
 Kết quả, bảng route/quyền/scope, ảnh giao diện và giới hạn được ghi trong [docs/test_results.md](docs/test_results.md).
+
+### Tồn kho, nhập nhanh và xuất chứng từ bán hàng
+
+Quy ước chung: **0 xe = hết hàng; 1–4 xe = sắp hết hàng; từ 5 xe = còn hàng**. Số lượng xét theo từng phiên bản tại từng chi nhánh. Chatbot, `/api/low-stock` và danh sách cảnh báo dùng cùng ngưỡng, luôn lọc phạm vi được cấp.
+
+Chạy `python -m pip install -r requirements.txt`, rồi `python init_db.py --extensions-only` và khởi động lại backend. Migration `11_sales_invoices.sql` thêm quyền `invoice:export` và menu **Thêm nhanh khách mua xe**, **Đơn hàng / Xuất hóa đơn**. Không cần reset dữ liệu.
+
+Vào `/customer-input?quick=1`, nhập họ tên, email, điện thoại, chi nhánh, chọn phiên bản và kiểm tra giá bán. Ngày đăng ký mặc định hôm nay, trạng thái Đã mua; thông tin bổ sung vẫn mở được. Chọn xe gợi ý giá niêm yết, người dùng có thể sửa thành giá thỏa thuận. Xem trước, xác nhận tạo hồ sơ/đơn chờ duyệt, sau đó bấm xuất phiếu PDF. Chat có nút **Thêm khách mua xe**, hỗ trợ cùng quy trình, ví dụ:
+
+```text
+Thêm khách mua xe: Họ và tên: Khách mô phỏng; Email: buyer@example.test; Số điện thoại: 0901234567; Chi nhánh phụ trách: NT01; Mã SP đã mua: SP014; Giá trị mua: 56.500.000
+```
+
+Trong `/orders`, tìm theo tên/email hoặc lọc trạng thái để xuất lại chứng từ. Đơn pending/approved xuất **Phiếu xác nhận đơn hàng (mô phỏng)**; paid/delivered xuất **Hóa đơn bán hàng (mô phỏng)**; đơn hủy hoặc thiếu/sai mặt hàng/số tiền bị chặn. PDF tính tiền từ `order_items` và giảm giá đã lưu, không lấy lại giá hiện tại của sản phẩm; không ghi nhận thanh toán hay giảm tồn kho khi tải PDF. Số chứng từ MP theo id đơn, ngày là ngày tạo đơn. Đây là chứng từ mô phỏng hỗ trợ đề tài, chưa tích hợp hóa đơn điện tử thuế hay lưu bản hóa đơn bất biến. Tải lại phản ánh dữ liệu đơn tại thời điểm tải.
+
+Backend kiểm tra đồng thời `order:read` và `invoice:export`, giao của hai phạm vi quyền; ghi nhật ký xuất. Sales/quản lý chi nhánh chỉ xuất trong chi nhánh được cấp, admin/kế toán theo quyền cấu hình. PDF dùng [Noto Sans](https://github.com/notofonts/noto-fonts/blob/main/hinted/ttf/NotoSans/NotoSans-Regular.ttf) và giấy phép SIL OFL đặt cục bộ tại `static/vendor/fonts/`; không cần mạng khi xuất PDF.
+
+```powershell
+python -m pytest -q tests/test_inventory_policy.py tests/test_sales_features.py tests/test_customer_input.py tests/test_customer_input_browser.py
+```
 
 ### Kiểm tra chat và bố cục
 
