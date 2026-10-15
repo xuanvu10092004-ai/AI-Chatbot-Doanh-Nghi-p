@@ -77,6 +77,7 @@ def answer_sql_question(
     question: str,
     user_id: int | None = None,
     session_id: int | None = None,
+    include_inventory_details: bool = False,
 ) -> str:
     if session_id is None:
         session_id = create_session(user_id)
@@ -115,6 +116,14 @@ def answer_sql_question(
         return 'Chưa phân tích được câu hỏi lúc này. Bạn hãy thử lại hoặc nêu rõ mẫu xe và điều kiện.'
     rows = _execute_text_to_sql(sql, params, allowed_views=allowed_views,
                                 scope_branch_ids=authorization['scope_branch_ids'],own_user_id=authorization['own_user_id'])
+    if include_inventory_details and intent_code=='ask_stock' and len(rows)==1 and set(rows[0])=={'total_stock'}:
+        total=rows[0]['total_stock'] or 0
+        detail_sql,detail_params=plan_query(question+' chi tiết theo sản phẩm theo chi nhánh',intent_code)
+        details=_execute_text_to_sql(detail_sql,detail_params,allowed_views=allowed_views,
+                                    scope_branch_ids=authorization['scope_branch_ids'],own_user_id=authorization['own_user_id'])
+        summary=f'Tổng tồn kho: {int(total):,} xe. Chi tiết theo từng phiên bản và chi nhánh trong phạm vi được cấp.'.replace(',','.')
+        if len(details)==100:summary+=' Hiển thị tối đa 100 dòng; mở trang Tồn kho để xem tiếp.'
+        return QueryEvidence(f'total_stock: {total}\n'+str(_format_rows(details)),details,generated,summary)
     from question_language import normalize, product_patterns, asks_available_stock
     patterns = product_patterns(question)
     if not rows and intent_code == 'ask_stock' and asks_available_stock(question):

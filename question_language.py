@@ -64,6 +64,8 @@ def wants_sql(question: str) -> bool:
 
 def resolve_followup(question: str, history: list[dict]) -> str:
     q = normalize(question)
+    if any(term in q for term in ('het hang','tong ton','san pham nao','tat ca san pham')):
+        return question
     if product_pattern(question) or not any(w in q for w in ('mau nao', 'mau gi', 'phien ban', 'ban abs', 'xe nay', 'gia bao nhieu', 'thong so', 'bao hanh', 'chi nhanh', 'dai ly', 'cua hang', 'o dau', 'con khong')):
         return question
     for message in reversed(history):

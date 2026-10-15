@@ -3,6 +3,7 @@ from decimal import Decimal
 
 
 LABELS = {
+    'model_year':'Năm đời xe','lifecycle':'Trạng thái kinh doanh',
     'model_name': 'Mẫu xe', 'variant_name': 'Phiên bản', 'color': 'Màu',
     'segment': 'Phân khúc', 'engine_cc': 'Dung tích động cơ',
     'list_price': 'Giá niêm yết', 'cost_price': 'Giá vốn', 'gross_margin': 'Lợi nhuận gộp',
@@ -25,6 +26,8 @@ LABELS = {
 def display_value(key, value):
     if value is None:
         return 'Chưa có dữ liệu'
+    if key=='lifecycle':
+        return {'current':'Đời hiện hành','previous':'Đời trước','discontinued':'Ngừng kinh doanh'}.get(value,value)
     if key == 'segment':
         return {'tay_ga': 'Xe ga', 'xe_so': 'Xe số', 'con_tay': 'Xe côn tay'}.get(value, value)
     if isinstance(value, (int, float, Decimal)) and any(w in key for w in ('price', 'amount', 'revenue', 'margin')):

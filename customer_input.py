@@ -22,7 +22,7 @@ FIELDS = {
  'address':'Địa chỉ','occupation':'Nghề nghiệp','lead_source':'Nguồn khách',
  'branch_code':'Chi nhánh phụ trách','interested_model':'Mẫu xe quan tâm',
  'payment_preference':'Hình thức thanh toán','registered_at':'Ngày đăng ký','status':'Trạng thái',
- 'purchased_sku':'Mã SP đã mua','purchase_amount':'Giá trị mua (VNĐ)'}
+ 'purchased_sku':'Mã SP','purchase_amount':'Giá trị mua (VNĐ)'}
 REQUIRED = ('full_name','phone','email','branch_code','registered_at','status')
 MAX_ROWS = 200
 WORKBOOK_HEADERS=['Mã KH','Họ và tên','Giới tính','Ngày sinh','Tuổi','Số điện thoại','Email','Tỉnh/Thành phố','Quận/Huyện','Địa chỉ','Nghề nghiệp','Nguồn khách','Chi nhánh phụ trách','Mẫu xe quan tâm','Hình thức thanh toán','Ngày đăng ký','Trạng thái','Mã SP đã mua','Giá trị mua (VNĐ)']
@@ -108,6 +108,7 @@ def read_customer_workbook(path):
         iterator=sheet.iter_rows(values_only=True);header=list(next(iterator,()))
         if len(header)!=len(set(str(v) for v in header)):raise CustomerInputError('Tiêu đề cột bị trùng; hãy sửa trước khi tải lên.')
         mapping={normalize(label):key for key,label in FIELDS.items()}
+        mapping['ma sp da mua']='purchased_sku'
         found={key for label in header if (key:=mapping.get(normalize(str(label))))}
         if not set(REQUIRED)<=found:raise CustomerInputError('File thiếu cột bắt buộc: '+', '.join(FIELDS[k] for k in REQUIRED if k not in found))
         rows=[]

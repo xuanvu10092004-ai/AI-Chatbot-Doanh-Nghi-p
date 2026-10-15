@@ -28,7 +28,7 @@ def test_quick_chat_collects_purchase_fields_sequentially(auth_client,clean_cust
     auth_client.login(3)
     result=auth_client.post('/chat',json={'question':'Thêm khách mua xe: Họ và tên: Khách tuần tự; Email: sequence@customer-input.test; Số điện thoại: 0901234567'}).get_json()
     BATCHES.add(result['customer_draft']['id'])
-    assert 'Mã SP đã mua' in result['answer']
+    assert 'Mã SP' in result['answer']
     result=auth_client.post('/chat',json={'question':'SP014'}).get_json()
     assert 'Giá trị mua' in result['answer']
     result=auth_client.post('/chat',json={'question':'Giá trị mua: 56.500.000'}).get_json()

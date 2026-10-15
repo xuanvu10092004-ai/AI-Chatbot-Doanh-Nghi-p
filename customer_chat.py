@@ -4,26 +4,54 @@ import re
 from flask import g
 from db import cursor
 from security import permissions
-from question_language import normalize
+from question_language import normalize,product_pattern
 from customer_input import FIELDS,REQUIRED,today,stage,get_batch,revise,commit,CustomerInputError
 from access_control import authorize_intent
+
+
+def parse_customer_values(text):
+    """Tách các trường có nhãn hoặc tên, email, điện thoại; giữ nguyên địa chỉ."""
+    labels={normalize(label):key for key,label in FIELDS.items()}
+    labels.update({'ten':'full_name','ho ten':'full_name','sdt':'phone','dien thoai':'phone',
+                   'chi nhanh':'branch_code','ma kh':'customer_code','ma sp':'purchased_sku',
+                   'ma sp da mua':'purchased_sku','gia tri mua':'purchase_amount'})
+    result={}
+    for part in re.split(r'[;\n]|,\s*(?=[^,:;\n]{2,35}:)',text):
+        if ':' in part:
+            label,value=part.split(':',1)
+            if (key:=labels.get(normalize(label))):result[key]=value.strip()
+    if result:return result
+    parts=[p.strip(' .') for p in text.split(',') if p.strip()]
+    if len(parts)<2:return result
+    leftovers=[]
+    for part in parts:
+        if re.fullmatch(r'[^\s@]+@[^\s@]+\.[^\s@.]+',part):result['email']=part
+        elif re.fullmatch(r'(?:0\d{9,10}|\+84\d{9,10})',re.sub(r'[ .()-]','',part)):result['phone']=part
+        else:leftovers.append(part)
+    if result and leftovers:
+        result['full_name']=leftovers[0]
+        if len(leftovers)>1:result['address']=', '.join(leftovers[1:])
+    return result
 
 
 def handle_customer_chat(question,session_id,confirmation=None):
     q=normalize(question)
     quick=bool(re.match(r'^(?:them|tao|nhap) (?:nhanh )?khach (?:hang )?(?:mua xe|da dong y mua)\b',q))
-    starting=quick or bool(re.match(r'^(?:them|tao|nhap) (?:mot )?khach hang\b',q))
+    starting=quick or bool(re.match(r'^(?:them|tao|nhap) (?:(?:mot|nhanh) )?khach hang\b',q))
     with cursor() as cur:
         cur.execute("SELECT id FROM customer_input_batches WHERE chat_session_id=%s AND created_by=%s AND status='draft' ORDER BY id DESC LIMIT 1",(session_id,g.user['id'] if g.user else None))
         pending=cur.fetchone()
     if not starting and not pending:return None
+    # Một câu hỏi mới không được biến thành giá trị của trường còn thiếu.
+    values=parse_customer_values(question)
+    if pending and not starting and not values and (product_pattern(question) or re.search(
+        r'\b(?:ton kho|het hang|con hang|san pham nao|chi nhanh nao|hien tai|bao nhieu|tong|so sanh|thong so|khuyen mai|don hang|gia von|gia xe|quy trinh|bao duong|chinh sach|danh sach)\b',q)):return None
     authorization=authorize_intent(session_id,g.user['id'] if g.user else None,'add_customer')
     if not authorization['allowed'] or not g.user:
         return {'answer':'Tôi không thể hỗ trợ yêu cầu này.','access_denied':True,'rows':[],'type':'customer-input'}
     if pending and q in ('huy','huy them khach hang','huy nhap khach hang'):
         with cursor() as cur:cur.execute("UPDATE customer_input_batches SET status='cancelled' WHERE id=%s AND created_by=%s",(pending['id'],g.user['id']))
         return {'answer':'Đã hủy bản nháp khách hàng.','type':'customer-input'}
-    if not starting and not q.startswith('gia tri mua:') and re.match(r'^(gia |ton kho|so sanh|thong so|khuyen mai|tong |danh sach)',q):return None
     if pending and not starting:
         batch=get_batch(pending['id'])
     else:
@@ -46,15 +74,11 @@ def handle_customer_chat(question,session_id,confirmation=None):
     label_map.update({'ten':'full_name','ho ten':'full_name','sdt':'phone','dien thoai':'phone','chi nhanh':'branch_code','ma kh':'customer_code','ma sp':'purchased_sku','gia tri mua':'purchase_amount'})
     required=list(REQUIRED)+(['purchased_sku','purchase_amount'] if row.get('status')=='Đã mua' else [])
     supplied=False
-    body=re.sub(r'^(?:thêm|them|tạo|tao|nhập|nhap)\s+(?:(?:một|mot)\s+)?(?:khách|khach)\s+(?:hàng|hang)\s*[:;]?\s*','',question,flags=re.I) if starting else question
+    body=re.sub(r'^(?:thêm|them|tạo|tao|nhập|nhap)\s+(?:(?:một|mot|nhanh)\s+)?(?:khách|khach)\s+(?:hàng|hang)\s*(?:với thông tin như sau\s*)?[:;]?\s*','',question,flags=re.I) if starting else question
     if quick:body=re.sub(r'^.*?(?:mua xe|mua)\s*[:;]?\s*','',body,flags=re.I)
-    for part in re.split(r'[;\n]',body):
-        if ':' in part:
-            label,value=part.split(':',1);label=normalize(label)
-            label=re.sub(r'^(them|tao|nhap) khach hang\s*','',label)
-            key=label_map.get(label)
-            if key:row[key]=value.strip();supplied=True
-    if not starting and not supplied:
+    values=parse_customer_values(body)
+    if values:row.update(values);supplied=True
+    if not starting and not supplied and q not in ('tiep tuc nhap khach hang','tiep tuc'):
         missing=next((key for key in required if not row.get(key)),None)
         if missing:row[missing]=question.strip();supplied=True
     if supplied:batch=revise(batch['id'],[row],batch['version'])

@@ -52,7 +52,7 @@ def test_customer_form_and_chat_creation(customer_server,width,height,tmp_path):
             from openpyxl import Workbook
             book=Workbook();sheet=book.active;sheet.title='Khach_hang';sheet.append(WORKBOOK_HEADERS)
             values={'full_name':'Khách từ file','phone':'0907654321','email':f'filebrowser{width}@customer-input.test','branch_code':'NT01','registered_at':'2026-10-10','status':'Đã mua','purchased_sku':'SP014','purchase_amount':56500000}
-            reverse={label:key for key,label in FIELDS.items()};sheet.append([values.get(reverse.get(label)) for label in WORKBOOK_HEADERS])
+            reverse={label:key for key,label in FIELDS.items()};reverse['Mã SP đã mua']='purchased_sku';sheet.append([values.get(reverse.get(label)) for label in WORKBOOK_HEADERS])
             file=tmp_path/'customers.xlsx';book.save(file)
             page.locator('#documentTitle').fill('Kiểm thử parser đồng bộ khách giao diện');page.locator('#documentFile').set_input_files(file)
             with page.expect_response(lambda r:r.url.endswith('/api/documents') and r.request.method=='POST') as uploaded:page.get_by_role('button',name='Tải lên và trích xuất').click()
@@ -69,7 +69,7 @@ def test_customer_form_and_chat_creation(customer_server,width,height,tmp_path):
             assert page.locator('#customerField_status').input_value()=='Đã mua'
             assert not page.locator('#customerField_occupation').is_visible()
             page.locator('#customerField_purchased_sku').select_option('SP014')
-            assert page.locator('#customerField_purchase_amount').input_value()=='56500000'
+            assert page.locator('#customerField_purchase_amount').input_value()=='56.500.000'
             with page.expect_response(lambda r:r.url.endswith('/api/customer-input') and r.request.method=='POST') as fast:
                 page.get_by_role('button',name='Kiểm tra và xem trước thay đổi').click()
             quick=fast.value.json();BATCHES.add(quick['id']);assert quick['valid']
