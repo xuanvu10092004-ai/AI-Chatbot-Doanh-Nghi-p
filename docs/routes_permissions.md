@@ -18,7 +18,13 @@
 | /api/admin/users | POST | user:manage | all / branch / own according to permission |
 | /api/admin/users/<int:target_id> | PUT | user:manage | all / branch / own according to permission |
 | /api/admin/users/<int:target_id>/roles | DELETE,POST | user:manage | all / branch / own according to permission |
-| /api/bookings | GET,POST | kb:public:read | all / branch / own according to permission |
+| /api/bookings | GET | booking:read | all / branch / own |
+| /api/bookings | POST | booking:create | all / branch / own; kiểm tra khách và chi nhánh |
+| /api/bookings/lookups | GET | booking:create | danh sách khách/chi nhánh trong scope |
+| /api/bookings/<id> | PATCH | booking:read + booking:manage (xác nhận/hoàn tất), booking:create (hủy lịch của mình) | scope, version, trạng thái hợp lệ |
+| /catalog | GET | product:manage | dữ liệu API yêu cầu scope all |
+| /api/catalog | GET, POST | product:manage | chỉ all |
+| /api/catalog/<id> | PUT | product:manage | chỉ all; kiểm tra version, audit |
 | /api/customers | GET | customer:read | all / branch / own according to permission |
 | /api/dashboard | GET | dashboard:view | all / branch / own according to permission |
 | /api/dashboard/bestsellers | GET | order:read | all / branch / own according to permission |
@@ -36,7 +42,7 @@
 | /api/opportunities | GET,POST | order:read | all / branch / own according to permission |
 | /api/potential-customers | GET | customer:read | all / branch / own according to permission |
 | /api/quotes | GET,POST | order:read | all / branch / own according to permission |
-| /bookings | GET | kb:public:read | all / branch / own according to permission |
+| /bookings | GET | booking:read | all / branch / own |
 | /change-password | GET,POST | authenticated session | n/a |
 | /chat | GET | kb:public:read | all / branch / own according to permission |
 | /chat | POST | kb:public:read | all / branch / own according to permission |

@@ -234,3 +234,42 @@ Test trình duyệt tùy chọn nằm trong `tests/test_chat_layout.py`. Cài `p
 python -m pip install playwright
 python -m pytest -q tests/test_chat_layout.py
 ```
+
+### Cập nhật công cụ điều hành (15/10/2026)
+
+Sau khi lấy mã mới, chạy `python init_db.py --extensions-only` rồi khởi động lại `python app.py`.
+Extension `12_catalog_bookings.sql` bổ sung bảng đời xe và lịch sửa chữa, quyền và menu tương ứng;
+`13_ai_vehicle_releases.sql` bổ sung năm đời/trạng thái kinh doanh vào view AI. Không cần reset dữ liệu khi nâng cấp.
+
+| Công cụ | Cách sử dụng |
+| --- | --- |
+| Trợ lý AI | Nhập `Thêm nhanh khách hàng với thông tin như sau: Nguyễn Văn An, an@example.test, 0901234567, 123 Đường Mẫu, Nha Trang`. Tên/email/SĐT được tách tự động; chi nhánh vẫn cần xác định nếu tài khoản có phạm vi toàn hệ thống. |
+| Bản nháp trong chat | Có thể hỏi tồn kho giữa lúc nhập khách; bản nháp được giữ nguyên. Bấm “Tiếp tục bản nháp” để nhập tiếp hoặc “Hủy bản nháp”. Chỉ ghi khách/đơn sau khi xem trước và xác nhận. |
+| Mã SP / giá trị mua | Mã SP đứng trước giá trị mua. Chọn phiên bản tự điền giá niêm yết có dấu chấm, vẫn cho phép sửa giá thỏa thuận. File Excel cũ có cột “Mã SP đã mua” tiếp tục được hỗ trợ. |
+| Tồn kho | Hỏi `Hiện tại chi nhánh Nha Trang sản phẩm nào gần hết hàng`: Nha Trang gồm NT01 và NT02, Cam Ranh là CR01; phạm vi quyền tiếp tục giới hạn kết quả. “Tổng tồn kho” trả tổng và chi tiết phiên bản–chi nhánh. Chat tối đa 100 dòng, có thông báo giới hạn; trang Tồn kho có phân trang và tổng toàn bộ kết quả. |
+| Lịch sửa chữa | `/bookings`: chọn khách, chi nhánh, ngày giờ, dịch vụ, xe và biển số. Hẹn từ 07:00 đến trước 18:00 theo giờ Việt Nam, trước ít nhất 10 phút, tối đa 180 ngày. Chặn lịch trùng cùng khách/cùng giờ. Quy trình: Chờ xác nhận → Đã xác nhận → Hoàn tất; có thể hủy trước khi hoàn tất. |
+| Danh mục xe | `/catalog`: tạo mẫu mới hoặc phiên bản thuộc mẫu hiện có; sửa tên mẫu, phiên bản/màu, phân khúc, dung tích, giá, năm đời, trạng thái Đời hiện hành/Đời trước/Ngừng kinh doanh. Sửa tên mẫu áp dụng mọi phiên bản cùng mẫu. Giá đơn cũ không thay đổi. Phiên bản mới có tồn kho 0 ở các chi nhánh và giá vốn 0; cần cập nhật giá vốn qua quy trình tài chính trước khi dùng báo cáo lợi nhuận. |
+| Tổng quan | Biểu đồ đường cho doanh thu tháng, cột cho chi nhánh/tồn kho/nguồn khách, vòng cho trạng thái khách. Số liệu chi tiết có thể mở ra xem; nút “Cập nhật số liệu” tải lại các chỉ tiêu. |
+| Quản trị truy cập | Một mục điều hướng với các tab Tài khoản, Vai trò & ma trận quyền, Danh mục quyền, Nhật ký. Mỗi tab/API giữ quyền riêng. Hỗ trợ tạo/sửa tài khoản, mật khẩu tạm, khóa/mở khóa, gán/gỡ vai trò, ngày hết hạn, chỉnh phạm vi quyền, nhân bản vai trò và nhật ký. |
+| Khách hàng | Tổng số và biểu đồ trạng thái tính trên toàn bộ tập dữ liệu sau lọc, không chỉ trang hiện tại. Có lối vào nhập khách và nhập nhanh khách mua xe. |
+
+Các quyền mới: `product:manage` yêu cầu phạm vi toàn hệ thống cho danh mục dùng chung;
+`booking:read`, `booking:create`, `booking:manage` kiểm soát lịch hẹn theo toàn hệ thống/chi nhánh/bản thân.
+Khách đã đăng nhập chỉ xem/đặt/hủy lịch của mình; khách vãng lai không được truy cập lịch.
+Mọi thao tác ghi dùng phiên backend, CSRF, truy vấn tham số hóa, kiểm tra phiên bản và nhật ký.
+Logo hiển thị là biểu trưng riêng dạng SVG cục bộ theo quy định không dùng logo thương hiệu trong `AGENTS.md`.
+
+Kiểm thử toàn bộ trên bộ seed chuẩn (MySQL thật), có sao lưu và khôi phục dữ liệu đang dùng:
+
+```powershell
+python -m pip install -r requirements-dev.txt
+python -X utf8 scripts/verify_with_snapshot.py --basetemp=C:/Users/nguye/AppData/Local/Temp/ai-portal-tests
+```
+
+Đổi `--basetemp` thành thư mục tạm riêng trên máy của bạn, không dùng thư mục chứa dữ liệu cần giữ vì pytest sẽ dọn thư mục đó.
+`MYSQL_BIN_DIR` tùy chọn trỏ đến thư mục chứa `mysqldump.exe` và `mysql.exe` nếu XAMPP ở vị trí khác.
+Script chỉ chấp nhận database phát triển `honda_chatbot` trên localhost, tạo snapshot đầy đủ gồm routine/trigger/event,
+kiểm tra dump hoàn tất, chạy thật `python init_db.py --reset` và `python -m pytest -q`, khôi phục trong `finally`,
+rồi so hash nội dung từng bảng với trước kiểm thử. Tạm dừng thao tác ghi trên website trong lúc chạy.
+Snapshot chứa dữ liệu riêng tư, nằm trong `.pytest_cache/` được Git bỏ qua; không đưa vào commit/chia sẻ công khai.
+Test LLM tự skip khi thiếu `GROQ_API_KEY`; test Edge cần Edge trên Windows (test chat cũ có thể dùng Chromium thay thế).

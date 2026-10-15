@@ -324,3 +324,99 @@ python -X utf8 -m pytest -q --tb=short --basetemp=D:/Projects/thuc_tap/project_t
 Giới hạn: chưa có OCR tự động, hàng đợi nền hoặc giới hạn RAM cứng Windows; xử lý trong request bằng subprocess timeout 45 giây. Bố cục phức tạp, bảng không đường kẻ, chữ trong ảnh, Word textbox/footnote/ô gộp và cache công thức cần đối chiếu. Backend dùng chung database phải chia sẻ nơi lưu file gốc. Ảnh kiểm tra nằm tại `.pytest_cache/document-ui/documents-1440.png` và `documents-390.png`.
 
 File thêm: `document_parser.py`, `document_service.py`, `document_routes.py`, extension 09, `templates/documents.html`, `static/documents.js`, 18 mẫu và manifest, 2 script tạo mẫu/đo chất lượng, `requirements-dev.txt`, `.gitattributes`, 3 module test, báo cáo trích xuất. File sửa: `app.py`, `requirements.txt`, `.gitignore`, `static/portal.css`, README và báo cáo test này. `.gitattributes` giữ file tài liệu ở chế độ binary để clone trên Windows không đổi LF/CRLF làm hỏng PDF. Các thao tác di chuyển/xóa tài liệu trong `phuong_phap_trien_khai_de_an/` và file mới trong `ke_hoach/` xuất hiện trong lúc thực hiện là thay đổi ngoài nhiệm vụ, được giữ nguyên và không đưa vào commit.
+
+## Sửa 12 hạng mục điều hành — 15/10/2026
+
+Kết quả cuối thay thế trạng thái lỗi logo ở báo cáo cũ phía trên. Kiểm thử trên MariaDB 10.4.32,
+Python 3.13, pytest 8.4.1, Playwright 1.64.0 và Edge cài cục bộ. Dịch vụ LLM được gọi thật vì môi trường có API key.
+
+| Hạng mục | Bằng chứng kiểm tra | Kết quả |
+| --- | --- | --- |
+| Thêm khách trong chat | Tách tên/email/điện thoại ngăn dấu phẩy ở cả hai thứ tự; giữ địa chỉ nhiều dấu phẩy; chỉ lưu sau xác nhận | Đạt |
+| Mã SP và giá mua | DOM kiểm tra Mã SP đứng trước giá mua; chọn SP014 lấy giá từ SQL và hiển thị 56.500.000; vẫn sửa được giá | Đạt |
+| Hỏi gần hết hàng giữa lúc nhập khách | Câu hỏi trong ảnh chạy SQL; so toàn bộ dòng với SQL gốc; bản nháp không đổi phiên bản/nội dung | Đạt |
+| Phạm vi Nha Trang/Cam Ranh | Nha Trang gồm NT01/NT02, Cam Ranh CR01; user 3 chỉ thấy NT01; quantity 1–4 | Đạt |
+| Tổng tồn kho đầy đủ | “Tổng tồn kho” trong API chat có đủ 93 tổ hợp phiên bản–chi nhánh, tổng bằng SQL độc lập | Đạt |
+| Giao diện | Edge desktop 1440×1000 và mobile 390×844 trên dashboard, khách hàng, tồn kho, lịch, danh mục, quản trị; không tràn ngang/JS error | Đạt |
+| Logo | Biểu trưng SVG riêng, tải cục bộ ở đăng nhập và portal; giữ tỉ lệ | Đạt |
+| Thanh công cụ | Mục chưa triển khai không xuất hiện; gom quản trị truy cập; quyền backend vẫn chặn truy cập trực tiếp | Đạt |
+| Lịch sửa chữa | Đặt lịch, chặn trùng/sai ngày/sai scope, xác nhận/hoàn tất/hủy, chặn phiên bản cũ; guest bị chặn và khách chỉ thao tác lịch của mình | Đạt |
+| Mẫu xe/giá/đời | Tạo phiên bản sinh tồn kho 0 mọi chi nhánh; sửa giá, năm đời và trạng thái; chặn dữ liệu sai/ghi đè phiên bản cũ; giá đơn hàng cũ giữ nguyên | Đạt |
+| AI đọc đời xe mới | Sau đổi đời/giá, hỏi giá mẫu đời 2024; đối chiếu năm, lifecycle và giá đã lưu | Đạt |
+| Biểu đồ tổng quan | Chart.js cục bộ: đường/cột/vòng, số liệu thu gọn, tải lại; KPI/biểu đồ tiếp tục đối chiếu SQL theo scope | Đạt |
+| Tài khoản–vai trò–quyền | Một mục sidebar, các tab phân quyền riêng; giữ test tạo/sửa/gán/gỡ/thu hồi/phạm vi/audit và bảo vệ quản trị cuối | Đạt |
+| Thống kê khách hàng | Tổng và phân bố theo trạng thái tính toàn bộ tập đã lọc, không phụ thuộc size=1; chi nhánh ngoài scope trả 0 | Đạt |
+| Extension 12/13 | Chạy trực tiếp hai lần; không đổi counts nghiệp vụ | Đạt |
+
+Lệnh xác minh thực tế qua script sao lưu/khôi phục:
+
+```text
+python -X utf8 scripts/verify_with_snapshot.py --basetemp=C:/Users/nguye/AppData/Local/Temp/ai-portal-full04 --tb=short
+
+> python init_db.py --reset
+Applied 02_ai_views.sql
+Applied 03_chatbot_ro_user.sql
+Applied 04_indexes.sql
+Applied 05_ai_product_details.sql
+Applied 06_auth_dynamic_rbac.sql
+Applied 07_own_scope_views.sql
+Applied 08_air_blade_125_seed.sql
+Applied 09_document_uploads.sql
+Applied 10_customer_input.sql
+Applied 11_sales_invoices.sql
+Applied 12_catalog_bookings.sql
+Applied 13_ai_vehicle_releases.sql
+MySQL schema and seed completed.
+products: 11 (expected 11)
+product_variants: 31 (expected 31)
+inventory: 93 (expected 93)
+customers: 80 (expected 80)
+customer_profiles: 80 (expected 80)
+orders: 30 (expected 30)
+
+> python -m pytest -q
+263 passed in 43.37s
+Restoring verified snapshot...
+RESTORE VERIFIED: all table contents match the pre-reset snapshot.
+```
+
+Sau khôi phục, `python -X utf8 check_db.py` xác nhận 11 mẫu, 31 phiên bản, 93 dòng tồn,
+81 khách, 81 hồ sơ, 31 đơn, 90 tài khoản (89 hoạt động). Đây là dữ liệu hiện tại của người dùng;
+counts 80/30 phía trên chỉ là bộ seed trong cửa sổ kiểm thử. Không giữ bản reset đè lên dữ liệu đang dùng.
+
+Chạy lại trực tiếp extension:
+
+```text
+EXTENSIONS_RERUN_OK 1
+EXTENSIONS_RERUN_OK 2
+BUSINESS_COUNTS_UNCHANGED
+```
+
+Các thất bại trung gian đã xử lý: sandbox chặn mạng LLM; thư mục tạm cũ có ACL khác;
+máy thiếu Playwright; fixture Excel sinh từ nhãn UI mới không có alias cho tiêu đề cũ;
+assertion định dạng tiền/501/logo không còn đúng yêu cầu mới; cú pháp chờ trình duyệt cần hàm thay vì eval chuỗi dưới CSP.
+Không bỏ test, không nới lỏng assertion an toàn. Test cũ được cập nhật theo hành vi yêu cầu mới và bổ sung kiểm tra tương ứng.
+
+Ảnh kiểm tra: `.pytest_cache/improvements/dashboard-1440.png`, `dashboard-390.png`,
+`chat-1440.png`, `chat-390.png`; các module trình duyệt cũ vẫn sinh ảnh riêng.
+Snapshot trong `.pytest_cache/before-reset-*.sql` có dữ liệu riêng tư, được Git bỏ qua.
+
+File thêm: `operations_routes.py`, extensions 12/13, `templates/operations.html`,
+`static/operations.js`, `static/images/brand-mark.svg`, `scripts/verify_with_snapshot.py`,
+`tests/test_requested_improvements.py`, `tests/test_improvements_browser.py`.
+
+File sửa: `app.py`, `customer_chat.py`, `customer_input.py`, `query_planner.py`,
+`question_language.py`, `sql_service.py`, `answer_renderer.py`, `business_routes.py`, `security.py`;
+JS `admin`, `chat`, `customer-input`, `dashboard`, `records`; `static/portal.css`;
+templates `admin`, `base`, `dashboard`, `index`, `login`, `records`;
+tests `test_chat_presentation`, `test_customer_input_browser`, `test_portal`, `test_sales_features`;
+`README.md`, `docs/routes_permissions.md`, báo cáo này.
+
+Giới hạn vận hành: chat giữ tối đa 100 dòng theo validator, thông báo giới hạn và xem tiếp ở trang tồn kho phân trang;
+lịch chưa có phân công kỹ thuật viên, giới hạn công suất hay nhắc lịch SMS; phiên bản xe mới có giá vốn 0 cần
+quy trình tài chính bổ sung. Báo giá/cơ hội vẫn chưa triển khai và đã được ẩn khỏi menu.
+File tạm Excel `ke_hoach/~$Ke_Hoach_Thuc_Tap.xlsx` có sẵn được giữ nguyên ngoài commit.
+
+Đã khởi động lại đúng tiến trình Flask cũ trên cổng 5000 để nạp mã mới:
+`FLASK_RESTART_OK pid=5428 status=200 new_logo=True`. Truy cập lại `http://127.0.0.1:5000` và tải lại trang để nhận giao diện mới.
+
