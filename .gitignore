@@ -13,3 +13,4 @@ database.db
 .venv/
 .preview-profile/
 instance/documents/
+~$*.xlsx
