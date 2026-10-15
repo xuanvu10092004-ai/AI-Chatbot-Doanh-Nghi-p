@@ -48,6 +48,14 @@ Máy chủ hiện tại: `192.168.10.160:3306`, mạng `192.168.10.0/24` (IP có
 python scripts/configure_shared_mysql.py --network 192.168.10.0/24
 ```
 
+Trên máy chủ, mở PowerShell bằng **Run as administrator** và chạy một lần để mở cổng MySQL có giới hạn:
+
+```powershell
+.\scripts\allow_mysql_lan.ps1
+```
+
+Rule chỉ cho TCP `3306` từ `192.168.10.0/24`, chặn truy cập từ các mạng khác. Chỉ chạy khi mạng Wi-Fi/LAN là mạng tin cậy; không mở cổng này ra Internet.
+
 Script chạy lại được, cập nhật mật khẩu từ `.env`, cấp quyền ứng dụng và quyền đọc view riêng cho chatbot. Khi đổi mật khẩu, chạy lại cả `init_db.py --extensions-only` và script trên để cập nhật tài khoản local/LAN.
 
 Máy bạn cùng mạng Wi-Fi/LAN đặt `DB_HOST=192.168.10.160`, `DB_PORT=3306`, `DB_NAME=honda_chatbot`, `DB_USER=admin_nt`, điền mật khẩu nhóm vào `DB_PASSWORD` và `APP_DB_PASSWORD`. Nhận riêng `CHATBOT_RO_PASSWORD` và `DEMO_ACCOUNT_PASSWORD` từ máy chủ; tự tạo `FLASK_SECRET_KEY` cục bộ. Không chia sẻ tài khoản quản trị MySQL. Chỉ chạy `python check_db.py` rồi `python app.py` trên máy bạn; mọi lệnh khởi tạo/migration/reset chỉ chạy trên máy chủ. Khởi động lại backend sau khi sửa `.env`.
