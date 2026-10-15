@@ -31,9 +31,11 @@ from document_routes import register_documents, document_request_limits
 from customer_input_routes import register_customer_input
 from customer_chat import handle_customer_chat
 from sales_routes import register_sales
+from operations_routes import register_operations
 
 
 app = Flask(__name__)
+app.json.sort_keys = False
 secret_key = os.getenv("FLASK_SECRET_KEY")
 if secret_key:
     app.secret_key = secret_key
@@ -49,6 +51,7 @@ register_business(app)
 register_documents(app)
 register_customer_input(app)
 register_sales(app)
+register_operations(app)
 
 @app.after_request
 def security_headers(response):
@@ -117,12 +120,6 @@ def quotes():
     return _legacy_not_implemented("Quote")
 
 
-@app.route("/api/bookings", methods=["GET", "POST"])
-@require_permission('kb:public:read')
-def bookings():
-    return _legacy_not_implemented("Booking")
-
-
 @app.route("/chat", methods=["POST"],endpoint='chat_api')
 @require_permission('kb:public:read')
 def chat():
@@ -153,7 +150,7 @@ def chat():
             return jsonify(customer_reply)
         route = route_question(retrieval_question)
         if route["type"] == "SQL":
-            context = answer_sql_question(retrieval_question, user_id, session_id)
+            context = answer_sql_question(retrieval_question, user_id, session_id, include_inventory_details=True)
         else:
             context = search_documents(question, user_id, session_id)
         denied = context == "Tôi không thể hỗ trợ yêu cầu này."

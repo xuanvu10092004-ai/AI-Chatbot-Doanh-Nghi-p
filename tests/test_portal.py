@@ -32,6 +32,8 @@ def test_business_api_scope_pagination_and_sort(auth_client):
 
 def test_legacy_endpoints_and_soon(auth_client):
     auth_client.login(1)
-    for path in ('/quotes','/opportunities','/bookings','/api/quotes','/api/opportunities','/api/bookings'):assert auth_client.get(path).status_code==501
+    for path in ('/quotes','/opportunities','/api/quotes','/api/opportunities'):assert auth_client.get(path).status_code==501
+    assert auth_client.get('/bookings').status_code==200
+    assert isinstance(auth_client.get('/api/bookings').get_json()['rows'],list)
     auth_client.login(5)
     assert auth_client.get('/api/quotes').status_code==403
