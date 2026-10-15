@@ -89,6 +89,21 @@ Lệnh reset xóa và tái tạo riêng `honda_chatbot`; chỉ chạy khi chủ 
 
 Ứng dụng chỉ có SELECT/INSERT/UPDATE/DELETE trên database. `chatbot_ro` có SELECT view AI và EXECUTE các hàm scope. Root chỉ nằm trong cấu hình khởi tạo. Schema chuẩn không bị sửa.
 
+### Import dữ liệu hiện tại sang máy khác
+
+Repository private có bản dump `data/seed/honda_chatbot_current.sql` gồm dữ liệu hiện tại của database mô phỏng. Dump không chứa mật khẩu MySQL, không chứa quyền tài khoản và cố ý bỏ qua `schema_migrations` cùng các view để script khởi tạo tạo lại chúng theo cấu hình máy mới.
+
+Trên máy Vũ, bật MySQL/MariaDB rồi tạo `.env` từ `.env.example`. Đặt `DB_HOST=127.0.0.1`, `DB_PORT=3306`, `DB_NAME=honda_chatbot`, `DB_USER=admin_nt` và các mật khẩu riêng của máy đó. Sau đó chạy PowerShell từ thư mục dự án:
+
+```powershell
+Get-Content data/seed/honda_chatbot_current.sql | D:\xampp\mysql\bin\mysql.exe -u root -p
+python -m pip install -r requirements.txt
+python init_db.py --extensions-only
+python check_db.py
+```
+
+Nếu XAMPP được cài ở thư mục khác, thay đường dẫn đến `mysql.exe`. Lệnh import yêu cầu mật khẩu tài khoản quản trị MySQL của máy Vũ. Không dùng `--reset` sau khi import vì sẽ xóa dữ liệu đã chuyển. Bản dump này là dữ liệu mô phỏng và chỉ nên dùng trong repository private.
+
 ## Tài khoản demo
 
 Mật khẩu lấy từ `DEMO_ACCOUNT_PASSWORD` trong `.env`, không viết ở đây.
