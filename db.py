@@ -5,6 +5,7 @@ import time
 from threading import Lock
 from pathlib import Path
 from contextlib import contextmanager
+from contextvars import ContextVar
 from typing import Any, Iterator
 
 import mysql.connector
@@ -18,6 +19,7 @@ load_dotenv(Path(__file__).resolve().parent / '.env')
 _APP_POOL: MySQLConnectionPool | None = None
 _TEXT_SQL_POOL: MySQLConnectionPool | None = None
 _POOL_LOCK = Lock()
+_TRANSACTION = ContextVar('app_transaction',default=None)
 
 
 def _required(name: str) -> str:
@@ -100,18 +102,38 @@ def get_connection(role: str = "app") -> MySQLConnection:
 
 @contextmanager
 def cursor(role: str = "app", dictionary: bool = True) -> Iterator[Any]:
-    connection = get_connection(role)
+    shared = _TRANSACTION.get() if role=='app' else None
+    connection = shared or get_connection(role)
     db_cursor = None
     try:
         db_cursor = connection.cursor(dictionary=dictionary)
         yield db_cursor
+        if shared is None:connection.commit()
+    except Exception:
+        if shared is None:connection.rollback()
+        raise
+    finally:
+        if db_cursor is not None:
+            db_cursor.close()
+        if shared is None:connection.close()
+
+
+@contextmanager
+def transaction():
+    """Một transaction cho công cụ và trạng thái xác nhận; cursor lồng không tự commit."""
+    if _TRANSACTION.get() is not None:
+        yield
+        return
+    connection=get_connection('app')
+    token=_TRANSACTION.set(connection)
+    try:
+        yield
         connection.commit()
     except Exception:
         connection.rollback()
         raise
     finally:
-        if db_cursor is not None:
-            db_cursor.close()
+        _TRANSACTION.reset(token)
         connection.close()
 
 
