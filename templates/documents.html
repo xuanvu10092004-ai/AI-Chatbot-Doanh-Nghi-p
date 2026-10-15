@@ -28,6 +28,10 @@
   <h2 id="previewTitle">Xem trước nội dung</h2>
   <p id="documentMetadata"></p><a id="downloadDocument">Tải file gốc để đối chiếu</a>
   <p><a id="customerImportLink" class="secondary" hidden>Kiểm tra và đồng bộ khách hàng</a></p>
+  <section id="customerImportPanel" hidden><h3>Đồng bộ danh sách khách hàng</h3><p>PDF, DOCX hoặc XLSX được chuyển thành bản nháp. Chỉ hồ sơ hợp lệ và đã xác nhận mới xuất hiện trong trang Khách hàng.</p>
+  <button id="previewCustomerImport" type="button" class="secondary">Đọc và xem trước danh sách khách</button>
+  <div id="customerImportPreview" class="table-scroll"></div><label><input id="confirmCustomerImport" type="checkbox">Tôi đã đối chiếu từng dòng khách với file gốc.</label>
+  <button id="commitCustomerImport" type="button" disabled>Xác nhận cập nhật danh sách khách hàng</button><p id="customerImportFeedback" role="status"></p></section>
   <div id="extractionWarnings" class="document-warnings" role="status"></div>
   <div id="extractionBlocks"></div>
   <form id="documentReview">

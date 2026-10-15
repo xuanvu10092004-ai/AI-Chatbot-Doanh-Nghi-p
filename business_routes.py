@@ -14,6 +14,8 @@ def records(kind,low_stock=False):
         searchable=['u.full_name','u.email','u.phone','cp.customer_code']
         sort_map={'name':'u.full_name','date':'cp.registered_at','status':'cp.status'}
         if request.args.get('status'):where+=' AND cp.status=%s';params+=(request.args['status'],)
+        if request.args.get('import_batch'):
+            where+=' AND EXISTS(SELECT 1 FROM customer_import_rows cir WHERE cir.customer_id=u.id AND cir.batch_id=%s)';params+=(int(request.args['import_batch']),)
     else:
         where,params=scope_filter('inventory:read','i.branch_id')
         source='inventory i JOIN branches b ON b.id=i.branch_id JOIN product_variants pv ON pv.id=i.variant_id JOIN products p ON p.id=pv.product_id'

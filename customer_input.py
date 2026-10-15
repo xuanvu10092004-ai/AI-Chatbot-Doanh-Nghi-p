@@ -24,7 +24,7 @@ FIELDS = {
  'payment_preference':'Hình thức thanh toán','registered_at':'Ngày đăng ký','status':'Trạng thái',
  'purchased_sku':'Mã SP','purchase_amount':'Giá trị mua (VNĐ)'}
 REQUIRED = ('full_name','phone','email','branch_code','registered_at','status')
-MAX_ROWS = 200
+MAX_ROWS = 1000
 WORKBOOK_HEADERS=['Mã KH','Họ và tên','Giới tính','Ngày sinh','Tuổi','Số điện thoại','Email','Tỉnh/Thành phố','Quận/Huyện','Địa chỉ','Nghề nghiệp','Nguồn khách','Chi nhánh phụ trách','Mẫu xe quan tâm','Hình thức thanh toán','Ngày đăng ký','Trạng thái','Mã SP đã mua','Giá trị mua (VNĐ)']
 
 
@@ -103,7 +103,7 @@ def read_customer_workbook(path):
     try:
         if 'Khach_hang' not in book.sheetnames:raise CustomerInputError('File cần sheet Khach_hang theo Excel mẫu.')
         sheet=book['Khach_hang']
-        if sheet.max_row>MAX_ROWS+1:raise CustomerInputError('Mỗi lần đồng bộ tối đa 200 khách hàng. Hãy chia file nhỏ hơn.')
+        if sheet.max_row>MAX_ROWS+1:raise CustomerInputError(f'Mỗi lần đồng bộ tối đa {MAX_ROWS} khách hàng. Hãy chia file nhỏ hơn.')
         if sheet.max_column>30:raise CustomerInputError('Sheet khách hàng có quá nhiều cột.')
         iterator=sheet.iter_rows(values_only=True);header=list(next(iterator,()))
         if len(header)!=len(set(str(v) for v in header)):raise CustomerInputError('Tiêu đề cột bị trùng; hãy sửa trước khi tải lên.')
@@ -142,10 +142,17 @@ def _existing(cur,row):
 
 
 def preview_rows(cur,rows):
-    if not isinstance(rows,list) or not 1<=len(rows)<=MAX_ROWS:raise CustomerInputError('Bản nháp phải có từ 1 đến 200 khách hàng.')
+    if not isinstance(rows,list) or not 1<=len(rows)<=MAX_ROWS:raise CustomerInputError(f'Bản nháp phải có từ 1 đến {MAX_ROWS} khách hàng.')
     result=[];seen_emails=set();seen_codes=set()
     for number,raw in enumerate(rows,1):
         row,errors=normalize_row(raw)
+        purchase_missing='Khách Đã mua cần mã SP và giá trị mua để ghi nhận đơn hàng.'
+        if purchase_missing in errors and not row['purchased_sku'] and not row['purchase_amount']:
+            try:
+                existing_profile=_existing(cur,row)
+                if existing_profile and existing_profile['status']=='Đã mua':
+                    errors.remove(purchase_missing);row['purchase_amount']=None
+            except ValueError as error:errors.append(str(error))
         item={'row':number,'data':row,'errors':errors,'action':'create','changes':{},'before':None,'order_action':None}
         if row['birth_date'] and not errors:
             birthday=date.fromisoformat(row['birth_date']);now=today()
@@ -221,13 +228,20 @@ def get_batch(batch_id):
     with cursor() as cur:
         batch=_batch(cur,batch_id)
         rows=preview_rows(cur,json.loads(batch['rows_json'])) if batch['status']=='draft' else json.loads(batch['preview_json'])
-    return {'id':batch['id'],'version':batch['version'],'status':batch['status'],'rows':rows,'valid':all(not r['errors'] for r in rows),'fields':FIELDS,'result':json.loads(batch['result_json']) if batch['result_json'] else None}
+        cur.execute('SELECT warnings_json FROM customer_import_sources WHERE batch_id=%s',(batch_id,));source=cur.fetchone()
+    return {'id':batch['id'],'version':batch['version'],'status':batch['status'],'rows':rows,'valid':all(not r['errors'] for r in rows),'fields':FIELDS,'result':json.loads(batch['result_json']) if batch['result_json'] else None,'warnings':json.loads(source['warnings_json']) if source else [],'document_id':batch['document_id']}
 
 
 def revise(batch_id,rows,version):
     with cursor() as cur:
         batch=_batch(cur,batch_id,True)
         if batch['status']!='draft' or version!=batch['version']:raise CustomerInputError('Bản nháp đã thay đổi. Hãy tải lại.',409)
+        if batch['document_id']:
+            from document_service import _load
+            document=_load(cur,batch['document_id'],True)
+            cur.execute('SELECT document_version FROM customer_import_sources WHERE batch_id=%s',(batch_id,));source=cur.fetchone()
+            if source and source['document_version']!=document['version']:
+                raise CustomerInputError('File đã thay đổi. Hãy tạo lại bản xem trước từ file mới.',409)
         preview=preview_rows(cur,rows)
         cur.execute('UPDATE customer_input_batches SET rows_json=%s,preview_json=%s,version=version+1 WHERE id=%s',
                     (json.dumps([r['data'] for r in preview],ensure_ascii=False),json.dumps(preview,default=str,ensure_ascii=False),batch_id))
@@ -242,6 +256,12 @@ def commit(batch_id,version,confirmed):
         batch=_batch(cur,batch_id,True)
         if batch['status']=='committed':return json.loads(batch['result_json'])
         if batch['status']!='draft' or version!=batch['version']:raise CustomerInputError('Bản nháp đã thay đổi. Hãy tải lại.',409)
+        if batch['document_id']:
+            from document_service import _load
+            document=_load(cur,batch['document_id'],True)
+            cur.execute('SELECT document_version FROM customer_import_sources WHERE batch_id=%s',(batch_id,));source=cur.fetchone()
+            if source and source['document_version']!=document['version']:
+                raise CustomerInputError('File đã thay đổi. Hãy tạo lại bản xem trước từ file mới.',409)
         preview=preview_rows(cur,json.loads(batch['rows_json']))
         prior=json.loads(batch['preview_json'])
         if any(item['errors'] for item in preview):raise CustomerInputError('Có dòng không hợp lệ; chưa lưu khách hàng hoặc đơn hàng nào.')
@@ -250,13 +270,13 @@ def commit(batch_id,version,confirmed):
         cur.execute("SELECT customer_code FROM customer_profiles WHERE customer_code REGEXP '^KH[0-9]+$'")
         used=[int(r['customer_code'][2:]) for r in cur.fetchall()]+[int(r['data']['customer_code'][2:]) for r in preview if r['data']['customer_code']]
         next_code=max(used,default=0)+1
-        outcome={'created':0,'updated':0,'orders_created':0,'customer_ids':[],'order_ids':[]}
+        outcome={'created':0,'updated':0,'orders_created':0,'customer_ids':[],'order_ids':[],'batch_id':batch_id,'document_id':batch['document_id']}
         for item in preview:
             row=item['data'];old=item['before'];user_id=old['id'] if old else None
             if not user_id:
                 cur.execute('''INSERT INTO users(email,full_name,phone,user_type,home_branch_id,password_hash,is_active,must_change_password)
                                VALUES(%s,%s,%s,'customer',%s,%s,FALSE,TRUE)''',
-                            (row['email'],row['full_name'],row['phone'],item['branch_id'],generate_password_hash(secrets.token_urlsafe(40))))
+                            (row['email'],row['full_name'],row['phone'],item['branch_id'],'!disabled:'+secrets.token_hex(32)))
                 user_id=cur.lastrowid
                 code=row['customer_code'] or f'KH{next_code:04d}'
                 if not row['customer_code']:next_code+=1
@@ -276,6 +296,8 @@ def commit(batch_id,version,confirmed):
                 cur.execute('INSERT INTO order_items(order_id,variant_id,quantity,unit_price) VALUES(%s,%s,1,%s)',(order_id,item['variant_id'],row['purchase_amount']))
                 outcome['orders_created']+=1;outcome['order_ids'].append(order_id)
             outcome['customer_ids'].append(user_id)
+            if batch['document_id']:
+                cur.execute('INSERT INTO customer_import_rows(batch_id,customer_id,row_number,action) VALUES(%s,%s,%s,%s)',(batch_id,user_id,item['row'],item['action']))
             audit(cur,'customer_input_'+item['action'],'user',user_id,before=old,after={'full_name':row['full_name'],'branch_id':item['branch_id'],'batch_id':batch_id},actor=g.user['id'])
         cur.execute("UPDATE customer_input_batches SET status='committed',result_json=%s,version=version+1 WHERE id=%s",(json.dumps(outcome),batch_id))
     return outcome

@@ -3,7 +3,7 @@
   const el = id => document.getElementById(id);
   const feedback = el('documentFeedback');
   const statuses = {uploaded:'Đã tải lên',processing:'Đang trích xuất',ready:'Có nội dung',needs_review:'Cần kiểm tra / bổ sung',failed:'Trích xuất lỗi',published:'Đã vào kho tri thức'};
-  let selected=null, page=1, total=0, busy=false;
+  let selected=null, page=1, total=0, busy=false, importBatch=null, canImport=false;
   const tell = (message,error=false) => {feedback.textContent=message;feedback.className=error?'error':'';el('previewFeedback').textContent=el('documentPreview').hidden?'':message;el('previewFeedback').className=error?'error':'';};
   async function api(url,options={}) {
     const response=await fetch(url,{...options,headers:{'X-CSRF-Token':document.querySelector('meta[name="csrf-token"]').content,...options.headers}});
@@ -25,7 +25,7 @@
     el('documentPagination').textContent='Trang '+page+' · '+total+' tài liệu';el('documentPrevious').disabled=page===1;el('documentNext').disabled=page*25>=total;
   }
   function render(data) {
-    selected=data;el('documentPreview').hidden=false;el('previewTitle').textContent='Xem trước: '+data.title;
+    selected=data;importBatch=null;el('customerImportPanel').hidden=data.category_code!=='customers'||!canImport;el('customerImportPreview').replaceChildren();el('commitCustomerImport').disabled=true;el('confirmCustomerImport').checked=false;el('customerImportFeedback').textContent=data.customer_synced?'File này đã được đồng bộ; mở danh sách khách hàng để xem.':'';el('documentPreview').hidden=false;el('previewTitle').textContent='Xem trước: '+data.title;
     el('documentMetadata').textContent=statuses[data.status]+' · '+(data.size_bytes/1024).toFixed(1)+' KB · '+data.file_format.toUpperCase()+' · '+(data.branch_code||'Toàn hệ thống');
     el('downloadDocument').href='/api/documents/'+data.id+'/file';
     el('customerImportLink').hidden=data.category_code!=='customers';el('customerImportLink').href='/customer-input?document_id='+data.id;
@@ -58,7 +58,7 @@
     if(!/\.(pdf|docx|xlsx)$/i.test(file.name))throw new Error('Chỉ nhận PDF, DOCX hoặc XLSX.');
     if(file.size===0||file.size>10*1024*1024)throw new Error('File không được rỗng hoặc vượt quá 10 MB.');
     el('uploadDocumentButton').disabled=true;tell('Đang tải lên và trích xuất; tài liệu chưa được đưa vào kho tri thức.');
-    try{const data=await api('/api/documents',{method:'POST',body:new FormData(event.target)});render(data);page=1;await refresh();tell(data.status==='failed'?data.error_message:'Đã trích xuất. Hãy đối chiếu nội dung và các cảnh báo.',data.status==='failed');}
+    try{const data=await api('/api/documents',{method:'POST',body:new FormData(event.target)});render(data);page=1;await refresh();tell(data.status==='failed'?data.error_message:'Đã trích xuất. Hãy đối chiếu nội dung và các cảnh báo.',data.status==='failed');if(data.category_code==='customers'&&canImport&&data.status!=='failed')await previewCustomers();}
     finally{el('uploadDocumentButton').disabled=false;}
   });});
   el('documentReview').addEventListener('submit',event=>{event.preventDefault();action(async()=>{
@@ -74,5 +74,17 @@
   el('documentCategory').addEventListener('change',()=>{el('customerTemplateLink').hidden=el('documentCategory').selectedOptions[0]?.dataset.categoryCode!=='customers';});
   el('documentPrevious').addEventListener('click',()=>{page--;refresh().catch(error=>tell(error.message,true));});
   el('documentNext').addEventListener('click',()=>{page++;refresh().catch(error=>tell(error.message,true));});
-  api('/api/documents/lookups').then(data=>{for(const category of data.categories){const option=node('option',category.name);option.value=category.id;option.dataset.categoryCode=category.category_code;el('documentCategory').append(option);}if(data.all_branches){const option=node('option','Toàn hệ thống');option.value='';el('documentBranch').append(option);}for(const branch of data.branches){const option=node('option',branch.code+' · '+branch.name);option.value=branch.id;el('documentBranch').append(option);}return refresh();}).catch(error=>tell(error.message,true));
+  api('/api/documents/lookups').then(data=>{canImport=data.can_import_customers;for(const category of data.categories){const option=node('option',category.name);option.value=category.id;option.dataset.categoryCode=category.category_code;el('documentCategory').append(option);}if(data.all_branches){const option=node('option','Toàn hệ thống');option.value='';el('documentBranch').append(option);}for(const branch of data.branches){const option=node('option',branch.code+' · '+branch.name);option.value=branch.id;el('documentBranch').append(option);}return refresh();}).catch(error=>tell(error.message,true));
+
+  async function previewCustomers(){
+    importBatch=await api('/api/customer-input',{method:'POST',...json({document_id:selected.id})});
+    const box=el('customerImportPreview');box.replaceChildren();
+    for(const warning of importBatch.warnings||[])box.append(node('p',warning));
+    const table=node('table'),head=node('tr');for(const label of ['Dòng','Họ tên','SĐT','Email','Chi nhánh','Thao tác','Lỗi cần sửa'])head.append(node('th',label));table.append(head);
+    for(const item of importBatch.rows){const tr=node('tr');for(const value of [item.row,item.data.full_name,item.data.phone,item.data.email,item.data.branch_code,item.action==='update'?'Cập nhật':'Thêm mới',item.errors.join(' ')])tr.append(node('td',value));table.append(tr);}box.append(table);
+    el('customerImportFeedback').textContent=importBatch.status==='committed'?'Danh sách này đã được đồng bộ.':importBatch.valid?'Đã xem trước '+importBatch.rows.length+' dòng. Chưa cập nhật CSDL; hãy xác nhận bên dưới.':'Có dòng thiếu/sai thông tin. Mở “Kiểm tra và đồng bộ khách hàng” để chỉnh sửa trước khi lưu.';
+    el('commitCustomerImport').disabled=!importBatch.valid||importBatch.status!=='draft';el('confirmCustomerImport').checked=false;
+  }
+  el('previewCustomerImport').addEventListener('click',()=>action(previewCustomers));
+  el('commitCustomerImport').addEventListener('click',()=>action(async()=>{if(!el('confirmCustomerImport').checked)throw Error('Vui lòng đối chiếu và xác nhận danh sách.');el('commitCustomerImport').disabled=true;try{const result=await api('/api/customer-input/'+importBatch.id+'/commit',{method:'POST',...json({version:importBatch.version,confirmed:true})});el('customerImportFeedback').replaceChildren(node('p','Đã thêm '+result.created+' khách, cập nhật '+result.updated+' hồ sơ.'));const link=node('a','Xem danh sách khách hàng vừa đồng bộ');link.href='/customers?import_batch='+result.batch_id;el('customerImportFeedback').append(link);importBatch.status='committed';await refresh();}catch(error){el('commitCustomerImport').disabled=false;throw error;}}));
 })();

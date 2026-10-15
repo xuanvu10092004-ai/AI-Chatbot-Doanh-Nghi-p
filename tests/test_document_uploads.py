@@ -21,6 +21,7 @@ def document_storage(tmp_path):
         cur.execute('SELECT id,published_doc_id FROM document_uploads WHERE title LIKE %s', ('Kiểm thử parser %',))
         rows = cur.fetchall()
         for row in rows:
+            cur.execute('DELETE FROM customer_input_batches WHERE document_id=%s',(row['id'],))
             cur.execute("DELETE FROM rbac_audit_log WHERE target_type='document' AND target_id=%s", (row['id'],))
             cur.execute('DELETE FROM document_uploads WHERE id=%s', (row['id'],))
             if row['published_doc_id']:

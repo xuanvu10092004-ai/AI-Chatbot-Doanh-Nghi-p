@@ -244,6 +244,9 @@ def main() -> int:
         if initialize:
             execute_script(connection, SEED_FILE)
         applied=apply_extensions(connection, str(config['chatbot_ro_password']))
+        from scripts.backfill_customer_imports import backfill
+        recovered=backfill(connection)
+        if recovered:print(f'Recovered {recovered} customer import history rows.')
         if initialize or '06_auth_dynamic_rbac.sql' in applied:
             from scripts.seed_demo_passwords import seed
             seed(connection)

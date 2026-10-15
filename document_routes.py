@@ -9,12 +9,12 @@ from security import require_permission, permissions
 
 
 def document_request_limits():
-    if request.endpoint == 'document_upload':
+    if request.endpoint in {'document_upload','chat_customer_upload'}:
         request.max_content_length = MAX_BYTES + 1024 * 1024
     elif request.endpoint == 'document_review':
         request.max_content_length = 80 * 1024
     elif request.endpoint in {'customer_input_stage','customer_input_revise'}:
-        request.max_content_length = 1024 * 1024
+        request.max_content_length = 4 * 1024 * 1024
 
 
 def register_documents(app):
@@ -40,7 +40,7 @@ def register_documents(app):
             cur.execute('SELECT id,code,name FROM branches ORDER BY id')
             grant = permissions()['document:manage']
             branches = [row for row in cur.fetchall() if grant['scope'] != 'branch' or row['id'] == grant['branch']]
-        return jsonify(categories=categories, branches=branches, all_branches=grant['scope'] == 'all', max_bytes=MAX_BYTES)
+        return jsonify(categories=categories, branches=branches, all_branches=grant['scope'] == 'all', max_bytes=MAX_BYTES,can_import_customers='customer:write' in permissions())
 
     @app.get('/api/documents')
     @require_permission('document:manage')

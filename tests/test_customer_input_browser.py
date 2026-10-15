@@ -55,12 +55,12 @@ def test_customer_form_and_chat_creation(customer_server,width,height,tmp_path):
             reverse={label:key for key,label in FIELDS.items()};reverse['Mã SP đã mua']='purchased_sku';sheet.append([values.get(reverse.get(label)) for label in WORKBOOK_HEADERS])
             file=tmp_path/'customers.xlsx';book.save(file)
             page.locator('#documentTitle').fill('Kiểm thử parser đồng bộ khách giao diện');page.locator('#documentFile').set_input_files(file)
-            with page.expect_response(lambda r:r.url.endswith('/api/documents') and r.request.method=='POST') as uploaded:page.get_by_role('button',name='Tải lên và trích xuất').click()
+            with page.expect_response(lambda r:r.url.endswith('/api/customer-input') and r.request.method=='POST') as imported:
+                with page.expect_response(lambda r:r.url.endswith('/api/documents') and r.request.method=='POST') as uploaded:page.get_by_role('button',name='Tải lên và trích xuất').click()
             assert uploaded.value.status==201
-            with page.expect_response(lambda r:r.url.endswith('/api/customer-input') and r.request.method=='POST') as imported:page.locator('#customerImportLink').click()
             staged=imported.value.json();BATCHES.add(staged['id']);assert staged['valid']
-            page.locator('#confirmCustomerBatch').check()
-            with page.expect_response(lambda r:r.url.endswith('/commit')) as synced:page.get_by_role('button',name='Xác nhận đồng bộ vào CSDL').click()
+            page.locator('#confirmCustomerImport').check()
+            with page.expect_response(lambda r:r.url.endswith('/commit')) as synced:page.get_by_role('button',name='Xác nhận cập nhật danh sách khách hàng',exact=True).click()
             assert synced.value.json()['created']==1 and synced.value.json()['orders_created']==1
             page.goto(customer_server+'/customer-input?quick=1')
             page.locator('#customerField_full_name').fill('Khách mua nhanh')

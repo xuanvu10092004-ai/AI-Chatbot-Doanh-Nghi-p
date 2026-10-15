@@ -3,8 +3,9 @@ from io import BytesIO
 from mysql.connector import IntegrityError
 from db import cursor
 from security import require_permission, permissions
-from customer_input import (CustomerInputError,FIELDS,REQUIRED,WORKBOOK_HEADERS,stage,get_batch,revise,commit,read_customer_workbook)
+from customer_input import (CustomerInputError,FIELDS,REQUIRED,WORKBOOK_HEADERS,MAX_ROWS,stage,get_batch,revise,commit,read_customer_workbook)
 from document_service import _load,stored_path
+from customer_file_import import stage_document
 
 
 def register_customer_input(app):
@@ -20,10 +21,10 @@ def register_customer_input(app):
     def customer_input_template():
         from openpyxl import Workbook
         book=Workbook();sheet=book.active;sheet.title='Khach_hang';sheet.append(WORKBOOK_HEADERS)
-        sheet.freeze_panes='A2';sheet.auto_filter.ref='A1:S201'
-        for number in range(2,202):sheet.cell(number,6).number_format='@'
+        sheet.freeze_panes='A2';sheet.auto_filter.ref=f'A1:S{MAX_ROWS+1}'
+        for number in range(2,MAX_ROWS+2):sheet.cell(number,6).number_format='@'
         guide=book.create_sheet('Huong_dan')
-        for text in ['Dữ liệu mô phỏng. Mỗi lần nhập tối đa 200 khách hàng.',
+        for text in [f'Dữ liệu mô phỏng. Mỗi lần nhập tối đa {MAX_ROWS} khách hàng.',
                      'Bắt buộc: Họ và tên, Số điện thoại, Email, Chi nhánh phụ trách, Ngày đăng ký, Trạng thái.',
                      'Giữ số 0 đầu điện thoại. Ngày dạng dd/MM/yyyy. Tuổi tự tính, không nhập vào CSDL.',
                      'Đã mua: điền Mã SP đã mua (SP001…) và Giá trị mua (số nguyên VNĐ).',
@@ -48,12 +49,7 @@ def register_customer_input(app):
         data=request.get_json(silent=True)
         if not isinstance(data,dict):raise CustomerInputError('Dữ liệu không hợp lệ.')
         if 'document_id' in data:
-            if 'document:manage' not in permissions():raise CustomerInputError('Bạn chưa có quyền quản lý file.',403)
-            with cursor() as cur:
-                document=_load(cur,data['document_id'])
-                cur.execute('SELECT code FROM kb_categories WHERE id=%s',(document['category_id'],));category=cur.fetchone()
-            if category['code']!='customers' or document['file_format']!='xlsx':raise CustomerInputError('Chọn danh mục khách hàng và file XLSX theo Excel mẫu.')
-            return jsonify(stage(read_customer_workbook(stored_path(document)),document_id=document['id'])),201
+            return jsonify(stage_document(data['document_id'])),201
         return jsonify(stage(data.get('rows'))),201
 
     @app.get('/api/customer-input/<int:batch_id>')
