@@ -275,3 +275,16 @@ kiểm tra dump hoàn tất, chạy thật `python init_db.py --reset` và `pyth
 rồi so hash nội dung từng bảng với trước kiểm thử. Tạm dừng thao tác ghi trên website trong lúc chạy.
 Snapshot chứa dữ liệu riêng tư, nằm trong `.pytest_cache/` được Git bỏ qua; không đưa vào commit/chia sẻ công khai.
 Test LLM tự skip khi thiếu `GROQ_API_KEY`; test Edge cần Edge trên Windows (test chat cũ có thể dùng Chromium thay thế).
+
+### Nhập hàng, công cụ chat và nhập khách từ tài liệu
+
+Chạy `python init_db.py --extensions-only` để áp dụng extension `14_chat_tools_stock_imports.sql`, rồi khởi động lại ứng dụng. Không cần reset dữ liệu. Không thêm biến môi trường bắt buộc; `GROQ_API_KEY` hiện có chỉ hỗ trợ phân tích tham số câu lệnh, không quyết định quyền hay chạy SQL ghi.
+
+- **Nhập hàng:** mở `/stock-receipts` hoặc gõ `Nhập hàng: Chi nhánh: NT01; Nhà cung cấp: Kho mẫu; Chứng từ: NH-001; SP014: 3; SP015: 2`. Xem trước rồi xác nhận. Tồn kho được cộng theo từng phiên bản/chi nhánh trong một giao dịch; mã chứng từ trùng bị chặn. Admin/quản lý chi nhánh được cấp `inventory:receive`; nhân viên khác cần được cấp quyền đúng phạm vi. Phiếu ghi nhận số lượng, chưa hạch toán công nợ/giá vốn nhà cung cấp.
+- **Chat theo danh tính:** chỉ lấy người dùng từ phiên đăng nhập backend. Nút Công cụ lấy danh sách được phép từ `/api/chat/tools`. Nhân viên có thể gọi các công cụ đã triển khai: khách hàng, tồn kho/nhập hàng, danh mục xe, lịch hẹn, tổng quan, tài liệu, đơn/chứng từ và quản trị truy cập theo quyền. Lệnh ghi tạo bản xem trước; bấm xác nhận hoặc gõ `Xác nhận lệnh #<id>`. Kiểm tra lại quyền/phạm vi khi thực thi; xác nhận lặp không ghi trùng. Không chạy mã hay SQL tùy ý. Mật khẩu nhập ở ô bí mật riêng, không đưa vào hội thoại hay prompt.
+- **Khách:** chỉ tra cứu thông tin/giá công khai và đặt lịch bảo dưỡng/tư vấn; không mở công cụ nội bộ, kể cả bị gán nhầm vai trò rộng. Ví dụ `Đặt lịch tư vấn: Chi nhánh: NT01; Họ tên: Nguyễn Văn An; Số điện thoại: 0901234567; Ngày giờ: 2026-10-20T09:00`. Chọn ngày giờ tương lai hợp lệ; khách đăng nhập xem/hủy lịch của mình. Khách vãng lai đặt lịch bằng thông tin liên hệ, không được xem danh sách khách khác.
+- **Nhập khách PDF/DOCX/XLSX:** chọn danh mục Khách hàng ở trang Tài liệu hoặc đính kèm ngay trong chat. Sau tải lên, hệ thống tạo bản xem trước, hiển thị dòng lỗi/cảnh báo, yêu cầu xác nhận rồi mới ghi vào CSDL. Hỗ trợ tối đa **1.000 khách/file**, giữ số điện thoại dạng chuỗi. PDF cần bảng/văn bản trích xuất được, chưa OCR ảnh quét. Trường không có trong file không xóa thông tin khách đang có. Tài khoản khách mới chưa kích hoạt và không có mật khẩu dùng chung; quản trị viên phải đặt lại mật khẩu trước khi đăng nhập.
+- **File đã tải trước đây:** gõ `Đồng bộ khách hàng từ file #245` (thay bằng ID tài liệu thật), xem và xác nhận bản nháp. File đã nhập trả kết quả cũ, không nhân đôi; tài liệu đổi phiên bản phải xem trước lại. Trang Khách hàng có lịch sử từng lần nhập và liên kết lọc đúng danh sách khách đã ghi từ file. Tải tài liệu vào kho kiến thức không đồng nghĩa đã nhập khách nếu chưa xác nhận.
+
+Kiểm thử riêng: `python -m pytest -q tests/test_chat_tools_imports.py tests/test_tools_browser.py`.
+Bao gồm nhập 580 khách qua API/file, chống ghi trùng, giao dịch nhiều mã SP, giới hạn 1.000 dòng, phân quyền/phạm vi, lịch khách, thao tác chat và trình duyệt desktop/mobile.

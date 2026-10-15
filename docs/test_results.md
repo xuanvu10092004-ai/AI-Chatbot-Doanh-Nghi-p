@@ -456,3 +456,38 @@ File sửa: `static/portal.css`, `static/dashboard.js`, `static/images/logo.jpg`
 `tests/test_improvements_browser.py`, `tests/test_requested_improvements.py`, `README.md`, báo cáo này.
 Ảnh desktop/mobile được cập nhật trong `.pytest_cache/improvements/dashboard-1440.png` và `dashboard-390.png`.
 
+## Nhập hàng, công cụ chatbot và đồng bộ khách từ file — 15/10/2026
+
+| Kiểm tra | Kết quả thật |
+| --- | --- |
+| Reset MySQL, extension 02–14 | Thành công; seed 11 mẫu, 31 phiên bản, 93 dòng tồn kho, 80 khách, 30 đơn |
+| Toàn bộ pytest trên MySQL/LLM/Edge | **290 passed in 55.46s** |
+| Khôi phục dữ liệu sau reset/test | Hash nội dung mọi bảng khớp snapshot trước chạy |
+| Nhập hàng qua chat/API | Cộng đúng nhiều mã SP, giới hạn chi nhánh, chặn trùng chứng từ/xác nhận; lỗi một mặt hàng rollback cả phiếu |
+| Phân luồng người dùng | Phiên backend; khách/guest không dùng nghiệp vụ nội bộ; khách gán nhầm superadmin vẫn bị chặn; thu hồi quyền trước xác nhận bị từ chối |
+| Công cụ chat | Danh mục xe, lịch, tài khoản/mật khẩu, vai trò/quyền, tài liệu, đơn/chứng từ qua registry cố định; bản nháp và xác nhận idempotent |
+| Khách từ PDF/DOCX/XLSX | Ghi khách thật sau xác nhận; lịch sử và lọc danh sách theo lần nhập; thiếu cột không xóa trường hiện có; tài liệu đổi phiên bản bị chặn |
+| Excel 580 dòng (test riêng) | Ghi 580 khách, không tạo đơn ngoài ý muốn, xác nhận lại không nhân đôi; tài khoản mới không có mật khẩu dùng chung |
+| Giới hạn nhập | Cho 1.000 dòng, chặn 1.001 dòng; sửa giới hạn cũ 200 khiến file thực tế bị chặn |
+| Edge desktop 1440/mobile 390 | Nhập hàng/chat, đính kèm DOCX → xác nhận → danh sách và lịch sử; không lỗi JavaScript/không tràn ngang |
+| File thực tế #245 | Xem trước HTTP 201, bản nháp #427: 580 dòng hợp lệ, 81 cập nhật + 499 tạo mới, không lỗi. **Chưa xác nhận ghi khách/đơn** để người dùng kiểm tra nội dung trước. |
+
+```text
+python -X utf8 scripts/verify_with_snapshot.py --basetemp=C:/Users/nguye/AppData/Local/Temp/ai-portal-tools-final04 --tb=short --show-capture=no
+> python init_db.py --reset
+Applied 14_chat_tools_stock_imports.sql
+MySQL schema and seed completed.
+> python -m pytest -q
+290 passed in 55.46s
+Restoring verified snapshot...
+RESTORE VERIFIED: all table contents match the pre-reset snapshot.
+```
+
+Extension 14 được áp dụng lặp hai lần trên CSDL đang dùng không lỗi; backfill lịch sử cũ chạy lặp không tạo bản ghi trùng. Giữ dữ liệu kinh doanh hiện có: 81 khách và 31 đơn; việc chuẩn bị bản nháp #427 chỉ thêm metadata xem trước, không ghi khách/đơn. Không tự nhập cả hai file #227 và #245 vì chúng là cùng nguồn 580 khách.
+
+File thêm: `stock_service.py`, `stock_routes.py`, `appointment_service.py`, `chat_tools.py`, `chat_action_routes.py`, `customer_file_import.py`, `data/schema/extensions/14_chat_tools_stock_imports.sql`, `scripts/backfill_customer_imports.py`, `templates/stock_receipts.html`, `static/stock-receipts.js`, `static/appointments.js`, `tests/test_chat_tools_imports.py`, `tests/test_tools_browser.py`.
+
+File sửa: `db.py`, `security.py`, `access_control.py`, `app.py`, `operations_routes.py`, `customer_chat.py`, `customer_input.py`, `customer_input_routes.py`, `document_routes.py`, `business_routes.py`, `init_db.py`; các giao diện `templates/{index,documents,operations,records}.html`, `static/{chat,customer-input,documents,records}.js`, `static/portal.css`; test `test_admin.py`, `test_customer_input_browser.py`, `test_document_uploads.py`, `test_requested_improvements.py`; `README.md`, báo cáo này.
+
+Giới hạn: PDF ảnh quét chưa OCR; nghiệp vụ chưa triển khai (báo giá/cơ hội) không trở thành công cụ chat; phiếu nhập chưa hạch toán giá vốn/công nợ. Chat không chạy mã/SQL ghi tùy ý. Xác nhận file thực tế còn chờ người dùng xem trước vì có 81 hồ sơ được cập nhật. Giữ nguyên file tạm Excel của người dùng ngoài commit, không `git push`.
+
