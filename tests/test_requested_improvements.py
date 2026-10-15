@@ -165,7 +165,7 @@ def test_access_management_is_single_navigation_tool(auth_client):
     assert sidebar.count('Quản trị truy cập')==1
     assert '/admin/roles' not in sidebar and '/admin/permissions' not in sidebar
     assert 'Vai trò & ma trận quyền' in text and 'Danh mục quyền' in text
-    assert 'HONDA' not in text.upper()
+    assert 'src="/static/images/logo.jpg"' in text and 'Dữ liệu mô phỏng' in text
 
 
 @pytest.mark.parametrize('changes',[{'list_price':-1},{'list_price':True},{'engine_cc':'abc'},{'model_year':1800},{'lifecycle':'invalid'},{'variant_name':'x'*101}])

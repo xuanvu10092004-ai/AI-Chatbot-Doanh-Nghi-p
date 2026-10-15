@@ -257,7 +257,9 @@ Các quyền mới: `product:manage` yêu cầu phạm vi toàn hệ thống cho
 `booking:read`, `booking:create`, `booking:manage` kiểm soát lịch hẹn theo toàn hệ thống/chi nhánh/bản thân.
 Khách đã đăng nhập chỉ xem/đặt/hủy lịch của mình; khách vãng lai không được truy cập lịch.
 Mọi thao tác ghi dùng phiên backend, CSRF, truy vấn tham số hóa, kiểm tra phiên bản và nhật ký.
-Logo hiển thị là biểu trưng riêng dạng SVG cục bộ theo quy định không dùng logo thương hiệu trong `AGENTS.md`.
+Theo yêu cầu giao diện mới nhất của người dùng, portal dùng tông đỏ `#CC0000`, trắng và xám,
+với logo gốc từ `docs/images/logo.jpg`, sao chép nguyên bản sang `static/images/logo.jpg` để phục vụ cục bộ.
+Đây là chỉ dẫn mới thay thế yêu cầu logo riêng trước đó; dòng “Dữ liệu mô phỏng” vẫn được giữ.
 
 Kiểm thử toàn bộ trên bộ seed chuẩn (MySQL thật), có sao lưu và khôi phục dữ liệu đang dùng:
 

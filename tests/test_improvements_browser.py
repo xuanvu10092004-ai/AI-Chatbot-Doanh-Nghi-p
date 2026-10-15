@@ -24,7 +24,8 @@ def test_requested_pages_and_money(customer_server,width,height):
             page.wait_for_function("() => document.querySelectorAll('.widget canvas').length >= 5")
             page.wait_for_function("() => [...document.querySelectorAll('.widget-content')].every(n=>!n.textContent.includes('Đang tải'))")
             assert 'Không tải được' not in page.locator('.widget-grid').inner_text()
-            assert page.locator('.brand-logo').evaluate('n=>n.complete&&n.naturalWidth>0')
+            assert page.locator('.brand-logo').evaluate('n=>n.complete&&n.naturalWidth>0&&n.src.endsWith("/static/images/logo.jpg")')
+            assert page.evaluate("getComputedStyle(document.documentElement).getPropertyValue('--accent').trim()")=='#cc0000'
             assert page.locator('.sidebar a',has_text='Quản trị truy cập').count()==1
             for path in ['/dashboard','/customers','/inventory','/bookings','/catalog','/admin/users','/admin/roles']:
                 page.goto(customer_server+path)

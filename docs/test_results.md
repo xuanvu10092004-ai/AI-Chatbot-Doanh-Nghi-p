@@ -420,3 +420,39 @@ File tạm Excel `ke_hoach/~$Ke_Hoach_Thuc_Tap.xlsx` có sẵn được giữ ng
 Đã khởi động lại đúng tiến trình Flask cũ trên cổng 5000 để nạp mã mới:
 `FLASK_RESTART_OK pid=5428 status=200 new_logo=True`. Truy cập lại `http://127.0.0.1:5000` và tải lại trang để nhận giao diện mới.
 
+## Giao diện đỏ và logo do người dùng chỉ định — 15/10/2026
+
+Theo chỉ dẫn mới nhất, giao diện đổi sang đỏ `#CC0000` kết hợp trắng/xám, dùng logo nguyên bản
+`docs/images/logo.jpg` thay cho biểu trưng riêng trước đó. Thay đổi đồng bộ menu, nút, viền header,
+khung chat, thanh thống kê, tab quản trị và bảng màu biểu đồ. Logo dùng `object-fit: contain`,
+giữ nguyên tỉ lệ ở trang đăng nhập, desktop và mobile. Dòng “Dữ liệu mô phỏng” giữ nguyên.
+
+| Kiểm tra | Kết quả |
+| --- | --- |
+| SHA-256 nguồn và `static/images/logo.jpg` | Trùng: `4AC9D09BAF98CB427BD01627EFCA1ADC50CF2F56760EA6DC5A4C2057CE1D1369` |
+| Test logo | HTTP 200, MIME image/jpeg, byte khớp chính xác ảnh nguồn |
+| Edge desktop/mobile | Logo tải đúng; màu chủ đạo #CC0000; không tràn ngang, không lỗi JS |
+| Kiểm thử toàn bộ MySQL/LLM/Edge | 263 passed trong 45,31 giây |
+| Khôi phục dữ liệu sau reset/test | Hash nội dung tất cả bảng khớp snapshot trước reset |
+
+```text
+python -X utf8 scripts/verify_with_snapshot.py --basetemp=C:/Users/nguye/AppData/Local/Temp/ai-portal-red01 --tb=short
+> python init_db.py --reset
+MySQL schema and seed completed.
+products: 11 (expected 11)
+product_variants: 31 (expected 31)
+inventory: 93 (expected 93)
+customers: 80 (expected 80)
+customer_profiles: 80 (expected 80)
+orders: 30 (expected 30)
+> python -m pytest -q
+263 passed in 45.31s
+Restoring verified snapshot...
+RESTORE VERIFIED: all table contents match the pre-reset snapshot.
+```
+
+File sửa: `static/portal.css`, `static/dashboard.js`, `static/images/logo.jpg`,
+`templates/base.html`, `templates/login.html`, `tests/test_chat_presentation.py`,
+`tests/test_improvements_browser.py`, `tests/test_requested_improvements.py`, `README.md`, báo cáo này.
+Ảnh desktop/mobile được cập nhật trong `.pytest_cache/improvements/dashboard-1440.png` và `dashboard-390.png`.
+
