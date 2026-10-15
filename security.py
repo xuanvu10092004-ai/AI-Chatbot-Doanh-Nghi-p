@@ -113,4 +113,12 @@ def authenticate(email,password):
 def navigation():
     with cursor() as cur:
         cur.execute('SELECT n.*,p.code AS permission FROM nav_items n LEFT JOIN permissions p ON p.id=n.required_permission_id ORDER BY sort_order,code')
-        return [r for r in cur.fetchall() if r['permission'] in permissions() and (r['permission']!='rbac:manage' or permissions()[r['permission']]['scope']=='all') and (g.user or r['code']=='chat')]
+        rows=[r for r in cur.fetchall() if r['is_enabled'] and r['permission'] in permissions() and (r['permission']!='rbac:manage' or permissions()[r['permission']]['scope']=='all') and (g.user or r['code']=='chat')]
+    result=[];admin_added=False
+    for row in rows:
+        if row['code']=='revenue':continue
+        if row['code'] in {'users','roles','permissions'}:
+            if admin_added:continue
+            row['label']='Quản trị truy cập';admin_added=True
+        result.append(row)
+    return result

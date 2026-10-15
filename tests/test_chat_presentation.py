@@ -23,15 +23,16 @@ def test_safe_dom_formatter():
 
 
 def test_logo_and_formatter_served_locally(auth_client):
-    """Logo phải đúng ảnh người dùng, tải cục bộ cả trước và sau đăng nhập."""
+    """Biểu trưng riêng tải cục bộ, không dùng logo thương hiệu trong UI."""
     login = auth_client.get('/login').get_data(as_text=True)
-    assert 'src="/static/images/logo.jpg"' in login
-    response = auth_client.get('/static/images/logo.jpg')
+    assert 'src="/static/images/brand-mark.svg"' in login
+    response = auth_client.get('/static/images/brand-mark.svg')
     assert response.status_code == 200
-    assert response.data == (ROOT / 'docs/images/logo.jpg').read_bytes()
+    assert response.data == (ROOT / 'static/images/brand-mark.svg').read_bytes()
+    assert b'HONDA' not in response.data.upper()
     auth_client.login(1)
     page = auth_client.get('/chat').get_data(as_text=True)
-    assert 'src="/static/images/logo.jpg"' in page
+    assert 'src="/static/images/brand-mark.svg"' in page
     assert page.index('/static/chat-formatting.js') < page.index('/static/chat.js')
     assert 'Dữ liệu mô phỏng' in page
     assert '\u2014' not in page
