@@ -64,7 +64,7 @@ def authorize_intent(session_id, user_id, intent_code):
         if not intent:raise ValueError("Unknown intent")
         grant=effective.get(intent['code'])
         allowed=bool(grant) and (user_id is not None or intent['code']=='kb:public:read')
-        if grant and grant['scope']=='own' and intent_code not in {'ask_customer_info','ask_order_status','ask_price_list','ask_promotion'}:allowed=False
+        if grant and grant['scope']=='own' and intent_code not in {'ask_customer_info','ask_order_status','ask_price_list','ask_promotion','tool_appointment_create','tool_appointment_list','tool_appointment_update'}:allowed=False
         cur.execute("INSERT INTO chatbot_audit_log(session_id,user_id,intent_id,decision,reason) VALUES(%s,%s,%s,%s,%s)",(session_id,user_id,intent['intent_id'],'allowed' if allowed else 'denied','Permission granted' if allowed else 'Permission or scope denied'))
         audit_id=cur.lastrowid
     return {'allowed':allowed,'intent_id':intent['intent_id'],'intent_code':intent_code,'audit_id':audit_id,

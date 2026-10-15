@@ -43,6 +43,12 @@ def get_effective_permissions(user_id):
             branches={r['scope_branch_id'] for r in rows if r['data_scope']=='branch'}
             if len(branches)==1 and None not in branches:result[code]={'scope':'branch','branch':next(iter(branches))}
         else:result[code]={'scope':'own','branch':None}
+    if user_id is not None:
+        with cursor() as cur:
+            cur.execute('SELECT user_type FROM users WHERE id=%s',(user_id,));person=cur.fetchone()
+        if not person or person['user_type']!='staff':
+            result={code:({'scope':'own','branch':None} if code.startswith('booking:') else grant)
+                    for code,grant in result.items() if code in {'chatbot:use','kb:public:read','booking:read','booking:create'}}
     return result
 
 
@@ -69,7 +75,7 @@ def initialize_request():
     user_id=session.get('user_id')
     if user_id:
         with cursor() as cur:
-            cur.execute('SELECT id,email,full_name,home_branch_id,is_active,must_change_password FROM users WHERE id=%s',(user_id,))
+            cur.execute('SELECT id,email,full_name,user_type,phone,home_branch_id,is_active,must_change_password FROM users WHERE id=%s',(user_id,))
             g.user=cur.fetchone()
             if not g.user or not g.user['is_active']:
                 session.clear();g.user=None
@@ -81,7 +87,7 @@ def initialize_request():
     if not public and not g.user and not guest:
         if request.path.startswith('/api/') or request.endpoint=='chat_api':return jsonify(error='authentication-required',message='Vui lòng đăng nhập.'),401
         return redirect(url_for('login',next=request.full_path.rstrip('?')))
-    if guest and not public and request.endpoint not in {'home','chat_page','chat_api','logout'}:
+    if guest and not public and request.endpoint not in {'home','chat_page','chat_api','chat_tools_list','logout'}:
         if request.path.startswith('/api/'):return jsonify(error='forbidden'),403
         return render_template('error.html',message='Khách chỉ sử dụng Trợ lý AI.'),403
     if request.method in {'POST','PUT','PATCH','DELETE'}:

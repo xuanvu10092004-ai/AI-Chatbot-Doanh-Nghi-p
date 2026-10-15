@@ -73,10 +73,10 @@ def register_operations(app):
     @app.route('/api/catalog',methods=['POST'])
     @app.route('/api/catalog/<int:variant_id>',methods=['PUT'])
     @require_permission('product:manage')
-    def save_vehicle(variant_id=None):
+    def save_vehicle(variant_id=None,tool_data=None):
         if permissions()['product:manage']['scope'] != 'all':
             raise OperationRejected('Danh mục dùng chung cần quyền toàn hệ thống.',403)
-        data=payload()
+        data=payload() if tool_data is None else tool_data
         model=text(data,'model_name',100)
         variant=text(data,'variant_name',100)
         segment=data.get('segment')
@@ -158,8 +158,8 @@ def register_operations(app):
 
     @app.post('/api/bookings')
     @require_permission('booking:create')
-    def create_booking():
-        data=payload()
+    def create_booking(tool_data=None):
+        data=payload() if tool_data is None else tool_data
         branch=number(data,'branch_id',1,2**31-1)
         customer=number(data,'customer_id',1,2**31-1)
         grant=permissions()['booking:create']
@@ -172,6 +172,7 @@ def register_operations(app):
             raise OperationRejected('Chọn lịch trước ít nhất 10 phút, trong 180 ngày và từ 07:00 đến trước 18:00.')
         service=data.get('service_type')
         if service not in {'maintenance','repair','inspection'}:raise OperationRejected('Loại dịch vụ không hợp lệ.')
+        if g.user['user_type']!='staff' and service!='maintenance':raise OperationRejected('Khách chỉ có thể đặt lịch bảo dưỡng hoặc tư vấn.',403)
         vehicle=text(data,'vehicle_description',200)
         plate=text(data,'license_plate',20,False)
         notes=text(data,'notes',1000,False)
@@ -191,8 +192,9 @@ def register_operations(app):
 
     @app.patch('/api/bookings/<int:booking_id>')
     @require_permission('booking:read')
-    def update_booking(booking_id):
-        data=payload();status=data.get('status')
+    def update_booking(booking_id,tool_data=None):
+        data=payload() if tool_data is None else tool_data
+        status=data.get('status')
         if status not in {'confirmed','completed','cancelled'}:raise OperationRejected('Trạng thái không hợp lệ.')
         code='booking:manage' if status!='cancelled' or 'booking:manage' in permissions() else 'booking:create'
         if code not in permissions():raise OperationRejected('Bạn chưa có quyền cập nhật lịch.',403)

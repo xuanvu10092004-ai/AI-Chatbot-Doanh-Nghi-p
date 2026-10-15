@@ -121,6 +121,8 @@ def test_booking_guest_and_customer_ownership(auth_client,booking_cleanup):
     assert data['customer_id']!=8
     assert auth_client.post('/api/bookings',json=data).status_code==403
     data['customer_id']=8
+    assert auth_client.post('/api/bookings',json=data).status_code==403
+    data['service_type']='maintenance'
     response=auth_client.post('/api/bookings',json=data);assert response.status_code==201
     target=response.json['id'];booking_cleanup.append(target)
     assert all(r['customer_id']==8 for r in auth_client.get('/api/bookings').json['rows'])

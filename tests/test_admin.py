@@ -3,18 +3,19 @@ from db import cursor
 
 def test_dynamic_role_grant_revoke_and_audit(auth_client):
     auth_client.login(1)
-    with cursor() as c:c.execute("SELECT id FROM permissions WHERE code='dashboard:view'");pid=c.fetchone()['id']
+    with cursor() as c:c.execute("SELECT id FROM permissions WHERE code='user:manage'");pid=c.fetchone()['id']
     response=auth_client.post('/api/admin/roles',json={'name':'test_dynamic_role','landing_path':'/dashboard','permissions':[{'permission_id':pid,'data_scope':'all'}]})
     assert response.status_code==200;role_id=response.get_json()['id']
     try:
-        assert auth_client.post('/api/admin/users/8/roles',json={'roles':[{'role_id':role_id}]}).status_code==200
-        customer=auth_client.__class__(auth_client.application);customer.login(8)
-        assert customer.get('/dashboard').status_code==200
+        # Nhân viên không có quyền quản trị; khách nay luôn bị giới hạn ở tra giá/đặt lịch.
+        assert auth_client.post('/api/admin/users/7/roles',json={'roles':[{'role_id':role_id}]}).status_code==200
+        employee=auth_client.__class__(auth_client.application);employee.login(7)
+        assert employee.get('/admin/users').status_code==200
         assert auth_client.put('/api/admin/roles/'+str(role_id),json={'permissions':[]}).status_code==200
-        assert customer.get('/dashboard').status_code==403
+        assert employee.get('/admin/users').status_code==403
         with cursor() as c:
             c.execute("SELECT COUNT(*) AS n FROM rbac_audit_log WHERE target_type='role' AND target_id=%s",(role_id,));assert c.fetchone()['n']>=2
-        assert auth_client.delete('/api/admin/users/8/roles',json={'role_id':role_id}).status_code==200
+        assert auth_client.delete('/api/admin/users/7/roles',json={'role_id':role_id}).status_code==200
         assert auth_client.delete('/api/admin/roles/'+str(role_id),json={}).status_code==200
     finally:
         with cursor() as c:

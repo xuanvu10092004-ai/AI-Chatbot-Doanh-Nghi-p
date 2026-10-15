@@ -21,9 +21,9 @@
 <label for="bookingBranch">Chi nhánh</label><select id="bookingBranch" required></select>
 <label for="scheduled_at">Ngày giờ hẹn</label><input id="scheduled_at" type="datetime-local" required>
 <p class="field-help">Giờ Việt Nam, 07:00–18:00. Đặt trước ít nhất 10 phút, tối đa 180 ngày.</p>
-<label for="service_type">Dịch vụ</label><select id="service_type"><option value="maintenance">Bảo dưỡng định kỳ</option><option value="repair">Sửa chữa</option><option value="inspection">Kiểm tra xe</option></select>
+<label for="service_type">Dịch vụ</label><select id="service_type"><option value="maintenance">Bảo dưỡng định kỳ</option>{% if current_user.user_type=="staff" %}<option value="repair">Sửa chữa</option><option value="inspection">Kiểm tra xe</option>{% endif %}</select>
 <label for="vehicle_description">Mẫu xe / tình trạng cần kiểm tra</label><input id="vehicle_description" maxlength="200" required>
 <label for="license_plate">Biển số (không bắt buộc)</label><input id="license_plate" maxlength="20">
 <label for="notes">Ghi chú</label><textarea id="notes" maxlength="1000"></textarea>
 {% endif %}<div class="actions"><button id="saveOperation">{{ 'Lưu thông tin xe' if section=='catalog' else 'Xác nhận đặt lịch' }}</button><button type="button" class="secondary" id="newOperation">Nhập mới</button></div></form>{% endif %}</div></section>
-{% endblock %}{% block scripts %}<script src="/static/operations.js" defer></script>{% endblock %}
+{% if section=="bookings" %}<section class="panel"><h2>Lịch tư vấn / bảo dưỡng từ chat</h2><div id="publicAppointmentList" class="table-scroll"></div></section>{% endif %}{% endblock %}{% block scripts %}<script src="/static/operations.js" defer></script>{% if section=="bookings" %}<script src="/static/appointments.js" defer></script>{% endif %}{% endblock %}

@@ -32,6 +32,9 @@ from customer_input_routes import register_customer_input
 from customer_chat import handle_customer_chat
 from sales_routes import register_sales
 from operations_routes import register_operations
+from stock_routes import register_stock
+from chat_action_routes import register_chat_actions
+from chat_tools import handle_tool_chat
 
 
 app = Flask(__name__)
@@ -52,6 +55,8 @@ register_documents(app)
 register_customer_input(app)
 register_sales(app)
 register_operations(app)
+register_stock(app)
+register_chat_actions(app)
 
 @app.after_request
 def security_headers(response):
@@ -68,6 +73,7 @@ def shell_context():
 
 @app.route("/")
 def home():
+    if not g.user or g.user['user_type']!='staff':return redirect('/chat')
     return redirect(g.roles[0]['landing_path'] if g.roles else '/chat')
 
 @app.get('/chat')
@@ -141,7 +147,14 @@ def chat():
                 session['chat_session_id'] = session_id
         history = read_history(session_id)
         retrieval_question = resolve_followup(question, history)
-        record_message(session_id, "user", question)
+        safe_question='[Thông tin mật khẩu đã được ẩn; dùng ô nhập bảo mật]' if re.search(r"\b(?:password|mật khẩu|mat khau)[\"']?\s*[:=]",question,re.I) else question
+        record_message(session_id, "user", safe_question)
+        tool_confirmation=(data.get('action_id'),data.get('action_version')) if 'action_id' in data else None
+        tool_reply=handle_tool_chat(question,session_id,tool_confirmation,data.get('action_secret'))
+        if tool_reply is not None:
+            record_message(session_id,'bot',tool_reply['answer'])
+            tool_reply['session_id']=session_id
+            return jsonify(tool_reply)
         confirmation = (data.get('customer_batch_id'), data.get('customer_batch_version')) if 'customer_batch_id' in data else None
         customer_reply = handle_customer_chat(question, session_id, confirmation)
         if customer_reply is not None:
