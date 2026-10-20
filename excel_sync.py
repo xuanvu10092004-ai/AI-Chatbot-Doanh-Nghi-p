@@ -14,6 +14,10 @@ SOURCE_WORKBOOK = ROOT / "data" / "source" / "honda_dataset_khach_hang_san_pham.
 SYNCED_WORKBOOK = ROOT / "data" / "exports" / "honda_chatbot_synced.xlsx"
 
 
+class ExcelSourceLocked(RuntimeError):
+    pass
+
+
 def _age(value: Any) -> int | None:
     if not value:
         return None
@@ -153,9 +157,8 @@ def export_synced_workbook(path: Path = SYNCED_WORKBOOK) -> Path:
         if path.resolve() != SOURCE_WORKBOOK.resolve():
             try:
                 shutil.copy2(path, SOURCE_WORKBOOK)
-            except PermissionError:
-                # Excel đang mở file nguồn; bản đồng bộ vẫn được tạo đầy đủ.
-                pass
+            except PermissionError as exc:
+                raise ExcelSourceLocked(str(SOURCE_WORKBOOK)) from exc
     finally:
         temp_path.unlink(missing_ok=True)
     return path
@@ -164,5 +167,7 @@ def export_synced_workbook(path: Path = SYNCED_WORKBOOK) -> Path:
 def sync_after_commit() -> dict[str, Any]:
     try:
         return {"status": "completed", "path": str(export_synced_workbook())}
+    except ExcelSourceLocked:
+        return {"status": "source_locked", "error": "Excel dang mo file nguon; hay dong Excel roi tai lai trang hoac luu lai du lieu."}
     except Exception as exc:
         return {"status": "failed", "error": type(exc).__name__}
