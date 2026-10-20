@@ -1,0 +1,22 @@
+from db import cursor
+from query_plans import plan_query
+from sql_service import answer_sql_question
+
+
+def test_chat_reads_web_inventory_for_adv_at_cr01():
+    question = 'xe ADV 160 ở kho CR01 có mấy chiếc'
+    sql, params = plan_query(question, 'ask_stock')
+    assert 'SUM(quantity) AS total_stock' in sql
+    assert params[0] == 'CR01'
+    assert '%ADV%160%' in params
+
+    with cursor() as cur:
+        cur.execute(
+            'SELECT COALESCE(SUM(quantity), 0) AS total '
+            'FROM v_ai_inventory WHERE branch_code=%s AND model_name LIKE %s',
+            ('CR01', '%ADV%160%'),
+        )
+        expected = int(cur.fetchone()['total'])
+
+    result = answer_sql_question(question, 1)
+    assert int(result.rows[0]['total_stock']) == expected

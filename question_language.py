@@ -1,4 +1,4 @@
-"""Chuẩn hóa tiếng Việt và cách viết tên xe, không suy đoán thông số xe."""
+"""Chuẩn hóa câu hỏi và nhận diện mẫu xe/tồn kho."""
 import re
 import unicodedata
 
@@ -16,14 +16,12 @@ FAMILIES = (
     (r'\blead\b', 'Lead'), (r'\bvario\b', 'Vario'),
     (r'\bfuture\b', 'Future'), (r'\bwave(?:\s+alpha)?\b', 'Wave'),
     (r'\bwinner(?:\s+x)?\b', 'Winner'), (r'\bblade\b', 'Blade'),
-    (r'\brebel\b', 'Rebel'),
+    (r'\badv\b', 'ADV'), (r'\brebel\b', 'Rebel'),
 )
 
 
 def product_patterns(question: str) -> list[str]:
-    q = normalize(question)
-    # AB125, SH160i, shmode125 -> tên họ xe + dung tích người dùng yêu cầu.
-    q = re.sub(r'([a-z])(?=\d)', r'\1 ', q)
+    q = re.sub(r'([a-z])(?=\d)', r'\1 ', normalize(question))
     matches = []
     for expression, family in FAMILIES:
         for match in re.finditer(expression, q):
@@ -31,7 +29,6 @@ def product_patterns(question: str) -> list[str]:
             pattern = '%' + family + ('%' + engine.group(1) + '%' if engine else '%')
             matches.append((match.start(), match.end(), pattern))
     patterns, end = [], -1
-    # SH Mode không bị nhận thêm thành SH; Air Blade không bị nhận thành Blade.
     for start, stop, pattern in sorted(matches, key=lambda item: (item[0], -item[1])):
         if start < end:
             continue
@@ -48,9 +45,13 @@ def product_pattern(question: str) -> str | None:
 
 def asks_available_stock(question: str) -> bool:
     q = normalize(question)
-    return bool(re.search(r'\bcon (?:hang|xe)\b', q)
-                or re.search(r'\b(?:chi nhanh|dai ly|cua hang|o dau)\b.*\b(?:con|co xe)\b', q)
-                or (product_pattern(question) and re.search(r'\bcon(?: hang| xe| khong|\s*[?!.,]*$)', q)))
+    pattern = product_pattern(question)
+    return bool(
+        re.search(r'\bcon (?:hang|xe)\b', q)
+        or re.search(r'\b(?:chi nhanh|dai ly|cua hang|o dau)\b.*\b(?:con|co xe)\b', q)
+        or (pattern and re.search(r'\bcon(?: hang| xe| khong|\s*[?!.,]*$)', q))
+        or (pattern and re.search(r'\bkho\b.*\b(?:co|con|het|may|bao nhieu)\b', q))
+    )
 
 
 def wants_sql(question: str) -> bool:
@@ -64,7 +65,7 @@ def wants_sql(question: str) -> bool:
 
 def resolve_followup(question: str, history: list[dict]) -> str:
     q = normalize(question)
-    if any(term in q for term in ('het hang','tong ton','san pham nao','tat ca san pham')):
+    if any(term in q for term in ('het hang', 'tong ton', 'san pham nao', 'tat ca san pham')):
         return question
     if product_pattern(question) or not any(w in q for w in ('mau nao', 'mau gi', 'phien ban', 'ban abs', 'xe nay', 'gia bao nhieu', 'thong so', 'bao hanh', 'chi nhanh', 'dai ly', 'cua hang', 'o dau', 'con khong')):
         return question
@@ -74,5 +75,5 @@ def resolve_followup(question: str, history: list[dict]) -> str:
         pattern = product_pattern(message['content'])
         if pattern:
             model = pattern.strip('%').replace('%', ' ')
-            return question + ' (mẫu xe đang trao đổi: ' + model + ')'
+            return question + ' (mau xe dang trao doi: ' + model + ')'
     return question

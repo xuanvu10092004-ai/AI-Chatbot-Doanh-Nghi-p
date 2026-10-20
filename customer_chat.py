@@ -7,6 +7,7 @@ from security import permissions
 from question_language import normalize,product_pattern
 from customer_input import FIELDS,REQUIRED,today,stage,get_batch,revise,commit,CustomerInputError,normalize_row,_existing
 from access_control import authorize_intent
+from excel_sync import sync_after_commit
 
 
 def parse_customer_values(text):
@@ -67,6 +68,7 @@ def handle_customer_chat(question,session_id,confirmation=None):
             if confirmation is not None and confirmation!=(batch['id'],batch['version']):
                 raise CustomerInputError('Bản nháp đã thay đổi. Hãy xem bản mới nhất trước khi xác nhận.',409)
             outcome=commit(batch['id'],batch['version'],True)
+            outcome['excel_sync']=sync_after_commit()
             return {'answer':f"Đã thêm {outcome['created']} khách hàng, cập nhật {outcome['updated']} hồ sơ và tạo {outcome['orders_created']} đơn chờ duyệt.",'type':'customer-input','result':outcome}
         except CustomerInputError as error:
             return {'answer':str(error),'type':'customer-input','customer_draft':batch}

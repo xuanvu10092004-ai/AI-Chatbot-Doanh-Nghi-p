@@ -14,3 +14,4 @@ database.db
 .preview-profile/
 instance/documents/
 ~$*.xlsx
+data/exports/

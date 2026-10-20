@@ -10,16 +10,15 @@ def records(kind,low_stock=False):
     if kind=='customers':
         where,params=scope_filter('customer:read','u.home_branch_id','u.id')
         source='users u JOIN customer_profiles cp ON cp.user_id=u.id LEFT JOIN branches b ON b.id=u.home_branch_id'
-        columns='u.id AS customer_id,cp.customer_code,u.full_name,u.email,u.phone,b.code AS branch_code,cp.status AS customer_status,cp.province,cp.lead_source,cp.registered_at'
+        columns='u.id AS customer_id,cp.customer_code,u.full_name,u.email,u.phone,b.code AS branch_code,cp.province,cp.lead_source,cp.registered_at'
         searchable=['u.full_name','u.email','u.phone','cp.customer_code']
-        sort_map={'name':'u.full_name','date':'cp.registered_at','status':'cp.status'}
-        if request.args.get('status'):where+=' AND cp.status=%s';params+=(request.args['status'],)
+        sort_map={'name':'u.full_name','date':'cp.registered_at'}
         if request.args.get('import_batch'):
             where+=' AND EXISTS(SELECT 1 FROM customer_import_rows cir WHERE cir.customer_id=u.id AND cir.batch_id=%s)';params+=(int(request.args['import_batch']),)
     else:
         where,params=scope_filter('inventory:read','i.branch_id')
         source='inventory i JOIN branches b ON b.id=i.branch_id JOIN product_variants pv ON pv.id=i.variant_id JOIN products p ON p.id=pv.product_id'
-        columns='b.code AS branch_code,p.model_name,pv.variant_name,i.quantity,pv.list_price,i.updated_at'
+        columns="b.code AS branch_code,p.model_name,pv.variant_name,i.quantity,pv.list_price,i.updated_at,CASE WHEN i.quantity=0 THEN 'Hết hàng' WHEN i.quantity<5 THEN 'Sắp hết hàng' ELSE 'Còn hàng' END AS stock_status"
         searchable=['p.model_name','pv.variant_name','b.code']
         sort_map={'name':'p.model_name','quantity':'i.quantity','price':'pv.list_price'}
         if low_stock:where+=' AND i.quantity>0 AND i.quantity<%s';params+=(LOW_STOCK_THRESHOLD,)
@@ -31,7 +30,7 @@ def records(kind,low_stock=False):
     if sort not in sort_map or direction not in {'asc','desc'}:raise ValueError('Invalid sort')
     with cursor() as cur:
         cur.execute('SELECT COUNT(*) AS total FROM '+source+' WHERE '+where,params);total=cur.fetchone()['total']
-        group_column='cp.status' if kind=='customers' else 'b.code'
+        group_column='b.code'
         metric='COUNT(*)' if kind=='customers' else 'SUM(i.quantity)'
         cur.execute('SELECT '+group_column+' AS label,'+metric+' AS value FROM '+source+' WHERE '+where+' GROUP BY '+group_column+' ORDER BY value DESC,label',params)
         distribution=cur.fetchall()

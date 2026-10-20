@@ -42,10 +42,11 @@ def get_low_stock_products(limit: int = 5) -> list[dict[str, Any]]:
     from inventory_policy import LOW_STOCK_THRESHOLD
     bounded_limit = max(1, min(int(limit), 100))
     with cursor("app") as db_cursor:
+        # Sắp hết hàng: quantity > 0 AND quantity < 10
         db_cursor.execute(
             """
             SELECT branch_code, branch_name, model_name, variant_name, color,
-                   quantity, list_price
+                   quantity, list_price, 'Sắp hết hàng' AS stock_status
             FROM v_ai_inventory
             WHERE quantity > 0 AND quantity < %s
             ORDER BY quantity ASC, model_name, variant_name
@@ -53,7 +54,21 @@ def get_low_stock_products(limit: int = 5) -> list[dict[str, Any]]:
             """,
             (LOW_STOCK_THRESHOLD, bounded_limit),
         )
-        return list(db_cursor.fetchall())
+        low_stock = list(db_cursor.fetchall())
+        # Hết hàng: quantity = 0
+        db_cursor.execute(
+            """
+            SELECT branch_code, branch_name, model_name, variant_name, color,
+                   quantity, list_price, 'Hết hàng' AS stock_status
+            FROM v_ai_inventory
+            WHERE quantity = 0
+            ORDER BY model_name, variant_name
+            LIMIT %s
+            """,
+            (bounded_limit,),
+        )
+        out_of_stock = list(db_cursor.fetchall())
+        return low_stock + out_of_stock
 
 
 def get_potential_customers(limit: int = 5) -> list[dict[str, Any]]:
