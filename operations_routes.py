@@ -123,6 +123,8 @@ def register_operations(app):
             if before:before.pop('cost_price',None)
             audit(cur,'catalog_update' if before else 'catalog_create','variant',variant_id,before=before,
                   after={k:data.get(k) for k in ('model_name','variant_name','list_price','model_year','lifecycle')},actor=g.user['id'])
+        from excel_sync import sync_after_commit
+        sync_after_commit()
         return jsonify(id=variant_id),200 if before else 201
 
     @app.get('/bookings')

@@ -300,4 +300,6 @@ def commit(batch_id,version,confirmed):
                 cur.execute('INSERT INTO customer_import_rows(batch_id,customer_id,row_number,action) VALUES(%s,%s,%s,%s)',(batch_id,user_id,item['row'],item['action']))
             audit(cur,'customer_input_'+item['action'],'user',user_id,before=old,after={'full_name':row['full_name'],'branch_id':item['branch_id'],'batch_id':batch_id},actor=g.user['id'])
         cur.execute("UPDATE customer_input_batches SET status='committed',result_json=%s,version=version+1 WHERE id=%s",(json.dumps(outcome),batch_id))
+    from excel_sync import sync_after_commit
+    outcome['excel_sync'] = sync_after_commit()
     return outcome

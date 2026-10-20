@@ -3,6 +3,7 @@ from db import cursor
 from security import require_permission
 from dashboard_service import scope_filter
 from inventory_policy import LOW_STOCK_THRESHOLD
+from excel_sync import sync_after_commit
 
 
 def records(kind,low_stock=False):
@@ -44,7 +45,9 @@ def records(kind,low_stock=False):
 
 def register_business(app):
     for kind,permission in [('customers','customer:read'),('inventory','inventory:read')]:
-        def page(dataset=kind):return render_template('records.html',dataset=dataset)
+        def page(dataset=kind):
+            sync_after_commit()
+            return render_template('records.html',dataset=dataset)
         def api(dataset=kind):
             try:return jsonify(records(dataset))
             except ValueError:return jsonify(error='invalid-filter'),400

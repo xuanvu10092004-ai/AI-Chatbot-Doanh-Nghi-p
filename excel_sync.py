@@ -25,12 +25,12 @@ def _age(value: Any) -> int | None:
 def _rows() -> dict[str, list[tuple[Any, ...]]]:
     with cursor() as cur:
         cur.execute("""
-            SELECT u.id AS customer_id, cp.customer_code, u.full_name, cp.gender,
+            SELECT u.id AS customer_id, COALESCE(cp.customer_code, CONCAT('DB', LPAD(u.id, 4, '0'))) AS customer_code, u.full_name, cp.gender,
                    cp.birth_date, u.phone, u.email, cp.province, cp.district,
                    cp.address, cp.occupation, cp.lead_source, b.code AS branch_code,
                    p.model_name, cp.payment_preference, cp.registered_at, cp.status
             FROM users u
-            JOIN customer_profiles cp ON cp.user_id = u.id
+            LEFT JOIN customer_profiles cp ON cp.user_id = u.id
             LEFT JOIN branches b ON b.id = u.home_branch_id
             LEFT JOIN products p ON p.id = cp.interested_product_id
             WHERE u.user_type = 'customer'
@@ -136,6 +136,8 @@ def export_synced_workbook(path: Path = SYNCED_WORKBOOK) -> Path:
             sheet.append(list(row))
         sheet.freeze_panes = "A2"
         sheet.auto_filter.ref = sheet.dimensions
+        for table in sheet.tables.values():
+            table.ref = sheet.dimensions
     if "Ghi_chu" not in book.sheetnames:
         book.create_sheet("Ghi_chu")
     notes = book["Ghi_chu"]
