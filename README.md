@@ -26,49 +26,51 @@ Tạo `.env` theo `.env.example`. Không commit bí mật.
 - `ALLOW_GUEST_CHAT=true`: cho phép nút vào chat công khai. Đặt false để tắt.
 - `GROQ_API_KEY`, `GROQ_MODEL=openai/gpt-oss-20b`: khóa thật và model; không cần khóa để chạy các test cục bộ.
 
-### Cấu hình máy của thành viên nhóm
+### Dùng chung một MySQL trong LAN
 
-Mỗi máy cài MySQL/MariaDB, cài dependencies rồi sao chép `.env.example` thành `.env`. Đặt `DB_USER=admin_nt`, điền mật khẩu nhóm đã thống nhất vào cả `DB_PASSWORD` và `APP_DB_PASSWORD`. Điền `ADMIN_DB_USER`/`ADMIN_DB_PASSWORD` theo tài khoản quản trị MySQL thực tế của máy đó; không mặc định các máy có cùng mật khẩu root. Điền đầy đủ các biến bí mật còn lại, gồm mật khẩu chatbot, demo và khóa phiên. `.env` được Git bỏ qua; trao đổi bí mật riêng, không đưa vào source.
+Các máy phải kết nối **cùng một máy chủ MySQL**. `DB_HOST=127.0.0.1` trên từng máy tạo các database độc lập; Git, file SQL và Excel không tự đồng bộ MySQL. Khi dùng chung máy chủ, giao dịch đã commit được các máy đọc ở lần truy vấn tiếp theo; tải lại trang để cập nhật giao diện. Không cần import/reset trên máy thành viên.
+
+Máy chủ giữ `.env` với `DB_HOST=127.0.0.1` và credential quản trị riêng. Chỉ máy chủ chạy:
 
 ```powershell
-python init_db.py --create-if-missing
-python check_db.py
+python init_db.py --extensions-only
+ipconfig
+```
+
+Nếu chưa có database, dùng `--create-if-missing`. Lấy IPv4 và subnet thực tế của adapter LAN/Wi-Fi, không dùng IP cũ từ README. Ví dụ kiểm tra ngày **21/10/2026**: máy chủ `192.168.100.187:3306`, mạng `192.168.100.0/24`. Trên máy chủ:
+
+```powershell
+python scripts/configure_shared_mysql.py --network 192.168.100.0/24
+```
+
+Script tạo/cập nhật tài khoản ứng dụng và chatbot riêng cho mạng đã chỉ định, không cấp quyền quản trị, không đổi dữ liệu nghiệp vụ. Chỉ nhận mạng IPv4 RFC1918 /24 hoặc nhỏ hơn. Khi đổi mật khẩu, chạy lại cả `init_db.py --extensions-only` và `configure_shared_mysql.py`. Khởi động lại các backend để tạo lại connection pool.
+
+MySQL phải lắng nghe trên IP LAN. Nếu firewall chưa cho phép, mở PowerShell quản trị trên máy chủ và chạy với đúng địa chỉ/mạng:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/allow_mysql_lan.ps1 -Network 192.168.100.0/24 -ServerAddress 192.168.100.187
+```
+
+Quy tắc giới hạn TCP 3306 từ mạng đã chọn tới IPv4 máy chủ đã chọn; áp dụng Private/Public để không phụ thuộc profile Wi-Fi. Script không thay đổi các quy tắc firewall khác. Chỉ dùng trên LAN tin cậy; không chuyển tiếp cổng MySQL ra Internet. Nên đặt DHCP reservation để IP máy chủ ổn định. Nếu đổi mạng, chạy lại script với subnet/IP mới.
+
+Trên **máy thành viên**, sao chép `.env.example` thành `.env` và đặt:
+
+```dotenv
+DB_HOST=192.168.100.187
+DB_PORT=3306
+DB_NAME=honda_chatbot
+DB_USER=admin_nt
+```
+
+Điền riêng `DB_PASSWORD`/`APP_DB_PASSWORD` và `CHATBOT_RO_PASSWORD` khớp máy chủ. Giữ `CHATBOT_RO_USER=chatbot_ro`. Tự tạo `FLASK_SECRET_KEY` riêng; đặt `APP_ENV=dev` khi chạy HTTP cục bộ. Xóa `ADMIN_DB_USER`/`ADMIN_DB_PASSWORD` trên máy thành viên, không chia sẻ credential quản trị. Mật khẩu website là mật khẩu trong bảng `users` trên máy chủ; `DEMO_ACCOUNT_PASSWORD` chỉ dùng seed/kiểm thử, không tự thay mật khẩu đăng nhập.
+
+```powershell
+Test-NetConnection 192.168.100.187 -Port 3306
+python scripts/check_shared_mysql.py
 python app.py
 ```
 
-Nếu database đã tồn tại và chỉ cần cập nhật tài khoản kết nối, chạy `python init_db.py --extensions-only`, rồi khởi động lại ứng dụng. Không dùng `--reset` để đổi mật khẩu vì lệnh này xóa dữ liệu.
-
-`DB_HOST=127.0.0.1` nghĩa là mỗi máy dùng database riêng. Cùng source và cùng tài khoản không tự đồng bộ dữ liệu. Muốn dữ liệu thay đổi được chia sẻ ngay, cần một MySQL dùng chung: đặt cùng `DB_HOST` trỏ tới máy chủ đó, quản trị viên cấp quyền kết nối cho đúng địa chỉ máy backend và cấu hình mạng/firewall. Script hiện tạo tài khoản `localhost`, phù hợp chạy backend và MySQL trên cùng máy; không tự mở MySQL ra mạng. Khi chạy test có thay đổi dữ liệu, dùng database phát triển riêng.
-
-### Dùng máy chủ của nhóm trong LAN
-
-Máy chủ hiện tại: `192.168.10.160:3306`, mạng `192.168.10.0/24` (IP có thể đổi khi chuyển Wi-Fi; nên đặt DHCP reservation trên router). Giữ `DB_HOST=127.0.0.1` trong `.env` máy chủ. Sau khi khởi tạo, cấp tài khoản cho LAN bằng:
-
-```powershell
-python scripts/configure_shared_mysql.py --network 192.168.10.0/24
-```
-
-Trên máy chủ, mở PowerShell bằng **Run as administrator** và chạy một lần để mở cổng MySQL có giới hạn:
-
-```powershell
-.\scripts\allow_mysql_lan.ps1
-```
-
-Rule chỉ cho TCP `3306` từ `192.168.10.0/24`, chặn truy cập từ các mạng khác. Chỉ chạy khi mạng Wi-Fi/LAN là mạng tin cậy; không mở cổng này ra Internet.
-
-Script chạy lại được, cập nhật mật khẩu từ `.env`, cấp quyền ứng dụng và quyền đọc view riêng cho chatbot. Khi đổi mật khẩu, chạy lại cả `init_db.py --extensions-only` và script trên để cập nhật tài khoản local/LAN.
-
-Máy bạn cùng mạng Wi-Fi/LAN đặt `DB_HOST=192.168.10.160`, `DB_PORT=3306`, `DB_NAME=honda_chatbot`, `DB_USER=admin_nt`, điền mật khẩu nhóm vào `DB_PASSWORD` và `APP_DB_PASSWORD`. Nhận riêng `CHATBOT_RO_PASSWORD` và `DEMO_ACCOUNT_PASSWORD` từ máy chủ; tự tạo `FLASK_SECRET_KEY` cục bộ. Không chia sẻ tài khoản quản trị MySQL. Chỉ chạy `python check_db.py` rồi `python app.py` trên máy bạn; mọi lệnh khởi tạo/migration/reset chỉ chạy trên máy chủ. Khởi động lại backend sau khi sửa `.env`.
-
-MySQL máy chủ phải lắng nghe địa chỉ LAN. Nếu Windows Firewall chặn, mở PowerShell quản trị trên máy chủ và thêm quy tắc giới hạn LAN:
-
-```powershell
-New-NetFirewallRule -DisplayName 'MySQL nhom de tai LAN' -Direction Inbound -Action Allow -Protocol TCP -LocalAddress 192.168.10.160 -LocalPort 3306 -RemoteAddress 192.168.10.0/24 -Profile Private
-```
-
-Quy tắc mẫu chỉ áp dụng mạng Private. Wi-Fi hiện đang là Public; chưa có quy tắc mới được tạo. Cần chủ máy xác nhận đây là LAN tin cậy và quyết định cấu hình profile/quy tắc trước khi mở kết nối từ máy khác.
-
-Máy chủ cần bật và MySQL đang chạy. Từ máy bạn kiểm tra `Test-NetConnection 192.168.10.160 -Port 3306`; sau đó `python check_db.py`. Ngoài LAN cần VPN hoặc máy chủ được triển khai riêng; không chuyển tiếp cổng MySQL ra Internet. `admin_nt` là tài khoản kết nối database; đăng nhập website vẫn dùng email và mật khẩu trong `users`.
+Công cụ kiểm tra in máy đích, tên máy chủ thực tế, account được MySQL chọn, migration còn thiếu và kiểm tra chatbot đọc view/hàm scope nhưng không đọc được bảng gốc. Có thể thử IP khác mà không sửa `.env` bằng `python scripts/check_shared_mysql.py --host 192.168.100.187`. Các máy phải có cùng máy đích và tên máy chủ trong kết quả. Không chạy reset/migration trên máy thành viên; kiểm thử có ghi dữ liệu phải dùng database phát triển riêng.
 
 ## Khởi tạo và chạy
 
@@ -83,7 +85,7 @@ Truy cập **http://127.0.0.1:5000/login**. Nếu đã có dữ liệu:
 python init_db.py --extensions-only
 ```
 
-`schema_migrations` ghi file đã áp dụng và bỏ qua ở lần sau. Extension xác thực là `06_auth_dynamic_rbac.sql` vì số 05 đã được dùng cho thông số sản phẩm. `07_own_scope_views.sql` thêm lọc bản ghi sở hữu cho chatbot.
+`schema_migrations` ghi file đã áp dụng và bỏ qua ở lần sau. Mỗi lần chạy vẫn cập nhật mật khẩu/quyền tài khoản local từ `.env`, kể cả khi migration 03 đã chạy. Credential được kiểm tra trước khi reset/ghi schema. Extension xác thực là `06_auth_dynamic_rbac.sql` vì số 05 đã được dùng cho thông số sản phẩm. `07_own_scope_views.sql` thêm lọc bản ghi sở hữu cho chatbot.
 
 `08_air_blade_125_seed.sql` bổ sung mẫu **Air Blade 125**, thông số, 3 phiên bản và 9 dòng tồn kho tại NT01/NT02/CR01. Đây là **dữ liệu mô phỏng**; các giá 42.500.000 / 44.500.000 / 46.500.000 VNĐ, giá vốn, thông số và tồn kho được đặt cho thử nghiệm, không phải thông tin thương mại thực tế. File Excel nguồn ban đầu được giữ nguyên; phần bổ sung nằm riêng trong extension và được áp dụng khi khởi tạo hoặc chạy `--extensions-only`. Extension chỉ thêm bản ghi thiếu, không ghi đè giá hoặc số lượng đã được người dùng cập nhật.
 
@@ -97,20 +99,11 @@ Lệnh reset xóa và tái tạo riêng `honda_chatbot`; chỉ chạy khi chủ 
 
 Ứng dụng chỉ có SELECT/INSERT/UPDATE/DELETE trên database. `chatbot_ro` có SELECT view AI và EXECUTE các hàm scope. Root chỉ nằm trong cấu hình khởi tạo. Schema chuẩn không bị sửa.
 
-### Import dữ liệu hiện tại sang máy khác
+### File SQL trong Git và việc chuyển máy chủ
 
-Repository private có bản dump `data/seed/honda_chatbot_current.sql` gồm dữ liệu hiện tại của database mô phỏng. Dump không chứa mật khẩu MySQL, không chứa quyền tài khoản và cố ý bỏ qua `schema_migrations` cùng các view để script khởi tạo tạo lại chúng theo cấu hình máy mới.
+Khi dùng chung LAN, máy thành viên **không import** `data/seed/honda_chatbot_current.sql`. File này là ảnh dữ liệu cũ, không phải dữ liệu đang chạy và không tự cập nhật theo MySQL. Nó thiếu `schema_migrations`, view và hàm scope; import rồi chạy lại mọi migration có thể lỗi cột/bảng đã tồn tại. Không dùng file đó để đồng bộ giữa các máy.
 
-Trên máy Vũ, bật MySQL/MariaDB rồi tạo `.env` từ `.env.example`. Đặt `DB_HOST=127.0.0.1`, `DB_PORT=3306`, `DB_NAME=honda_chatbot`, `DB_USER=admin_nt` và các mật khẩu riêng của máy đó. Sau đó chạy PowerShell từ thư mục dự án:
-
-```powershell
-Get-Content data/seed/honda_chatbot_current.sql | D:\xampp\mysql\bin\mysql.exe -u root -p
-python -m pip install -r requirements.txt
-python init_db.py --extensions-only
-python check_db.py
-```
-
-Nếu XAMPP được cài ở thư mục khác, thay đường dẫn đến `mysql.exe`. Lệnh import yêu cầu mật khẩu tài khoản quản trị MySQL của máy Vũ. Không dùng `--reset` sau khi import vì sẽ xóa dữ liệu đã chuyển. Bản dump này là dữ liệu mô phỏng và chỉ nên dùng trong repository private.
+Nếu cần chuyển hẳn máy chủ, sao lưu database đang chạy bằng công cụ MySQL/MariaDB với đầy đủ bảng, `schema_migrations`, view, routines và triggers. Giữ file sao lưu ngoài Git, kiểm tra DEFINER và phiên bản server trên đích; sau restore, cấu hình `.env`, cấp lại account local/LAN và chạy `scripts/check_shared_mysql.py` trên từng backend. Không chạy `--reset` trên database đã restore vì sẽ xóa dữ liệu vừa chuyển.
 
 ## Tài khoản demo
 
@@ -166,6 +159,8 @@ Ví dụ: “giá Vario 160”, “thông tin SH Mode 125”, “xe ga dưới 5
 Khách hàng và tồn kho có tìm kiếm, lọc, phân trang và sắp xếp. Opportunity, Quote, Booking giữ trạng thái **Sắp có** và HTTP 501, chưa tự tạo schema.
 
 ## Kiểm thử
+
+Không chạy bộ kiểm thử ghi dữ liệu trên MySQL dùng chung đang phục vụ nhóm. Trên database phát triển, dùng `python scripts/verify_with_snapshot.py` để sao lưu, chạy reset + pytest và khôi phục/so sánh hash mọi bảng cùng workbook sau đó. Script tìm MySQL client qua PATH hoặc basedir của server cục bộ; có thể đặt `MYSQL_BIN_DIR` tới thư mục chứa `mysql.exe` và `mysqldump.exe`. Snapshot chứa dữ liệu riêng tư, lưu trong `data/exports/db-verification/` bị Git bỏ qua; tạm dừng mọi thao tác ghi khác trong lúc chạy. Thư mục tạm pytest nằm riêng dưới `data/exports/`, không phụ thuộc ACL thư mục Temp của máy cũ.
 
 ```powershell
 python init_db.py --reset
