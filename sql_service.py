@@ -126,6 +126,9 @@ def answer_sql_question(
         return 'Chưa phân tích được câu hỏi lúc này. Bạn hãy thử lại hoặc nêu rõ mẫu xe và điều kiện.'
     rows = _execute_text_to_sql(sql, params, allowed_views=allowed_views,
                                 scope_branch_ids=authorization['scope_branch_ids'],own_user_id=authorization['own_user_id'])
+    # SUM trên tập rỗng trả NULL; số lượng tồn bằng 0, không chuyển None thành chuỗi/số.
+    if intent_code == 'ask_stock' and rows == [{'total_stock': None}]:
+        rows = [{'total_stock': 0}]
     if include_inventory_details and intent_code=='ask_stock' and len(rows)==1 and set(rows[0])=={'total_stock'}:
         total=rows[0]['total_stock'] or 0
         detail_sql,detail_params=plan_query(question+' chi tiết theo sản phẩm theo chi nhánh',intent_code)
