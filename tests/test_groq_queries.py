@@ -1,8 +1,8 @@
-import os
-import pytest
-from db import cursor
-from llm_sql import generate_query
-from sql_service import _execute_text_to_sql
+import os  # Đọc biến môi trường hoặc thông tin hệ điều hành được dùng trong file.
+import pytest  # Khai báo fixture, tham số hóa test và kiểm tra kết quả.
+from db import cursor  # Mở cursor hoặc connection MySQL.
+from llm_sql import generate_query  # Sinh truy vấn SQL và bind literal thành tham số.
+from sql_service import _execute_text_to_sql  # Thực thi câu hỏi SQL hoặc truy vấn đã kiểm tra.
 
 pytestmark = pytest.mark.skipif(not os.getenv('GROQ_API_KEY'), reason='GROQ_API_KEY is not configured')
 

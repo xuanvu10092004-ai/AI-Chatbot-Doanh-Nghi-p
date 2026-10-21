@@ -1,6 +1,8 @@
+// Tải widget theo quyền backend rồi hiển thị số tổng hợp hoặc biểu đồ Chart.js.
 'use strict';
 document.querySelectorAll('[data-widget]').forEach(widget=>{
   let chart;
+  // Mỗi widget gọi endpoint riêng; lỗi chỉ bật nút thử lại của widget đó.
   const load=async()=>{
     const content=widget.querySelector('.widget-content');widget.querySelector('.retry').hidden=true;content.textContent='Đang tải…';if(chart)chart.destroy();
     try{const response=await fetch('/api/dashboard/'+widget.dataset.widget);if(!response.ok)throw Error();const {rows}=await response.json();

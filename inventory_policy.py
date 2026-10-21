@@ -1,5 +1,5 @@
-"""Quy ước tồn kho dùng chung cho chatbot và màn hình bán hàng."""
-from question_language import normalize
+# Nhận diện câu hỏi về xe sắp hết hàng theo ngưỡng dùng chung.
+from question_language import normalize  # Chuẩn hóa câu có dấu/không dấu trước khi so từ khóa.
 
 LOW_STOCK_THRESHOLD = 5
 

@@ -1,12 +1,11 @@
-"""Ánh xạ bảng PDF/DOCX/XLSX thành bản nháp; không dùng LLM để đoán dữ liệu thiếu."""
-import json
-import re
-from flask import g
-from db import cursor,transaction
-from customer_input import FIELDS,REQUIRED,MAX_ROWS,CustomerInputError,today,stage,get_batch,read_customer_workbook,normalize_row,_existing
-from document_service import _load,stored_path
-from question_language import normalize
-from security import permissions
+import json  # Lưu cảnh báo trích xuất cạnh bản nháp nhập khách.
+import re  # Tách header và dòng văn bản có nhãn từ nội dung tài liệu.
+from flask import g  # Lấy user nhân viên sở hữu batch nhập file.
+from db import cursor, transaction  # Khóa nguồn và ghi batch trong cùng transaction.
+from customer_input import FIELDS, REQUIRED, MAX_ROWS, CustomerInputError, today, stage, get_batch, read_customer_workbook, normalize_row, _existing  # Dùng chung quy tắc kiểm tra và lưu khách.
+from document_service import _load, stored_path  # Kiểm tra quyền tài liệu và lấy file gốc đã lưu.
+from question_language import normalize  # So khớp tiêu đề cột dù người nhập dùng dấu khác nhau.
+from security import permissions  # Chặn nhập file khi thiếu quyền khách hàng/tài liệu.
 
 
 def header_key(value):
@@ -19,6 +18,7 @@ def header_key(value):
     return aliases.get(label)
 
 
+# Chuẩn hóa đầu vào trong bước extracted_rows để các phép so khớp phía sau dùng cùng một dạng.
 def extracted_rows(extraction,branch_code=None):
     output=[];warnings=[]
     mapping=None
@@ -39,7 +39,7 @@ def extracted_rows(extraction,branch_code=None):
             output.append(row)
     if not output:
         # Hỗ trợ khối có nhãn; không suy diễn cột từ văn bản PDF mất cấu trúc.
-        from customer_chat import parse_customer_values
+        from customer_chat import parse_customer_values  # Phân tích thông tin khách gửi qua chat.
         current={}
         for block in extraction.get('blocks',[]):
             if block.get('kind')!='text':continue
@@ -60,6 +60,7 @@ def extracted_rows(extraction,branch_code=None):
     return output,list(dict.fromkeys(warnings))
 
 
+# Chỉ nhân viên có quyền đọc/ghi được staging danh sách khách từ tài liệu đã trích xuất.
 def stage_document(document_id,chat_session_id=None):
     if not g.user or g.user['user_type']!='staff' or not {'customer:write','document:manage'}<=permissions().keys():
         raise CustomerInputError('Bạn không có quyền thực hiện yêu cầu này.',403)

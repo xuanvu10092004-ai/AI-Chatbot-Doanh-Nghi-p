@@ -1,33 +1,24 @@
-"""
-sql_guard.py - Validator cho SQL do LLM sinh (text-to-SQL), dùng cho MySQL.
-
-Cài: pip install sqlglot
-Dùng:
-    from sql_guard import validate_sql, SqlRejected
-    safe_sql = validate_sql(llm_sql, allowed_views={"v_ai_products", "v_ai_inventory"})
-
-Nguyên tắc: whitelist, không blacklist. Chỉ chấp nhận đúng 1 câu SELECT, chỉ đọc
-các view trong allowed_views (tập này do backend tính theo quyền của user, KHÔNG
-lấy từ LLM), không có hàm nguy hiểm, và luôn có LIMIT <= MAX_ROWS.
-"""
-import re
-import sqlglot
-from sqlglot import exp
-from sqlglot.optimizer.scope import traverse_scope
+# Kiểm tra AST để chỉ cho phép một truy vấn SELECT tới view nằm trong whitelist.
+import re  # Chặn comment, outfile và cú pháp nguy hiểm trước khi parse AST.
+import sqlglot  # Parse câu SQL theo cú pháp MySQL.
+from sqlglot import exp  # So loại node câu lệnh, bảng, hàm và LIMIT trong AST.
+from sqlglot.optimizer.scope import traverse_scope  # Kiểm tra bảng trong cả CTE và subquery.
 
 MAX_ROWS = 100
 FORBIDDEN_FUNCS = {"SLEEP", "BENCHMARK", "LOAD_FILE", "GET_LOCK", "RELEASE_LOCK", "UUID_SHORT"}
 
 
+# SQL bị từ chối; mã lỗi nội bộ không được phản hồi nguyên văn cho người dùng.
 class SqlRejected(ValueError):
     """SQL bị từ chối. Thông điệp dùng cho log/audit, KHÔNG gửi nguyên văn cho người dùng."""
 
 
+# Parse, áp whitelist view, cấm hàm nguy hiểm và ép LIMIT tối đa MAX_ROWS.
 def validate_sql(sql: str, allowed_views: set[str]) -> str:
     if not sql or not sql.strip():
         raise SqlRejected("empty_sql")
 
-    # Chặn ký tự/chuỗi dễ dùng để lách ở tầng văn bản (kiểm tra thêm, không thay cho AST)
+    # Chặn comment và ghi file ngay trên chuỗi, trước khi phân tích AST.
     if re.search(r"--|/\*|\*/|#|\binto\s+(outfile|dumpfile)\b", sql, re.IGNORECASE):
         raise SqlRejected("comment_or_outfile_not_allowed")
 
@@ -44,13 +35,13 @@ def validate_sql(sql: str, allowed_views: set[str]) -> str:
     if not isinstance(tree, (exp.Select, exp.Union)):
         raise SqlRejected("only_select_allowed")
 
-    # Không cho các nút ghi/DDL/lệnh khác lọt vào bên trong (CTE, subquery...)
+    # Chặn cả node ghi/DDL ẩn bên trong CTE hoặc truy vấn con.
     for node in tree.walk():
         if isinstance(node, (exp.Insert, exp.Update, exp.Delete, exp.Drop, exp.Create,
                              exp.Alter, exp.Command, exp.Into, exp.Set)):
             raise SqlRejected(f"forbidden_node: {type(node).__name__}")
 
-    # Whitelist bảng/view (bỏ qua tên CTE do chính câu lệnh định nghĩa)
+    # Duyệt từng scope để CTE không che được bảng thật nằm trong truy vấn con.
     allowed = {v.lower() for v in allowed_views}
     real_tables = []
     for scope in traverse_scope(tree):
@@ -64,7 +55,7 @@ def validate_sql(sql: str, allowed_views: set[str]) -> str:
     if tree.find(exp.Lock) or tree.find(exp.Hint):
         raise SqlRejected("lock_or_hint_not_allowed")
 
-    # Hàm nguy hiểm
+    # Chỉ cho phép hàm nằm trong whitelist hẹp; chặn sleep và hàm truy cập file/khóa.
     for func in tree.find_all(exp.Func):
         fname = (func.sql_name() or "").upper()
         if fname in FORBIDDEN_FUNCS:
@@ -73,12 +64,12 @@ def validate_sql(sql: str, allowed_views: set[str]) -> str:
         if str(anon.this).upper() not in {"ROUND", "DATE_FORMAT"}:
             raise SqlRejected(f"function_not_allowed: {anon.this}")
 
-    # Biến phiên (@x, @@x) bị cấm để LLM không đổi được @ai_branch
+    # Cấm biến phiên để truy vấn không thể thay scope do backend thiết lập.
     for node in tree.walk():
         if isinstance(node, (exp.SessionParameter, exp.Parameter)):
             raise SqlRejected("session_variable_not_allowed")
 
-    # Ép LIMIT <= MAX_ROWS (chỉ áp cho câu SELECT ngoài cùng)
+    # Giới hạn số dòng trả về ở SELECT ngoài cùng, không sửa LIMIT trong truy vấn con.
     limit = tree.args.get("limit")
     if limit is None:
         tree = tree.limit(MAX_ROWS)

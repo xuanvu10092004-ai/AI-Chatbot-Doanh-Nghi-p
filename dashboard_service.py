@@ -1,7 +1,7 @@
-"""Dashboard chỉ chạy SQL cố định, lọc scope từ quyền hiệu lực."""
-from flask import g
-from db import cursor
-from security import permissions
+# Trả dữ liệu từng widget dashboard sau khi áp dụng phạm vi quyền của user.
+from flask import g  # Cung cấp user hiện tại cho bộ lọc bản ghi sở hữu.
+from db import cursor  # Chạy các phép tổng hợp trên đơn, khách, tồn và sản phẩm.
+from security import permissions  # Lấy scope all, branch hoặc own cho từng permission.
 
 WIDGETS={
  'orders':('Đơn hàng & doanh thu',('order:read',)),
@@ -18,6 +18,7 @@ WIDGETS={
 
 
 def scope_filter(code,alias,owner=None):
+    # Chuyển scope quyền thành điều kiện SQL và tuple tham số, không nhận tên cột từ request.
     grant=permissions()[code]
     if grant['scope']=='all':return '1=1',()
     if grant['scope']=='branch':return alias+' = %s',(grant['branch'],)
@@ -26,6 +27,7 @@ def scope_filter(code,alias,owner=None):
 
 
 def widget_data(widget):
+    # Chọn truy vấn tổng hợp tương ứng với widget đã được whitelist ở WIDGETS.
     if widget in {'inventory','inventory-branch'}:
         where,params=scope_filter('inventory:read','i.branch_id')
         select='COALESCE(SUM(i.quantity),0) AS total_stock,COALESCE(SUM(i.quantity=0),0) AS empty_rows' if widget=='inventory' else 'b.code AS label,SUM(i.quantity) AS value'

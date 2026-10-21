@@ -1,11 +1,13 @@
-from flask import request,render_template,jsonify
-from mysql.connector import IntegrityError
-from db import cursor
-from security import require_permission
-from admin_service import mutate,AdminRejected
-from dashboard_service import scope_filter
+# Đăng ký trang và API quản lý user, role, permission cùng audit log.
+from flask import request, render_template, jsonify  # Đọc bộ lọc request và tạo phản hồi HTML/JSON.
+from mysql.connector import IntegrityError  # Nhận lỗi ràng buộc khi dữ liệu admin bị trùng.
+from db import cursor  # Chạy các truy vấn MySQL trong phạm vi từng request.
+from security import require_permission  # Bảo vệ mỗi route bằng permission ở backend.
+from admin_service import mutate, AdminRejected  # Giao cập nhật RBAC cho service và ánh xạ lỗi nghiệp vụ.
+from dashboard_service import scope_filter  # Áp dụng giới hạn chi nhánh hoặc user cho danh sách.
 
 
+# Đăng ký các endpoint của nhóm admin để Flask chuyển request vào đúng hàm.
 def register_admin(app):
     @app.errorhandler(AdminRejected)
     def admin_error(error):return jsonify(error='rejected',message=str(error)),400
@@ -17,6 +19,7 @@ def register_admin(app):
     @app.get('/api/admin/users')
     @require_permission('user:manage')
     def users_list():
+        # Lọc user theo quyền quản trị, giới hạn kết quả để bảng không tải quá nhiều dòng.
         search='%'+request.args.get('q','')+'%'
         where,params=scope_filter('user:manage','home_branch_id','id')
         with cursor() as cur:
@@ -54,6 +57,7 @@ def register_admin(app):
     def audit_list():
         scope,values=scope_filter('audit:read','au.home_branch_id','l.actor_user_id')
         filters=[scope];params=list(values)
+        # Ghép điều kiện audit theo tên cột cố định; giá trị lọc luôn bind qua parameters.
         for key,column in [('actor','l.actor_user_id'),('action','l.action')]:
             if request.args.get(key):filters.append(column+'=%s');params.append(request.args[key])
         for key,operator in [('from','>='),('to','<=')]:

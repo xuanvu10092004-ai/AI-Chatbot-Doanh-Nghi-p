@@ -1,9 +1,12 @@
+-- Bổ sung quyền xuất chứng từ bán hàng và các mục điều hướng liên quan.
 USE honda_chatbot;
 INSERT INTO permissions(code,description)
+-- Gán quyền xuất hóa đơn theo phạm vi của từng vai trò.
 SELECT 'invoice:export','Xuất chứng từ bán hàng PDF mô phỏng từ đơn được phép xem'
 WHERE NOT EXISTS (SELECT 1 FROM permissions WHERE code='invoice:export');
 INSERT INTO role_permissions(role_id,permission_id,data_scope)
 SELECT r.id,p.id,CASE WHEN r.name IN ('super_admin','accountant') THEN 'all' ELSE 'branch' END
+-- Hiển thị các mục đơn hàng và thêm nhanh khách mua xe khi có quyền.
 FROM roles r JOIN permissions p ON p.code='invoice:export'
 WHERE r.name IN ('super_admin','accountant','branch_manager','sales_staff')
 AND NOT EXISTS (SELECT 1 FROM role_permissions rp WHERE rp.role_id=r.id AND rp.permission_id=p.id);

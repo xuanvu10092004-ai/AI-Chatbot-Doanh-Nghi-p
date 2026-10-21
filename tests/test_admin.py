@@ -1,4 +1,4 @@
-from db import cursor
+from db import cursor  # Mở cursor hoặc connection MySQL.
 
 
 def test_dynamic_role_grant_revoke_and_audit(auth_client):
@@ -7,7 +7,7 @@ def test_dynamic_role_grant_revoke_and_audit(auth_client):
     response=auth_client.post('/api/admin/roles',json={'name':'test_dynamic_role','landing_path':'/dashboard','permissions':[{'permission_id':pid,'data_scope':'all'}]})
     assert response.status_code==200;role_id=response.get_json()['id']
     try:
-        # Nhân viên không có quyền quản trị; khách nay luôn bị giới hạn ở tra giá/đặt lịch.
+        # Gán role tạm để xác nhận quyền bị gỡ có hiệu lực ngay với request kế tiếp.
         assert auth_client.post('/api/admin/users/7/roles',json={'roles':[{'role_id':role_id}]}).status_code==200
         employee=auth_client.__class__(auth_client.application);employee.login(7)
         assert employee.get('/admin/users').status_code==200

@@ -1,14 +1,15 @@
+# File này lập kế hoạch, kiểm tra quyền và thực thi truy vấn cho chatbot.
 from __future__ import annotations
 
-from typing import Any
+from typing import Any  # Mô tả kiểu tham số và kết quả thực thi truy vấn.
 
-from access_control import authorize_intent, create_session, detect_intent, permitted_views
-from query_plans import plan_query, NeedsGeneratedQuery
-from llm_sql import generate_query, QueryClarification
-from sql_guard import SqlRejected
-from answer_renderer import QueryEvidence
-from db import get_connection
-from sql_safety import validate_sql
+from access_control import authorize_intent, create_session, detect_intent, permitted_views  # Dùng session, intent và quyền của chatbot.
+from query_plans import plan_query, NeedsGeneratedQuery  # Tạo kế hoạch truy vấn tồn kho theo câu hỏi.
+from llm_sql import generate_query, QueryClarification  # Sinh truy vấn SQL và bind literal thành tham số.
+from sql_guard import SqlRejected  # Kiểm tra whitelist AST của truy vấn SQL.
+from answer_renderer import QueryEvidence  # Định dạng kết quả truy vấn thành nội dung hiển thị.
+from db import get_connection  # Mở cursor hoặc connection MySQL.
+from sql_safety import validate_sql  # Kiểm tra validator và timeout truy vấn SQL.
 
 
 AI_VIEWS = frozenset(
@@ -22,6 +23,7 @@ AI_VIEWS = frozenset(
 )
 
 
+# Báo route rằng schema chuẩn chưa có bảng cho module nghiệp vụ cũ.
 class SchemaExtensionRequired(RuntimeError):
     """Raised when a legacy module has no table in the Honda schema."""
 
@@ -36,7 +38,9 @@ def _format_rows(rows: list[dict[str, Any]], generated: bool = False, summary: s
     return QueryEvidence("\n".join(lines), rows, generated, summary)
 
 
+# Chạy truy vấn bằng connection read-only; scope chi nhánh được thêm bằng parameters ở bước này.
 def _execute_text_to_sql(sql: str, params: tuple[Any, ...] = (), *, allowed_views=None, scope_branch_ids=None, own_user_id=None) -> list[dict[str, Any]]:
+    # Kiểm tra truy vấn trước khi mở connection read-only và áp scope bằng session variables.
     validated = validate_sql(sql, frozenset({'v_ai_products'} if allowed_views is None else allowed_views))
     if scope_branch_ids is not None and len(scope_branch_ids) != 1:
         raise ValueError("ambiguous_branch_scope")
@@ -46,6 +50,7 @@ def _execute_text_to_sql(sql: str, params: tuple[Any, ...] = (), *, allowed_view
         db_cursor = connection.cursor(dictionary=True)
         db_cursor.execute("SET @ai_branch = %s", (scope_branch_ids[0] if scope_branch_ids else None,))
         db_cursor.execute('SET @ai_user = %s',(own_user_id,))
+        # Chọn tên biến timeout phù hợp giữa MySQL và MariaDB.
         db_cursor.execute("SELECT VERSION() AS version")
         version = db_cursor.fetchone()['version']
         if 'MariaDB' in version:
@@ -65,6 +70,7 @@ def _execute_text_to_sql(sql: str, params: tuple[Any, ...] = (), *, allowed_view
 
 
 def _branch_clause(scope_branch_ids: list[int] | None) -> tuple[str, tuple[int, ...]]:
+    # Biến scope rỗng thành điều kiện không trả dòng; không có scope thì không thêm lọc.
     if scope_branch_ids is None:
         return "", ()
     if not scope_branch_ids:
@@ -73,12 +79,14 @@ def _branch_clause(scope_branch_ids: list[int] | None) -> tuple[str, tuple[int, 
     return f" AND branch_id IN ({placeholders})", tuple(scope_branch_ids)
 
 
+# Xác định intent và quyền trước, sau đó mới chọn kế hoạch SQL hoặc yêu cầu LLM sinh truy vấn.
 def answer_sql_question(
     question: str,
     user_id: int | None = None,
     session_id: int | None = None,
     include_inventory_details: bool = False,
 ) -> str:
+    # Ghi nhận intent và quyết định quyền trước khi tạo hoặc thực thi SQL.
     if session_id is None:
         session_id = create_session(user_id)
     intent_code = detect_intent(question)
@@ -91,6 +99,7 @@ def answer_sql_question(
             "Opportunity, Quote và Booking cần schema-extension; chưa được tự thiết kế bảng."
         )
 
+    # Giới hạn các view theo intent rồi giao với quyền view của user.
     intent_views = {
         'ask_price_list': {'v_ai_products'},
         'ask_stock': {'v_ai_products', 'v_ai_inventory'},
@@ -100,6 +109,7 @@ def answer_sql_question(
     }
     allowed_views = permitted_views(user_id) & intent_views.get(intent_code, set())
     generated = False
+    # Thử kế hoạch SQL có sẵn trước; chỉ gọi LLM khi cần nhóm/điều kiện phức tạp.
     try:
         try:
             sql, params = plan_query(question, intent_code)
@@ -109,7 +119,7 @@ def answer_sql_question(
     except QueryClarification as exc:
         return 'Cần làm rõ: ' + str(exc)
     except (SqlRejected, ValueError):
-        from access_control import mark_audit_denied
+        from access_control import mark_audit_denied  # Dùng session, intent và quyền của chatbot.
         mark_audit_denied(authorization['audit_id'], 'SQL bị chặn bởi whitelist hoặc validator')
         return authorization['denied_message']
     except Exception:
@@ -124,12 +134,12 @@ def answer_sql_question(
         summary=f'Tổng tồn kho: {int(total):,} xe. Chi tiết theo từng phiên bản và chi nhánh trong phạm vi được cấp.'.replace(',','.')
         if len(details)==100:summary+=' Hiển thị tối đa 100 dòng; mở trang Tồn kho để xem tiếp.'
         return QueryEvidence(f'total_stock: {total}\n'+str(_format_rows(details)),details,generated,summary)
-    from question_language import normalize, product_patterns, asks_available_stock
+    from question_language import normalize, product_patterns, asks_available_stock  # Chuẩn hóa câu hỏi và nhận diện mẫu xe.
     patterns = product_patterns(question)
     if not rows and intent_code == 'ask_stock' and asks_available_stock(question):
         return 'Không tìm thấy dữ liệu tồn kho phù hợp trong phạm vi bạn được xem. Hãy kiểm tra lại mẫu xe hoặc chi nhánh cần tra cứu.'
     summary = None
-    from inventory_policy import asks_low_stock
+    from inventory_policy import asks_low_stock  # Dùng quy tắc xác định tình trạng tồn kho.
     if intent_code == 'ask_stock' and asks_low_stock(question):
         summary = 'Sắp hết hàng là còn 1–4 xe theo phiên bản và chi nhánh; số lượng 0 là hết hàng.'
         if not rows:
@@ -138,7 +148,7 @@ def answer_sql_question(
         if intent_code == 'ask_stock' and asks_available_stock(question):
             summary = 'Các phiên bản còn xe tại những chi nhánh dưới đây, trong phạm vi bạn được xem.'
         if 'so sanh' in normalize(question) and len(patterns) >= 2:
-            import re
+            import re  # Tìm và chuẩn hóa mẫu văn bản bằng biểu thức chính quy.
             missing = [pattern.strip('%').replace('%', ' ') for pattern in patterns
                        if not any(re.search('.*'.join(re.escape(normalize(part)) for part in pattern.split('%')),
                                             normalize(str(row.get('model_name', '')))) for row in rows)]

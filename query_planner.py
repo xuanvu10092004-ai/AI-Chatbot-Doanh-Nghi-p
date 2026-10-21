@@ -1,15 +1,17 @@
-"""Truy vấn cố định cho câu hỏi biến; câu phức tạp chuyển sang bộ sinh SQL."""
-import re
+# Tạo SQL có tham số cho các câu hỏi phổ biến về xe, khách, đơn và tồn kho.
+import re  # Nhận diện mã chi nhánh, năm đời xe và cụm từ trong câu hỏi.
 
-from question_language import normalize, product_pattern, product_patterns, asks_available_stock
-from inventory_policy import asks_low_stock, LOW_STOCK_THRESHOLD
+from question_language import normalize, product_pattern, product_patterns, asks_available_stock  # Chuẩn hóa câu hỏi và nhận diện mẫu xe.
+from inventory_policy import asks_low_stock, LOW_STOCK_THRESHOLD  # Dùng quy tắc xác định tình trạng tồn kho.
 
 
+# Báo cần LLM sinh truy vấn khi câu hỏi cần nhóm hoặc tổng hợp phức tạp.
 class NeedsGeneratedQuery(ValueError):
     pass
 
 
 def plan_query(question: str, intent: str) -> tuple[str, tuple]:
+    # Chuẩn hóa câu hỏi rồi chọn query template theo intent; giá trị động luôn bind.
     q = normalize(question)
     patterns = product_patterns(question)
     simple_comparison = not any(term in q for term in (

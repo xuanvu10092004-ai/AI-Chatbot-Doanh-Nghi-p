@@ -1,13 +1,13 @@
 """Kiểm tra luồng chat thật với MySQL và định dạng DOM không thực thi HTML."""
-import shutil
-import subprocess
-from pathlib import Path
+import shutil  # Tìm tiện ích hoặc sao chép file.
+import subprocess  # Chạy parser hoặc tiện ích trong tiến trình riêng.
+from pathlib import Path  # Tạo và kiểm tra đường dẫn file trong dự án.
 
-import pytest
+import pytest  # Khai báo fixture, tham số hóa test và kiểm tra kết quả.
 
-from db import cursor
-from rag_service import _search_query
-from text_formatting import normalize_dashes
+from db import cursor  # Mở cursor hoặc connection MySQL.
+from rag_service import _search_query  # Tạo truy vấn RAG và lọc nguồn theo quyền.
+from text_formatting import normalize_dashes  # Kiểm tra quy ước dấu gạch trong câu trả lời.
 
 ROOT = Path(__file__).resolve().parents[1]
 

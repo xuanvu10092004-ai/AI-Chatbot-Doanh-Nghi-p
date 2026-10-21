@@ -1,14 +1,16 @@
+# Các tiện ích hỗ trợ chuẩn bị dữ liệu, cấu hình và kiểm tra triển khai.
 """Đo trên đáp án mẫu, không suy rộng thành độ chính xác mọi tài liệu/OCR."""
-import json
-import re
-import sys
-from pathlib import Path
-from collections import Counter
+import json  # Đọc manifest đáp án mẫu và tạo báo cáo Markdown.
+import re  # So sánh token văn bản, bỏ khác biệt xuống dòng.
+import sys  # Thêm thư mục dự án vào đường dẫn import của Python.
+from pathlib import Path  # Tìm mẫu tài liệu và ghi báo cáo tại thư mục dự án.
+from collections import Counter  # Đếm token trùng để tính recall/precision.
 
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
-from document_parser import parse_document, ParseError
+from document_parser import parse_document, ParseError  # Dùng parser và giới hạn xử lý file.
 
 
+# So sánh kết quả parser với manifest độc lập, ghi bảng và trả trạng thái lỗi mẫu.
 def report():
     root=Path(__file__).resolve().parents[1]
     samples=root/'data/samples/documents'

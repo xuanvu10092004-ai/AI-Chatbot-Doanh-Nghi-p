@@ -1,8 +1,11 @@
+// Tải dữ liệu quản trị, dựng biểu mẫu role/user và gửi thay đổi có CSRF token.
 'use strict';
 const section=document.getElementById('admin').dataset.section,feedback=document.getElementById('adminFeedback'),editor=document.getElementById('editor');let rows=[],lookups={},perms=[];
 const el=id=>document.getElementById(id);
+// Gửi JSON kèm CSRF token; quyền thực tế vẫn được backend kiểm tra.
 async function api(path,method='GET',data){const response=await fetch(path,{method,headers:{'Content-Type':'application/json','X-CSRF-Token':document.querySelector('meta[name="csrf-token"]').content},body:data?JSON.stringify(data):undefined});const payload=await response.json();if(!response.ok)throw Error(payload.message||'Yêu cầu không được chấp nhận.');return payload;}
 function action(label,callback){const button=document.createElement('button');button.type='button';button.className='secondary';button.textContent=label;button.addEventListener('click',callback);return button;}
+// Tạo lựa chọn role/branch cho form user hoặc ma trận permission cho form role.
 function choices(){
  if(section==='users'){el('home_branch_id').replaceChildren(new Option('Toàn hệ thống',''));for(const b of lookups.branches)el('home_branch_id').add(new Option(b.code,b.id));for(const role of lookups.roles){const label=document.createElement('label'),input=document.createElement('input');input.type='checkbox';input.value=role.id;label.append(input,document.createTextNode(role.description||role.name));const expiry=document.createElement('input');expiry.type='datetime-local';expiry.className='role-expiry';expiry.dataset.role=role.id;expiry.setAttribute('aria-label','Ngày hết hạn '+role.name);label.append(expiry);el('roleChoices').append(label);}}
  if(section==='roles'){for(const p of perms){const row=document.createElement('div');row.className='matrix-row';const label=document.createElement('label'),input=document.createElement('input'),scope=document.createElement('select');input.type='checkbox';input.value=p.id;label.append(input,document.createTextNode(p.code+' · '+p.description));scope.setAttribute('aria-label','Phạm vi '+p.code);for(const value of ['all','branch','own'])scope.add(new Option({all:'Toàn hệ thống',branch:'Chi nhánh',own:'Bản ghi sở hữu'}[value],value));row.append(label,scope);el('permissionMatrix').append(row);}}

@@ -1,5 +1,5 @@
-import pytest
-from db import cursor
+import pytest  # Khai báo fixture, tham số hóa test và kiểm tra kết quả.
+from db import cursor  # Mở cursor hoặc connection MySQL.
 
 
 @pytest.mark.parametrize('user_id,path',[(1,'/dashboard'),(3,'/customers'),(3,'/inventory'),(5,'/inventory'),(8,'/chat')])

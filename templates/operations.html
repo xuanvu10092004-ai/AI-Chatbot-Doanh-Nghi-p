@@ -1,3 +1,4 @@
+<!-- Dùng section từ Flask để chọn form quản lý danh mục xe hoặc lịch dịch vụ. -->
 {% extends 'base.html' %}{% block content %}
 <section id="operations" data-section="{{ section }}" data-can-manage="{{ 'true' if can('booking:manage') else 'false' }}">
 <h1>{{ 'Danh mục xe & đời xe' if section=='catalog' else 'Lịch sửa chữa & bảo dưỡng' }}</h1>

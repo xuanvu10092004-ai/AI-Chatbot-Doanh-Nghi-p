@@ -1,24 +1,26 @@
+# Các tiện ích hỗ trợ chuẩn bị dữ liệu, cấu hình và kiểm tra triển khai.
 """Tạo bộ tài liệu mô phỏng và đáp án độc lập để đo chất lượng parser."""
-from pathlib import Path
-import json
-from io import BytesIO
-from datetime import date
+from pathlib import Path  # Tạo thư mục và đường dẫn các tài liệu mẫu.
+import json  # Ghi manifest đáp án độc lập cho test parser.
+from io import BytesIO  # Giữ file PDF trong bộ nhớ khi tạo fixture.
+from datetime import date  # Tạo giá trị ngày mẫu cho workbook Excel.
 
-from docx import Document
-from openpyxl import Workbook
-from PIL import Image, ImageDraw, ImageFont, ImageFilter
-from reportlab.pdfgen import canvas
-from reportlab.pdfbase import pdfmetrics
-from reportlab.pdfbase.ttfonts import TTFont
-from reportlab.platypus import Table, TableStyle
-from reportlab.lib import colors
-from reportlab.lib.utils import ImageReader
-from reportlab.lib.pdfencrypt import StandardEncryption
+from docx import Document  # Tạo tài liệu Word có đoạn văn, bảng và ô gộp.
+from openpyxl import Workbook  # Tạo workbook Excel với bảng, ngày và công thức.
+from PIL import Image, ImageDraw, ImageFont, ImageFilter  # Tạo ảnh scan nghiêng/mờ để kiểm thử giới hạn OCR.
+from reportlab.pdfgen import canvas  # Tạo PDF nhiều trang, bảng và ảnh.
+from reportlab.pdfbase import pdfmetrics  # Đăng ký font để PDF hiển thị tiếng Việt.
+from reportlab.pdfbase.ttfonts import TTFont  # Nạp font TTF cho nội dung PDF mẫu.
+from reportlab.platypus import Table, TableStyle  # Dựng bảng có đường kẻ trong PDF.
+from reportlab.lib import colors  # Chọn màu cho bảng fixture.
+from reportlab.lib.utils import ImageReader  # Nhúng ảnh scan vào PDF.
+from reportlab.lib.pdfencrypt import StandardEncryption  # Tạo PDF mã hóa dùng cho ca lỗi.
 
 
 ROOT = Path(__file__).resolve().parents[1] / 'data/samples/documents'
 
 
+# Sinh fixture PDF/DOCX/XLSX cùng manifest nội dung kỳ vọng cho test parser.
 def generate():
     ROOT.mkdir(parents=True, exist_ok=True)
     fonts = [Path('C:/Windows/Fonts/arial.ttf'), Path('/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf')]
@@ -28,6 +30,7 @@ def generate():
     pdfmetrics.registerFont(TTFont('SampleVN', str(font)))
     manifest = []
 
+    # Dựng một PDF với font tiếng Việt và các dòng văn bản được cung cấp.
     def pdf(name, lines=None, encrypt=None):
         c = canvas.Canvas(str(ROOT / name), pagesize=(595, 842), encrypt=encrypt)
         c.setFont('SampleVN', 12)

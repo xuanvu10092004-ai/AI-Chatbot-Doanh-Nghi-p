@@ -1,7 +1,7 @@
-import pytest
-from db import cursor
-from query_planner import plan_query
-from sql_service import answer_sql_question
+import pytest  # Khai báo fixture, tham số hóa test và kiểm tra kết quả.
+from db import cursor  # Mở cursor hoặc connection MySQL.
+from query_planner import plan_query  # Tạo SQL template cho intent được nhận diện.
+from sql_service import answer_sql_question  # Thực thi câu hỏi SQL hoặc truy vấn đã kiểm tra.
 
 
 @pytest.mark.parametrize('question,condition',[
@@ -27,7 +27,7 @@ def test_stock_boundaries(quantity,low):
         cur.execute('SELECT i.branch_id,i.variant_id,i.quantity,b.code AS branch_code,pv.variant_name FROM inventory i JOIN branches b ON b.id=i.branch_id JOIN product_variants pv ON pv.id=i.variant_id LIMIT 1');row=cur.fetchone()
         try:
             cur.execute('UPDATE inventory SET quantity=%s WHERE branch_id=%s AND variant_id=%s',(quantity,row['branch_id'],row['variant_id']))
-            # Read in this same transaction to exercise the actual planner predicate.
+            # Truy vấn trong cùng transaction để kiểm tra điều kiện planner vừa tạo.
             cur.execute(sql,params)
             found=any(r['branch_code']==row['branch_code'] and r['variant_name']==row['variant_name'] for r in cur.fetchall())
             assert found==low

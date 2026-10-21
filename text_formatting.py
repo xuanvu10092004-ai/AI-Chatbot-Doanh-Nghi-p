@@ -1,6 +1,7 @@
-"""Quy ước văn bản chung cho câu trả lời, lịch sử chat và tiêu đề nguồn."""
+# Chuẩn hóa dấu gạch trong nội dung hiển thị mà không sửa dữ liệu lưu trong CSDL.
 
 
+# Thay en dash/em dash thành dấu gạch ngang thường ở ranh giới hiển thị.
 def normalize_dashes(value: str) -> str:
     """Đổi gạch dài sang '-' kể cả khi chúng đến từ LLM hoặc dữ liệu cũ.
 

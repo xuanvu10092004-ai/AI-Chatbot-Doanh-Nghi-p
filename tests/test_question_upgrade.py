@@ -1,13 +1,13 @@
-import json
-from types import SimpleNamespace
-import pytest
-from db import cursor
-from app import app
-from query_plans import plan_query
-from routing import route_question
-from access_control import detect_intent, permitted_views
-from llm_sql import bind_literals, generate_query
-from sql_service import _execute_text_to_sql
+import json  # Đọc hoặc ghi dữ liệu JSON trong luồng xử lý của file.
+from types import SimpleNamespace  # Tạo response giả cho client model trong test.
+import pytest  # Khai báo fixture, tham số hóa test và kiểm tra kết quả.
+from db import cursor  # Mở cursor hoặc connection MySQL.
+from app import app  # Dùng ứng dụng Flask đang được kiểm thử.
+from query_plans import plan_query  # Tạo kế hoạch truy vấn tồn kho theo câu hỏi.
+from routing import route_question  # Phân loại câu hỏi SQL/RAG và nhãn module.
+from access_control import detect_intent, permitted_views  # Dùng session, intent và quyền của chatbot.
+from llm_sql import bind_literals, generate_query  # Sinh truy vấn SQL và bind literal thành tham số.
+from sql_service import _execute_text_to_sql  # Thực thi câu hỏi SQL hoặc truy vấn đã kiểm tra.
 
 
 @pytest.mark.parametrize('question,model', [
@@ -61,7 +61,7 @@ def test_public_specs_are_not_internal_procedures():
 
 
 def test_rendered_prices_keep_every_digit():
-    from answer_renderer import render_rows
+    from answer_renderer import render_rows  # Định dạng kết quả truy vấn thành nội dung hiển thị.
     result = render_rows([{'model_name': 'Air Blade 160', 'list_price': 57500000}, {'list_price': 60500000}])
     assert '57.500.000 VNĐ' in result and '60.500.000 VNĐ' in result
     assert '57.500 VNĐ' not in result
@@ -143,7 +143,7 @@ def test_many_literals_keep_sql_order_and_no_marker_prefix_collision():
 
 
 def test_generated_query_receives_only_allowed_schema(monkeypatch):
-    import ai_service
+    import ai_service  # Thay client model để kiểm tra schema prompt được gửi.
     captured = []
     def completion(**kwargs):
         captured.append(kwargs)
@@ -156,7 +156,7 @@ def test_generated_query_receives_only_allowed_schema(monkeypatch):
 
 
 def test_llm_cannot_expand_guest_rights(monkeypatch):
-    import ai_service
+    import ai_service  # Thay client model để test truy vấn không nâng quyền guest.
     def completion(**kwargs):
         return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content=json.dumps({'sql': 'SELECT * FROM v_ai_product_costs'})))])
     monkeypatch.setenv('GROQ_API_KEY', 'test-key')

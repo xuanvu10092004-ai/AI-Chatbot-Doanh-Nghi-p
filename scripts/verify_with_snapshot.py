@@ -1,20 +1,22 @@
+# Các tiện ích hỗ trợ chuẩn bị dữ liệu, cấu hình và kiểm tra triển khai.
 """Chạy reset + pytest rồi khôi phục snapshot, giữ dữ liệu người dùng sau kiểm thử.
 
 Chỉ dành cho máy phát triển; tạm dừng thao tác ghi trên giao diện trong lúc chạy.
 Snapshot SQL có dữ liệu riêng tư, nằm trong .pytest_cache được Git bỏ qua.
 """
-import hashlib
-import os
-from pathlib import Path
-import subprocess
-import sys
-from uuid import uuid4
+import hashlib  # So sánh nội dung từng bảng trước và sau quá trình restore.
+import os  # Đọc thư mục binary MySQL và truyền mật khẩu qua môi trường subprocess.
+from pathlib import Path  # Tạo snapshot tạm trong cache bị Git bỏ qua.
+import subprocess  # Gọi mysqldump, mysql, init_db và pytest.
+import sys  # Dùng cùng Python hiện tại để chạy init_db/pytest.
+from uuid import uuid4  # Tạo tên snapshot duy nhất cho lần kiểm tra.
 
 ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT))
-from init_db import get_config,connect
+from init_db import get_config,connect  # Dùng chung cấu hình MySQL và hàm kết nối dự án.
 
 
+# Tính số dòng và hash từng bảng để xác nhận restore giữ nguyên dữ liệu.
 def fingerprints(config):
     connection=connect(config,True)
     try:
@@ -32,6 +34,7 @@ def fingerprints(config):
     finally:connection.close()
 
 
+# Snapshot database cục bộ, chạy reset/test rồi khôi phục và đối chiếu mọi bảng.
 def main():
     config=get_config()
     if config['database']!='honda_chatbot' or config['host'] not in {'127.0.0.1','localhost','::1'}:

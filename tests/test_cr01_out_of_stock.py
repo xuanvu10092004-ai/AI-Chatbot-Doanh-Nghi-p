@@ -1,5 +1,5 @@
-from query_planner import plan_query
-from sql_service import answer_sql_question
+from query_planner import plan_query  # Tạo SQL template cho intent được nhận diện.
+from sql_service import answer_sql_question  # Thực thi câu hỏi SQL hoặc truy vấn đã kiểm tra.
 
 
 def test_cr01_out_of_stock_question_is_planned_as_inventory_query():

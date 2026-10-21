@@ -1,18 +1,15 @@
-"""Bộ công cụ chat có danh mục cố định, xem trước, RBAC và transaction xác nhận.
-
-LLM chỉ chọn tên công cụ/tham số; không có công cụ chạy SQL, URL hoặc Python tùy ý.
-"""
-import json
-import os
-import re
-from datetime import datetime
-from uuid import uuid4
-from flask import current_app,g
-from db import cursor,transaction
-from security import permissions
-from access_control import authorize_intent,mark_audit_denied
-from question_language import normalize
-from operations_routes import OperationRejected,number
+# File này nhận diện và thực thi các tool mà chatbot được phép gọi.
+import json  # Đọc hoặc ghi dữ liệu JSON trong luồng xử lý của file.
+import os  # Đọc biến môi trường hoặc thông tin hệ điều hành được dùng trong file.
+import re  # Tìm và chuẩn hóa mẫu văn bản bằng biểu thức chính quy.
+from datetime import datetime  # Tạo, so sánh hoặc định dạng ngày giờ.
+from uuid import uuid4  # Tạo mã định danh ngẫu nhiên cho tài nguyên.
+from flask import current_app,g  # Tạo request, response hoặc client Flask.
+from db import cursor,transaction  # Mở cursor hoặc connection MySQL.
+from security import permissions  # Dùng xác thực, permission hoặc audit của backend.
+from access_control import authorize_intent,mark_audit_denied  # Dùng session, intent và quyền của chatbot.
+from question_language import normalize  # Chuẩn hóa câu hỏi và nhận diện mẫu xe.
+from operations_routes import OperationRejected,number  # Kiểm tra tham số số và trả lỗi tool theo nghiệp vụ.
 
 DENIED='Tôi không thể hỗ trợ yêu cầu này.'
 # name: (mô tả, permission, chỉ nhân viên, ghi dữ liệu, các trường nhận)
@@ -95,25 +92,25 @@ def endpoint(name,**kwargs):
 
 def run(name,data,session_id):
     if name=='stock_receive':
-        from stock_service import receive_stock
+        from stock_service import receive_stock  # Ghi phiếu nhập và cộng số lượng tồn.
         return receive_stock(data)
     if name=='stock_list':
-        from stock_service import list_receipts
+        from stock_service import list_receipts  # Đọc phiếu nhập trong phạm vi chi nhánh.
         return {'rows':list_receipts()}
     if name=='catalog_save':return endpoint('save_vehicle',variant_id=data.get('id'),tool_data=data)
     if name=='booking_create':return endpoint('create_booking',tool_data=data)
     if name=='booking_update':return endpoint('update_booking',booking_id=data['id'],tool_data=data)
     if name=='appointment_create':
-        from appointment_service import create_appointment
+        from appointment_service import create_appointment  # Tạo lịch tư vấn/bảo dưỡng cho user hoặc khách.
         return create_appointment(data,session_id)
     if name=='appointment_list':
-        from appointment_service import list_appointments
+        from appointment_service import list_appointments  # Đọc lịch tư vấn/bảo dưỡng theo scope quyền.
         return {'rows':list_appointments()}
     if name=='appointment_update':
-        from appointment_service import update_appointment
+        from appointment_service import update_appointment  # Hủy hoặc chuyển trạng thái lịch hợp lệ.
         return update_appointment(data,session_id)
     if name=='dashboard_read':
-        from dashboard_service import WIDGETS,widget_data
+        from dashboard_service import WIDGETS,widget_data  # Kiểm tra quyền widget trước khi truy vấn số liệu.
         if data['widget'] not in WIDGETS or not all(p in permissions() for p in WIDGETS[data['widget']][1]):
             raise OperationRejected(DENIED,403)
         return {'rows':widget_data(data['widget'])}
@@ -122,12 +119,12 @@ def run(name,data,session_id):
     if name in read:return endpoint(read[name])
     if name=='invoice_export':return endpoint('sales_invoice_export',order_id=data['id'])
     if name=='documents_list':
-        from document_service import list_documents
+        from document_service import list_documents  # Lấy danh sách tài liệu được phép quản lý.
         return list_documents()
     if name.startswith('document_'):
-        from document_service import save_review,publish_document
+        from document_service import save_review,publish_document  # Hiệu đính hoặc xuất bản bản đã kiểm tra.
         return (save_review if name=='document_review' else publish_document)(data['id'],{**data,'confirmed':True})
-    from admin_service import mutate
+    from admin_service import mutate  # Lưu thay đổi user, role và permission qua service RBAC.
     kinds={'user_save':'user','user_password':'user','role_save':'role','role_delete':'role','permission_save':'permission',
            'assignment_save':'assignment','assignment_delete':'assignment'}
     return {'id':mutate(kinds[name],data.get('id'),data,'delete' if name.endswith('_delete') else 'save')}
@@ -155,6 +152,7 @@ def infer(question):
     return next((name for name,pattern in rules if re.search(pattern,q)),None)
 
 
+# Chuẩn hóa đầu vào trong bước parse_args để các phép so khớp phía sau dùng cùng một dạng.
 def parse_args(question,name):
     start=question.find('{')
     result={}
@@ -201,9 +199,9 @@ def parse_args(question,name):
 def model_args(question,name):
     """Chỉ dùng khi lệnh đã được nhận diện và người dùng có quyền công cụ đó."""
     if not os.getenv('GROQ_API_KEY'):return None
-    import ai_service
+    import ai_service  # Dùng cấu hình model/client Groq dùng chung.
     if ai_service.client is None:
-        from groq import Groq
+        from groq import Groq  # Tạo client khi arguments của model được yêu cầu lần đầu.
         ai_service.client=Groq(api_key=os.environ['GROQ_API_KEY'],timeout=15,max_retries=0)
     schema={'tool':name,'description':TOOLS[name][0],'fields':TOOLS[name][4].split(),'required':REQUIRED.get(name,())}
     message='Chuyển lệnh tiếng Việt thành JSON arguments, chỉ những trường cho phép. Không tạo SQL. Không suy đoán ID, ngày, tên, giá hoặc số lượng thiếu. branch_code dùng NT01/NT02/CR01. scheduled_at yyyy-mm-ddTHH:mm, múi giờ Việt Nam. items=[{variant_id,quantity}]. Không nhận password, quyền truy cập hoặc user_id để giả danh. Nếu thiếu thông tin, trả những trường đã biết. Schema: '+json.dumps(schema,ensure_ascii=False)
@@ -247,7 +245,7 @@ def prepare(name,raw):
         data['version']=row['version']
         if data.get('status')!='cancelled' and 'booking:manage' not in permissions():raise OperationRejected(DENIED,403)
     if name.startswith('document_') and name!='documents_list' and data.get('id'):
-        from document_service import get_document
+        from document_service import get_document  # Đọc version trước khi tạo lệnh hiệu đính.
         row=get_document(data['id']);data['version']=row['version']
     if name=='user_save' and data.get('id'):
         row=next((r for r in endpoint('users_list')['rows'] if r['id']==data['id']),None)
@@ -327,8 +325,8 @@ def handle_tool_chat(question,session_id,confirmation=None,secret=None):
             if not authorization['allowed'] or not staff() or 'document:manage' not in permissions():
                 mark_audit_denied(authorization['audit_id'],'Không có quyền nhập file khách hàng')
                 return {'type':'tool','answer':DENIED,'access_denied':True,'rows':[]}
-            from customer_file_import import stage_document
-            from customer_input import CustomerInputError
+            from customer_file_import import stage_document  # Chuyển file thành bản nháp nhập khách.
+            from customer_input import CustomerInputError  # Trả lỗi kiểm tra batch nhập khách.
             try:batch=stage_document(int(file_import.group(1)),session_id)
             except CustomerInputError as error:return {'type':'customer-input','answer':str(error),'rows':[]}
             if batch['status']=='committed':return {'type':'customer-input','answer':'Danh sách này đã được đồng bộ.','result':batch['result'],'rows':[]}
@@ -362,8 +360,8 @@ def handle_tool_chat(question,session_id,confirmation=None,secret=None):
         return {'type':'tool','answer':'Bản xem trước '+TOOLS[name][0]+'. Chưa ghi thay đổi. Kiểm tra thông tin rồi xác nhận.',
                 'action_draft':{'id':action_id,'version':1,'title':TOOLS[name][0],'arguments':public,'requires_password':name=='user_password' or name=='user_save' and not data.get('id')},'rows':[]}
     except Exception as error:
-        from admin_service import AdminRejected
-        from document_service import DocumentError
+        from admin_service import AdminRejected  # Nhận diện lỗi thay đổi RBAC bị từ chối.
+        from document_service import DocumentError  # Nhận diện lỗi quyền/trạng thái tài liệu.
         if isinstance(error,(OperationRejected,AdminRejected,DocumentError)):
             denied=getattr(error,'status',400) in {403,404}
             if denied:

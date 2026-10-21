@@ -1,5 +1,5 @@
-"""Hiển thị kết quả SQL chính xác, không để model viết lại giá/số lượng."""
-from decimal import Decimal
+# File này định dạng kết quả truy vấn và nguồn bằng chứng trước khi trả về giao diện.
+from decimal import Decimal  # Định dạng số tiền chính xác, tránh sai số của float.
 
 
 LABELS = {
@@ -51,6 +51,7 @@ def render_rows(rows: list[dict]) -> str:
     return 'Kết quả từ dữ liệu mô phỏng:\n\n' + '\n\n'.join(blocks)
 
 
+# Gắn dữ liệu thô cùng phần hiển thị để route trả cả bảng và câu trả lời.
 class QueryEvidence(str):
     def __new__(cls, text: str, rows: list[dict], generated: bool = False, summary: str | None = None):
         instance = super().__new__(cls, text)

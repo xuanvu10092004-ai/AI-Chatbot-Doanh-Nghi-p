@@ -1,9 +1,9 @@
-from pathlib import Path
-import pytest
+from pathlib import Path  # Tạo và kiểm tra đường dẫn file trong dự án.
+import pytest  # Khai báo fixture, tham số hóa test và kiểm tra kết quả.
 
-from db import cursor
-from customer_input import read_customer_workbook,normalize_row
-from test_document_uploads import document_storage
+from db import cursor  # Mở cursor hoặc connection MySQL.
+from customer_input import read_customer_workbook,normalize_row  # Dùng quy tắc kiểm tra và lưu batch nhập khách.
+from test_document_uploads import document_storage  # Dùng fixture lưu trữ và helper upload tài liệu.
 
 BATCHES=set()
 
@@ -125,7 +125,7 @@ def test_edit_after_preview_requires_fresh_confirmation(auth_client):
 
 
 def test_file_customer_category_uses_database_sync_not_rag(auth_client):
-    from io import BytesIO
+    from io import BytesIO  # Tạo stream trong bộ nhớ cho upload hoặc PDF.
     auth_client.login(1)
     with cursor() as cur:cur.execute("SELECT id FROM kb_categories WHERE code='customers'");category=cur.fetchone()['id']
     file=Path('data/source/honda_dataset_khach_hang_san_pham.xlsx')
@@ -158,8 +158,8 @@ def test_client_cannot_assign_staff_role_or_activate_portal_account(auth_client)
 
 
 def test_template_has_source_columns_and_preserves_phone_text(auth_client):
-    from openpyxl import load_workbook
-    from io import BytesIO
+    from openpyxl import load_workbook  # Đọc hoặc tạo workbook Excel.
+    from io import BytesIO  # Tạo stream trong bộ nhớ cho upload hoặc PDF.
     auth_client.login(3);response=auth_client.get('/api/customer-input/template');assert response.status_code==200
     book=load_workbook(BytesIO(response.data));sheet=book['Khach_hang']
     original=load_workbook('data/source/honda_dataset_khach_hang_san_pham.xlsx',read_only=True)

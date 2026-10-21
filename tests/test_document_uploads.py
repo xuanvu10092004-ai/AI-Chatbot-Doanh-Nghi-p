@@ -1,13 +1,13 @@
-from io import BytesIO
-import hashlib
-from pathlib import Path
-import subprocess
+from io import BytesIO  # Tạo stream trong bộ nhớ cho upload hoặc PDF.
+import hashlib  # Tính SHA-256 độc lập để đối chiếu metadata file đã lưu.
+from pathlib import Path  # Tạo và kiểm tra đường dẫn file trong dự án.
+import subprocess  # Chạy parser hoặc tiện ích trong tiến trình riêng.
 
-import pytest
+import pytest  # Khai báo fixture, tham số hóa test và kiểm tra kết quả.
 
-from app import app
-from db import cursor
-from document_parser import MAX_BYTES
+from app import app  # Dùng ứng dụng Flask đang được kiểm thử.
+from db import cursor  # Mở cursor hoặc connection MySQL.
+from document_parser import MAX_BYTES  # Dùng parser và giới hạn xử lý file.
 
 SAMPLES = Path(__file__).resolve().parents[1] / 'data/samples/documents'
 

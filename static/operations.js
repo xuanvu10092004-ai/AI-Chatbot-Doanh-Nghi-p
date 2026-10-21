@@ -1,3 +1,4 @@
+// Dựng danh mục xe hoặc lịch hẹn từ API và gửi thay đổi qua biểu mẫu.
 'use strict';
 (() => {
  const el=id=>document.getElementById(id),root=el('operations'),catalog=root.dataset.section==='catalog';
@@ -8,6 +9,7 @@
  const labels={current:'Đời hiện hành',previous:'Đời trước',discontinued:'Ngừng kinh doanh',scheduled:'Chờ xác nhận',confirmed:'Đã xác nhận',completed:'Hoàn tất',cancelled:'Đã hủy',maintenance:'Bảo dưỡng',repair:'Sửa chữa',inspection:'Kiểm tra'};
  function button(title,fn){const b=node('button',title);b.type='button';b.className='secondary';b.addEventListener('click',()=>Promise.resolve(fn()).catch(e=>feedback(e.message,true)));return b;}
  function edit(row){el('operationEditor').reset();el('operationId').value=row.id;el('operationVersion').value=row.version;for(const key of ['model_name','variant_name','segment','engine_cc','model_year','lifecycle'])el(key).value=row[key]??'';el('list_price').value=new Intl.NumberFormat('vi-VN').format(Number(row.list_price));el('vehicleProduct').value=row.product_id;el('vehicleProduct').disabled=true;el('operationEditTitle').textContent='Chỉnh sửa SP'+String(row.id).padStart(3,'0');el('operationEditor').scrollIntoView({block:'nearest'});}
+ // Lọc trên dữ liệu đã tải và dựng ô bằng textContent, không phân tích HTML từ API.
  function render(){const q=el('operationSearch').value.toLocaleLowerCase('vi-VN'),filtered=rows.filter(r=>Object.values(r).some(v=>String(v??'').toLocaleLowerCase('vi-VN').includes(q)));const box=el('operationTable');box.replaceChildren(node('p',filtered.length+' / '+rows.length+' kết quả'));if(!filtered.length){box.append(node('p','Chưa có dữ liệu phù hợp.'));return;}
   const columns=catalog?[['id','Mã SP'],['model_name','Mẫu xe'],['variant_name','Phiên bản / màu'],['model_year','Năm đời'],['lifecycle','Kinh doanh'],['list_price','Giá niêm yết']]:[['id','Mã lịch'],['customer_name','Khách hàng'],['branch_code','Chi nhánh'],['scheduled_at','Ngày giờ'],['service_type','Dịch vụ'],['vehicle_description','Xe'],['license_plate','Biển số'],['status','Trạng thái']];
   const table=node('table'),head=node('thead'),tr=node('tr'),body=node('tbody');for(const [,label] of columns)tr.append(node('th',label));tr.append(node('th','Thao tác'));head.append(tr);

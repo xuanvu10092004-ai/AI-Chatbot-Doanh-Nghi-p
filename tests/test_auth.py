@@ -1,7 +1,7 @@
-import os
-from datetime import datetime,timedelta
-from db import cursor
-from app import app
+import os  # Đọc biến môi trường hoặc thông tin hệ điều hành được dùng trong file.
+from datetime import datetime,timedelta  # Tạo, so sánh hoặc định dạng ngày giờ.
+from db import cursor  # Mở cursor hoặc connection MySQL.
+from app import app  # Dùng ứng dụng Flask đang được kiểm thử.
 
 
 def email(user_id):

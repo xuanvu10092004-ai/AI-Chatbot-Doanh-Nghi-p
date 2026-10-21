@@ -1,14 +1,16 @@
-from flask import g,jsonify,request,session
-from db import cursor
-from security import require_permission
-from access_control import create_session,resume_session,record_message
-from customer_file_import import stage_document
-from customer_input import CustomerInputError
-from document_service import upload_document
-from chat_tools import staff,available_tools
-from dashboard_service import scope_filter
+# Đăng ký API công cụ chat, nhập file khách và lịch hẹn.
+from flask import g, jsonify, request, session  # Dùng danh tính, body và session hiện tại của chat.
+from db import cursor  # Đọc danh mục và lịch sử nhập từ MySQL.
+from security import require_permission  # Kiểm tra quyền route trước khi vào handler.
+from access_control import create_session, resume_session, record_message  # Gắn thao tác file vào lịch sử chat của đúng user.
+from customer_file_import import stage_document  # Chuyển tài liệu khách thành bản nháp để xem xét.
+from customer_input import CustomerInputError  # Trả lỗi nhập liệu theo định dạng API.
+from document_service import upload_document  # Lưu và trích xuất file trước khi staging dữ liệu.
+from chat_tools import staff, available_tools  # Lọc công cụ theo loại tài khoản và quyền hiện tại.
+from dashboard_service import scope_filter  # Giới hạn lịch sử nhập theo phạm vi customer:read.
 
 
+# Đăng ký các endpoint của nhóm chat_actions để Flask chuyển request vào đúng hàm.
 def register_chat_actions(app):
     @app.get('/api/chat/tools')
     @require_permission('kb:public:read')
@@ -48,14 +50,14 @@ def register_chat_actions(app):
     @app.get('/api/appointments')
     @require_permission('booking:read')
     def appointments_list():
-        from appointment_service import list_appointments
+        from appointment_service import list_appointments  # Lấy lịch theo scope quyền của user.
         return jsonify(rows=list_appointments())
 
     @app.patch('/api/appointments/<int:target_id>')
     @require_permission('booking:read')
     def appointments_update(target_id):
-        from appointment_service import update_appointment
-        from operations_routes import OperationRejected
+        from appointment_service import update_appointment  # Kiểm tra version/trạng thái rồi cập nhật lịch.
+        from operations_routes import OperationRejected  # Trả lỗi nghiệp vụ lịch theo định dạng API.
         data=request.get_json(silent=True)
         if not isinstance(data,dict):raise OperationRejected('Dữ liệu không hợp lệ.')
         return jsonify(update_appointment({**data,'id':target_id},session.get('chat_session_id')))

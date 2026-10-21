@@ -1,12 +1,12 @@
-"""Xác thực phiên, CSRF và quyền đọc từ CSDL ở từng request."""
-import json
-import os
-import secrets
-from functools import wraps
-from urllib.parse import urlsplit,unquote
-from flask import g,session,request,redirect,url_for,jsonify,render_template
-from werkzeug.security import check_password_hash,generate_password_hash
-from db import cursor
+# File này xử lý session, CSRF, xác thực, phân quyền và audit cho request Flask.
+import json  # Tuần tự hóa trạng thái trước/sau trong nhật ký audit.
+import os  # Đọc cấu hình cho guest và chế độ session bảo vệ.
+import secrets  # Tạo token CSRF, hash giả và so sánh token an toàn.
+from functools import wraps  # Giữ metadata route khi bọc decorator quyền.
+from urllib.parse import urlsplit, unquote  # Kiểm tra URL chuyển hướng nội bộ sau đăng nhập.
+from flask import g, session, request, redirect, url_for, jsonify, render_template  # Truy cập danh tính/session và dựng phản hồi.
+from werkzeug.security import check_password_hash, generate_password_hash  # So mật khẩu với hash và tạo hash giả chống dò user.
+from db import cursor  # Đọc quyền và user, ghi audit trong MySQL.
 
 DUMMY_HASH=generate_password_hash(secrets.token_urlsafe(32))
 
@@ -28,6 +28,7 @@ def audit(cur,action,target_type,target_id=None,before=None,after=None,actor=Non
                 (actor,action,target_type,target_id,json.dumps(before,default=str,ensure_ascii=False) if before is not None else None,json.dumps(after,default=str,ensure_ascii=False) if after is not None else None,request.remote_addr))
 
 
+# Gộp quyền từ role và lọc quyền của user thường; guest chỉ nhận các quyền công khai.
 def get_effective_permissions(user_id):
     with cursor() as cur:
         if user_id is None:
@@ -57,6 +58,7 @@ def permissions():
     return g.permissions
 
 
+# Chặn route ngay ở backend nếu user thiếu permission, không dựa vào việc ẩn nút trên giao diện.
 def require_permission(*codes):
     def decorator(fn):
         @wraps(fn)
@@ -70,7 +72,9 @@ def require_permission(*codes):
     return decorator
 
 
+# Nạp user từ session vào request context để các route dùng cùng một danh tính đã xác thực.
 def initialize_request():
+    # Khôi phục user/role từ session; guest chỉ được vào các endpoint chat cho phép.
     g.user=None;g.roles=[]
     user_id=session.get('user_id')
     if user_id:
@@ -98,7 +102,9 @@ def initialize_request():
         return redirect(url_for('change_password'))
 
 
+# So khớp thông tin đăng nhập với password hash rồi tạo session server-side cho user hợp lệ.
 def authenticate(email,password):
+    # Khóa bản ghi đăng nhập, kiểm tra hash và tăng bộ đếm sai để áp dụng khóa tạm.
     with cursor() as cur:
         cur.execute('SELECT *, locked_until IS NOT NULL AND locked_until>NOW() AS locked FROM users WHERE email=%s FOR UPDATE',(email.casefold().strip(),))
         user=cur.fetchone()

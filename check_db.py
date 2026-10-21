@@ -1,17 +1,15 @@
-"""Kiểm tra kết nối và trạng thái cơ bản của database dùng chung.
-
-Chỉ đọc dữ liệu; không tạo, sửa hoặc xóa bảng/bản ghi.
-"""
+# Kiểm tra kết nối MySQL và đếm các bảng nghiệp vụ chính từ dòng lệnh.
 from __future__ import annotations
 
-import os
-import sys
+import os  # Đọc thông tin kết nối từ biến môi trường.
+import sys  # Ghi lỗi cấu hình/kết nối ra stderr và trả mã thoát.
 
-import mysql.connector
-from dotenv import load_dotenv
+import mysql.connector  # Mở kết nối MySQL và nhận lỗi driver.
+from dotenv import load_dotenv  # Nạp file .env trước khi đọc credential.
 
 
 def main() -> int:
+    # Đọc thông tin server/schema rồi kiểm tra số dòng của các bảng trọng yếu.
     load_dotenv()
     config = {
         "host": os.environ["DB_HOST"],

@@ -1,19 +1,20 @@
-"""Export the current MySQL data to a synchronized Excel copy."""
+# Xuất các view dữ liệu đã đồng bộ ra workbook và thay file theo cách an toàn.
 from __future__ import annotations
 
-from datetime import date, datetime
-from pathlib import Path
-import shutil
-from tempfile import NamedTemporaryFile
-from typing import Any
+from datetime import date, datetime  # Tính tuổi khách và ghi thời điểm đồng bộ.
+from pathlib import Path  # Xác định workbook nguồn, workbook xuất và file tạm.
+import shutil  # Sao chép workbook xuất về nguồn sau khi hoàn tất.
+from tempfile import NamedTemporaryFile  # Lưu workbook tạm rồi thay thế nguyên tử.
+from typing import Any  # Mô tả tuple dữ liệu linh hoạt từ MySQL.
 
-from db import cursor
+from db import cursor  # Mở cursor hoặc connection MySQL.
 
 ROOT = Path(__file__).resolve().parent
 SOURCE_WORKBOOK = ROOT / "data" / "source" / "honda_dataset_khach_hang_san_pham.xlsx"
 SYNCED_WORKBOOK = ROOT / "data" / "exports" / "honda_chatbot_synced.xlsx"
 
 
+# Báo workbook nguồn đang bị khóa để service trả trạng thái đồng bộ phù hợp.
 class ExcelSourceLocked(RuntimeError):
     pass
 
@@ -27,6 +28,7 @@ def _age(value: Any) -> int | None:
 
 
 def _rows() -> dict[str, list[tuple[Any, ...]]]:
+    # Tạo ba sheet khách hàng, sản phẩm và tồn kho từ dữ liệu hiện tại trong MySQL.
     with cursor() as cur:
         cur.execute("""
             SELECT u.id AS customer_id, COALESCE(cp.customer_code, CONCAT('DB', LPAD(u.id, 4, '0'))) AS customer_code, u.full_name, cp.gender,
@@ -119,8 +121,9 @@ def _rows() -> dict[str, list[tuple[Any, ...]]]:
 
 
 def export_synced_workbook(path: Path = SYNCED_WORKBOOK) -> Path:
-    from openpyxl import Workbook, load_workbook
-    from openpyxl.styles import Font
+    # Giữ header/style nguồn, ghi dữ liệu mới vào file tạm rồi thay đích.
+    from openpyxl import Workbook, load_workbook  # Đọc hoặc tạo workbook Excel.
+    from openpyxl.styles import Font  # Định dạng header trong workbook Excel.
 
     data = _rows()
     book = load_workbook(SOURCE_WORKBOOK) if SOURCE_WORKBOOK.exists() else Workbook()

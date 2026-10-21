@@ -1,14 +1,15 @@
+# File này tạo database, nạp schema/dữ liệu và chạy extension SQL theo thứ tự.
 from __future__ import annotations
 
-import argparse
-import os
-import re
-import sys
-from pathlib import Path
-from typing import Iterator
+import argparse  # Đọc chế độ reset, tạo mới hoặc áp dụng migration từ CLI.
+import os  # Đọc biến môi trường hoặc thông tin hệ điều hành được dùng trong file.
+import re  # Tìm và chuẩn hóa mẫu văn bản bằng biểu thức chính quy.
+import sys  # Đọc đối số và trạng thái trình thông dịch của công cụ.
+from pathlib import Path  # Tạo và kiểm tra đường dẫn file trong dự án.
+from typing import Iterator  # Khai báo kiểu dữ liệu cho tham số và kết quả.
 
-import mysql.connector
-from dotenv import load_dotenv
+import mysql.connector  # Dùng driver MySQL và kiểu lỗi/kết nối database.
+from dotenv import load_dotenv  # Nạp cấu hình từ file .env.
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent
@@ -24,6 +25,7 @@ EXPECTED_COUNTS = {
 }
 
 
+# Nạp .env, kiểm tra các credential bắt buộc và tạo cấu hình MySQL cho init script.
 def get_config() -> dict[str, object]:
     load_dotenv(PROJECT_ROOT / ".env")
     required = (
@@ -59,6 +61,7 @@ def get_config() -> dict[str, object]:
 
 
 def split_sql_script(script: str) -> Iterator[str]:
+    # Tách statement theo dấu chấm phẩy nhưng bỏ qua dấu nằm trong chuỗi/comment.
     statement: list[str] = []
     quote: str | None = None
     line_comment = False
@@ -150,6 +153,7 @@ def execute_script(
     path: Path,
     skip_database_drop: bool = False,
 ) -> None:
+    # Chạy lần lượt statement, tùy chọn bỏ DROP DATABASE và rollback nếu có lỗi.
     script = path.read_text(encoding="utf-8")
     cursor = connection.cursor()
     try:
@@ -169,6 +173,7 @@ def execute_script(
 
 
 def apply_extensions(connection, password: str) -> None:
+    # Áp dụng extension theo số thứ tự và bỏ qua migration đã ghi nhận.
     applied=set()
     with connection.cursor() as cur:
         cur.execute('CREATE TABLE IF NOT EXISTS schema_migrations(filename VARCHAR(255) PRIMARY KEY, applied_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)')
@@ -244,11 +249,11 @@ def main() -> int:
         if initialize:
             execute_script(connection, SEED_FILE)
         applied=apply_extensions(connection, str(config['chatbot_ro_password']))
-        from scripts.backfill_customer_imports import backfill
+        from scripts.backfill_customer_imports import backfill  # Khôi phục lịch sử các dòng khách đã commit.
         recovered=backfill(connection)
         if recovered:print(f'Recovered {recovered} customer import history rows.')
         if initialize or '06_auth_dynamic_rbac.sql' in applied:
-            from scripts.seed_demo_passwords import seed
+            from scripts.seed_demo_passwords import seed  # Đặt lại mật khẩu demo sau khi seed schema.
             seed(connection)
         app_password=os.getenv('APP_DB_PASSWORD')
         if not app_password:

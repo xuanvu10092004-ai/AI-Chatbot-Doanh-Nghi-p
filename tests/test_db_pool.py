@@ -1,9 +1,9 @@
 """MySQL thật: request đồng thời chờ kết nối bận được trả lại."""
-from concurrent.futures import ThreadPoolExecutor, TimeoutError
+from concurrent.futures import ThreadPoolExecutor, TimeoutError  # Chạy tác vụ đồng thời để kiểm thử connection pool.
 
-import pytest
+import pytest  # Khai báo fixture, tham số hóa test và kiểm tra kết quả.
 
-from db import get_connection
+from db import get_connection  # Mở cursor hoặc connection MySQL.
 
 
 def test_busy_pool_waits_for_returned_connection():

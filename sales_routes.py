@@ -1,20 +1,19 @@
-"""Xuất PDF từ đơn có thật; kiểm tra cả quyền đọc và quyền xuất theo phạm vi."""
-from io import BytesIO
-from pathlib import Path
-from threading import Lock
-from xml.sax.saxutils import escape
+from io import BytesIO  # Giữ PDF đã tạo trong bộ nhớ trước khi gửi response.
+from pathlib import Path  # Tìm font chữ tiếng Việt trong thư mục static.
+from threading import Lock  # Ngăn đăng ký font PDF đồng thời nhiều lần.
+from xml.sax.saxutils import escape  # Escape dữ liệu khách/đơn trước khi đưa vào Paragraph PDF.
 
-from flask import g, jsonify, render_template, request, send_file
-from reportlab.lib import colors
-from reportlab.lib.styles import ParagraphStyle
-from reportlab.lib.pagesizes import A4
-from reportlab.pdfbase import pdfmetrics
-from reportlab.pdfbase.ttfonts import TTFont
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+from flask import g, jsonify, render_template, request, send_file  # Nhận filter, dựng trang và gửi chứng từ.
+from reportlab.lib import colors  # Tô nền và viền bảng trong chứng từ.
+from reportlab.lib.styles import ParagraphStyle  # Thiết lập font và cỡ chữ PDF.
+from reportlab.lib.pagesizes import A4  # Chọn khổ A4 cho chứng từ mô phỏng.
+from reportlab.pdfbase import pdfmetrics  # Đăng ký font để render tiếng Việt.
+from reportlab.pdfbase.ttfonts import TTFont  # Nạp font TTF cục bộ cho PDF.
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle  # Dựng chữ, khoảng cách và bảng dòng hàng.
 
-from db import cursor
-from dashboard_service import scope_filter
-from security import require_permission, audit
+from db import cursor  # Đọc đơn hàng, khách hàng và dòng sản phẩm trong MySQL.
+from dashboard_service import scope_filter  # Giới hạn danh sách/chứng từ theo quyền và phạm vi.
+from security import require_permission, audit  # Kiểm tra quyền xuất và ghi audit xuất chứng từ.
 
 STATUS_LABELS = {'pending':'Chờ duyệt','approved':'Đã duyệt','paid':'Đã thanh toán',
                  'delivered':'Đã giao xe','cancelled':'Đã hủy'}
@@ -26,6 +25,7 @@ def money(value):
 
 
 def invoice_pdf(order, items):
+    # Tính tổng/giảm giá, tạo chứng từ mô phỏng và không khẳng định đơn chưa thanh toán.
     with FONT_LOCK:
         if 'InvoiceNoto' not in pdfmetrics.getRegisteredFontNames():
             pdfmetrics.registerFont(TTFont('InvoiceNoto', str(Path(__file__).parent/'static/vendor/fonts/NotoSans-Regular.ttf')))
@@ -64,6 +64,7 @@ def invoice_pdf(order, items):
     return out
 
 
+# Đăng ký các endpoint của nhóm sales để Flask chuyển request vào đúng hàm.
 def register_sales(app):
     @app.get('/orders')
     @require_permission('order:read')

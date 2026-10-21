@@ -1,12 +1,12 @@
-import json
-import re
-from collections import Counter
-from pathlib import Path
-from zipfile import ZipFile, ZIP_DEFLATED
+import json  # Đọc hoặc ghi dữ liệu JSON trong luồng xử lý của file.
+import re  # Tìm và chuẩn hóa mẫu văn bản bằng biểu thức chính quy.
+from collections import Counter  # Đếm phần tử để so sánh dữ liệu.
+from pathlib import Path  # Tạo và kiểm tra đường dẫn file trong dự án.
+from zipfile import ZipFile, ZIP_DEFLATED  # Tạo hoặc kiểm tra cấu trúc archive Office.
 
-import pytest
+import pytest  # Khai báo fixture, tham số hóa test và kiểm tra kết quả.
 
-from document_parser import parse_document, ParseError, validate_file
+from document_parser import parse_document, ParseError, validate_file  # Dùng parser và giới hạn xử lý file.
 
 SAMPLES = Path(__file__).resolve().parents[1] / 'data/samples/documents'
 CASES = json.loads((SAMPLES / 'manifest.json').read_text(encoding='utf-8'))

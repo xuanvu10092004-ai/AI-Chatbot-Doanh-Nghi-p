@@ -1,9 +1,11 @@
-"""Chuẩn hóa câu hỏi và nhận diện mẫu xe/tồn kho."""
-import re
-import unicodedata
+# Chuẩn hóa câu tiếng Việt, nhận diện mẫu xe và xử lý câu hỏi nối tiếp.
+import re  # Tìm mẫu xe, từ khóa tồn kho và dấu câu.
+import unicodedata  # Bỏ dấu tiếng Việt để so khớp không phụ thuộc cách gõ.
 
 
+# Chuẩn hóa đầu vào trong bước normalize để các phép so khớp phía sau dùng cùng một dạng.
 def normalize(text: str) -> str:
+    # Đưa chữ về thường, bỏ dấu và gộp khoảng trắng liên tiếp.
     text = unicodedata.normalize('NFD', text.casefold().replace('đ', 'd'))
     text = ''.join(c for c in text if not unicodedata.combining(c))
     return re.sub(r'\s+', ' ', text).strip()
@@ -21,6 +23,7 @@ FAMILIES = (
 
 
 def product_patterns(question: str) -> list[str]:
+    # Tạo mẫu LIKE cho mọi dòng xe/dung tích được nhắc trong câu hỏi.
     q = re.sub(r'([a-z])(?=\d)', r'\1 ', normalize(question))
     matches = []
     for expression, family in FAMILIES:
@@ -64,6 +67,7 @@ def wants_sql(question: str) -> bool:
 
 
 def resolve_followup(question: str, history: list[dict]) -> str:
+    # Chỉ thêm mẫu xe từ câu user gần nhất khi câu hiện tại thực sự là câu nối tiếp.
     q = normalize(question)
     if any(term in q for term in ('het hang', 'tong ton', 'san pham nao', 'tat ca san pham')):
         return question

@@ -1,14 +1,14 @@
-"""Lịch bảo dưỡng/tư vấn dành cho khách; danh tính không nhận từ nội dung chat."""
-from datetime import datetime,timedelta
-from zoneinfo import ZoneInfo
-import re
-from flask import g
-from db import cursor
-from security import permissions,audit
-from operations_routes import number,text,OperationRejected
-from dashboard_service import scope_filter
+from datetime import datetime, timedelta  # Tính giới hạn thời gian đặt lịch.
+from zoneinfo import ZoneInfo  # Diễn giải giờ hẹn theo múi giờ Việt Nam.
+import re  # Chuẩn hóa số điện thoại và kiểm tra email.
+from flask import g  # Lấy user đã xác thực trong request hiện tại.
+from db import cursor  # Đọc và ghi yêu cầu đặt lịch trong MySQL.
+from security import permissions, audit  # Kiểm tra quyền và lưu dấu vết thay đổi lịch.
+from operations_routes import number, text, OperationRejected  # Dùng lại kiểm tra đầu vào chung của API.
+from dashboard_service import scope_filter  # Giới hạn truy vấn theo chi nhánh hoặc chủ sở hữu.
 
 
+# Kiểm tra quyền, chi nhánh, giờ hẹn và thông tin liên hệ trước khi tạo lịch.
 def create_appointment(data,session_id):
     branch=number(data,'branch_id',1,2**31-1)
     kind=data.get('kind')
@@ -42,6 +42,7 @@ def create_appointment(data,session_id):
     return {'id':target,'status':'scheduled','message':'Đã nhận lịch, chờ nhân viên xác nhận.'}
 
 
+# Chỉ liệt kê lịch nằm trong phạm vi chi nhánh hoặc user được cấp quyền.
 def list_appointments():
     where,params=scope_filter('booking:read','a.branch_id','a.customer_id')
     with cursor() as cur:
@@ -51,6 +52,7 @@ def list_appointments():
         return cur.fetchall()
 
 
+# Khóa lịch, kiểm tra version và trạng thái trước khi cập nhật hoặc hủy.
 def update_appointment(data,session_id):
     target=number(data,'id',1,2**31-1);version=number(data,'version',1,2**31-1)
     status=data.get('status')

@@ -1,3 +1,4 @@
+-- Bổ sung thông tin đời xe và lịch sửa chữa mà không đổi bảng sản phẩm chuẩn.
 USE honda_chatbot;
 CREATE TABLE IF NOT EXISTS vehicle_releases (
  variant_id INT PRIMARY KEY,
@@ -8,11 +9,13 @@ CREATE TABLE IF NOT EXISTS vehicle_releases (
  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
  FOREIGN KEY(variant_id) REFERENCES product_variants(id),
  FOREIGN KEY(updated_by) REFERENCES users(id)
+-- Đăng ký các quyền xem, tạo và quản lý lịch sửa chữa.
 ) COMMENT='Thông tin bổ sung về đời xe; không thay đổi schema sản phẩm chuẩn';
 CREATE TABLE IF NOT EXISTS service_bookings (
  id INT AUTO_INCREMENT PRIMARY KEY,
  branch_id INT NOT NULL, customer_id INT NOT NULL, created_by INT NOT NULL,
  scheduled_at DATETIME NOT NULL COMMENT 'Giờ hẹn địa phương Việt Nam',
+-- Thêm mục điều hướng cho lịch sửa chữa và danh mục xe.
  service_type ENUM('maintenance','repair','inspection') NOT NULL,
  vehicle_description VARCHAR(200) NOT NULL, license_plate VARCHAR(20) NULL,
  notes VARCHAR(1000) NULL,

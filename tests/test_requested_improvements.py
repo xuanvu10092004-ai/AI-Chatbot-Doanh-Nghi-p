@@ -1,12 +1,12 @@
 """Hồi quy cho các tình huống trong ảnh và công cụ nghiệp vụ mới (MySQL thật)."""
-from datetime import datetime,timedelta
-from zoneinfo import ZoneInfo
-import pytest
-from db import cursor
-from customer_chat import parse_customer_values
-from sql_service import answer_sql_question
-from test_customer_input import clean_customer_input,BATCHES
-from test_document_uploads import document_storage
+from datetime import datetime,timedelta  # Tạo, so sánh hoặc định dạng ngày giờ.
+from zoneinfo import ZoneInfo  # Tính thời gian theo múi giờ Việt Nam.
+import pytest  # Khai báo fixture, tham số hóa test và kiểm tra kết quả.
+from db import cursor  # Mở cursor hoặc connection MySQL.
+from customer_chat import parse_customer_values  # Phân tích thông tin khách gửi qua chat.
+from sql_service import answer_sql_question  # Thực thi câu hỏi SQL hoặc truy vấn đã kiểm tra.
+from test_customer_input import clean_customer_input,BATCHES  # Dùng fixture và helper tạo/dọn batch nhập khách.
+from test_document_uploads import document_storage  # Dùng fixture lưu trữ và helper upload tài liệu.
 
 
 def test_comma_customer_values_in_any_contact_order():

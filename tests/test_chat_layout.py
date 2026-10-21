@@ -1,15 +1,15 @@
 """Kiểm tra khung chat thật bằng Edge/Chromium; cần Playwright (tùy chọn)."""
-import os
-from pathlib import Path
-from threading import Thread
+import os  # Đọc biến môi trường hoặc thông tin hệ điều hành được dùng trong file.
+from pathlib import Path  # Tạo và kiểm tra đường dẫn file trong dự án.
+from threading import Thread  # Tạo hoặc đồng bộ các luồng chạy đồng thời.
 
-import pytest
-from werkzeug.serving import make_server
+import pytest  # Khai báo fixture, tham số hóa test và kiểm tra kết quả.
+from werkzeug.serving import make_server  # Khởi chạy server Flask để trình duyệt kiểm thử truy cập.
 
 playwright = pytest.importorskip('playwright.sync_api', reason='Cần Playwright để kiểm tra bố cục bằng trình duyệt thật')
 
-from app import app
-from db import cursor
+from app import app  # Dùng ứng dụng Flask đang được kiểm thử.
+from db import cursor  # Mở cursor hoặc connection MySQL.
 
 
 @pytest.fixture

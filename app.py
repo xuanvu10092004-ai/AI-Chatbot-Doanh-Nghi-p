@@ -1,50 +1,68 @@
+# File này khởi tạo Flask, đăng ký route và chuyển request tới các service xác thực, dữ liệu và chatbot.
 from __future__ import annotations
 
-import os
-import re
-from typing import Any
+import os  # Đọc khóa session và trạng thái môi trường khi khởi tạo Flask.
+import re  # Phát hiện thông tin mật khẩu trước khi lưu câu hỏi vào lịch sử chat.
+from typing import Any  # Dùng cho kiểu dữ liệu trong các hàm backend.
 
-from flask import Flask, jsonify, render_template, request, session, g, redirect
+from flask import Flask, jsonify, render_template, request, session, g, redirect  # Tạo ứng dụng, xử lý request và dựng response.
 
-from access_control import create_session, record_message, resume_session, read_history
+from access_control import create_session, record_message, resume_session, read_history  # Dùng session, intent và quyền của chatbot.
+# Gọi model để diễn đạt câu trả lời từ bằng chứng SQL hoặc RAG.
 from ai_service import generate_answer
+# Lấy số liệu tổng quan, tồn thấp và khách tiềm năng cho các API cũ.
 from database_service import (
-    SchemaExtensionRequired,
-    get_dashboard_stats,
-    get_low_stock_products,
-    get_potential_customers,
+    SchemaExtensionRequired,  # Báo module cũ cần schema extension chưa có.
+    get_dashboard_stats,  # Đọc số đếm tổng quan cho dashboard.
+    get_low_stock_products,  # Lấy phiên bản sắp hết hoặc đã hết hàng.
+    get_potential_customers,  # Lấy khách tiềm năng, đang tư vấn hoặc đã mua.
 )
-from rag_service import search_documents
-from routing import route_question
-from sql_service import answer_sql_question
-from sql_service import SchemaExtensionRequired as SQLSchemaExtensionRequired
-from mysql.connector import Error as DatabaseError
-from question_language import resolve_followup
-from answer_renderer import QueryEvidence
+from rag_service import search_documents  # Tạo truy vấn RAG và lọc nguồn theo quyền.
+from routing import route_question  # Phân loại câu hỏi SQL/RAG và nhãn module.
+from sql_service import answer_sql_question  # Thực thi câu hỏi SQL hoặc truy vấn đã kiểm tra.
+from sql_service import SchemaExtensionRequired as SQLSchemaExtensionRequired  # Thực thi câu hỏi SQL hoặc truy vấn đã kiểm tra.
+from mysql.connector import Error as DatabaseError  # Dùng driver MySQL và kiểu lỗi/kết nối database.
+from question_language import resolve_followup  # Chuẩn hóa câu hỏi và nhận diện mẫu xe.
+from answer_renderer import QueryEvidence  # Định dạng kết quả truy vấn thành nội dung hiển thị.
+# Chuẩn hóa dấu gạch trước khi ghi lịch sử và trả JSON.
 from text_formatting import normalize_dashes
-from security import initialize_request,permissions,navigation,csrf_token,require_permission
+from security import initialize_request,permissions,navigation,csrf_token,require_permission  # Dùng xác thực, permission hoặc audit của backend.
+# Đăng ký route đăng nhập và đổi mật khẩu.
 from auth_routes import register_auth
+# Đăng ký dashboard cùng API widget.
 from dashboard_routes import register_dashboard
+# Đăng ký API quản trị user, role, permission và audit.
 from admin_routes import register_admin
+# Đăng ký danh sách khách hàng và tồn kho.
 from business_routes import register_business
+# Đăng ký upload tài liệu và giới hạn kích thước request.
 from document_routes import register_documents, document_request_limits
+# Đăng ký biểu mẫu Excel và API nhập khách.
 from customer_input_routes import register_customer_input
-from customer_chat import handle_customer_chat
+from customer_chat import handle_customer_chat  # Phân tích thông tin khách gửi qua chat.
+# Đăng ký API danh sách đơn hàng và xuất chứng từ PDF.
 from sales_routes import register_sales
+# Đăng ký danh mục xe và lịch dịch vụ.
 from operations_routes import register_operations
+# Đăng ký trang/API nhận và đọc phiếu nhập kho.
 from stock_routes import register_stock
+# Đăng ký API lịch hẹn và thao tác chat.
 from chat_action_routes import register_chat_actions
+# Thực thi lệnh nghiệp vụ trong chat sau khi kiểm tra quyền.
 from chat_tools import handle_tool_chat
 
 
 app = Flask(__name__)
+# Giữ thứ tự key JSON theo dữ liệu trả về của route.
 app.json.sort_keys = False
+# Session cần secret key cấu hình; ứng dụng dừng thay vì dùng khóa mặc định không an toàn.
 secret_key = os.getenv("FLASK_SECRET_KEY")
 if secret_key:
     app.secret_key = secret_key
 else:
     raise RuntimeError('FLASK_SECRET_KEY is required')
 app.config.update(SESSION_COOKIE_HTTPONLY=True,SESSION_COOKIE_SAMESITE='Lax',SESSION_COOKIE_SECURE=os.getenv('APP_ENV')!='dev',MAX_CONTENT_LENGTH=65536)
+# Chạy giới hạn upload và nạp danh tính/quyền trước mọi route.
 app.before_request(document_request_limits)
 app.before_request(initialize_request)
 register_auth(app)
@@ -60,6 +78,7 @@ register_chat_actions(app)
 
 @app.after_request
 def security_headers(response):
+    # Ngăn nhúng trang, sniff kiểu nội dung và lưu cache response nhạy cảm.
     response.headers['Content-Security-Policy']="default-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
     response.headers['X-Frame-Options']='DENY'
     response.headers['X-Content-Type-Options']='nosniff'
@@ -68,6 +87,7 @@ def security_headers(response):
 
 @app.context_processor
 def shell_context():
+    # Cấp CSRF token, user và menu đã lọc quyền cho mọi template.
     return dict(csrf_token=csrf_token,current_user=g.user,menu=navigation() if g.user or session.get('guest') else [],identity=' · '.join(r['name']+' - '+(r['branch_code'] or 'Toàn hệ thống') for r in g.roles) if g.user else 'Khách',can=lambda code:code in permissions())
 
 
@@ -85,21 +105,21 @@ def chat_page():
 @app.route("/api/dashboard", methods=["GET"])
 @require_permission('dashboard:view')
 def dashboard():
-    from dashboard_service import WIDGETS,widget_data
+    from dashboard_service import WIDGETS,widget_data  # Lọc widget theo permission và truy vấn số liệu.
     return jsonify({code:widget_data(code) for code,(_,codes) in WIDGETS.items() if all(c in permissions() for c in codes)})
 
 
 @app.route("/api/low-stock", methods=["GET"])
 @require_permission('inventory:read')
 def low_stock():
-    from business_routes import records
+    from business_routes import records  # Tạo danh sách tồn kho đã áp scope backend.
     return jsonify(records('inventory',low_stock=True))
 
 
 @app.route("/api/potential-customers", methods=["GET"])
 @require_permission('customer:read')
 def potential_customers():
-    from business_routes import records
+    from business_routes import records  # Tạo danh sách khách hàng đã áp scope backend.
     return jsonify(records('customers'))
 
 
@@ -129,6 +149,7 @@ def quotes():
 @app.route("/chat", methods=["POST"],endpoint='chat_api')
 @require_permission('kb:public:read')
 def chat():
+    # Chỉ nhận JSON có câu hỏi văn bản, giới hạn độ dài trước khi truy xuất dữ liệu.
     data = request.get_json(silent=True)
     if not isinstance(data, dict) or not isinstance(data.get('question'), str) or not data['question'].strip():
         return jsonify({"answer": "Vui lòng nhập câu hỏi.", "type": "None", "module": "None"}), 400
@@ -161,11 +182,13 @@ def chat():
             record_message(session_id, 'bot', customer_reply['answer'])
             customer_reply['session_id'] = session_id
             return jsonify(customer_reply)
+        # Phân nhánh truy vấn có cấu trúc hoặc tìm tài liệu theo quyền của user.
         route = route_question(retrieval_question)
         if route["type"] == "SQL":
             context = answer_sql_question(retrieval_question, user_id, session_id, include_inventory_details=True)
         else:
             context = search_documents(question, user_id, session_id)
+        # Không gửi kết quả từ chối hoặc thiếu bằng chứng tới model để tránh suy diễn.
         denied = context == "Tôi không thể hỗ trợ yêu cầu này."
         no_evidence = context.startswith(('Không tìm thấy', 'Chưa tìm thấy', 'Cần làm rõ:', 'Chưa phân tích được'))
         engine = 'database'
@@ -184,7 +207,6 @@ def chat():
                 answer = "Dịch vụ AI chưa sẵn sàng. Vui lòng thử lại sau."
                 record_message(session_id, 'bot', answer)
                 return jsonify(answer=answer, error='ai-unavailable', session_id=session_id), 503
-        # Chuẩn hóa trước khi lưu: API và lịch sử những lượt sau dùng cùng dấu '-'.
         answer = normalize_dashes(str(answer))
         record_message(session_id, "bot", answer)
         return jsonify({
@@ -209,8 +231,8 @@ def chat():
 
 
 if __name__ == "__main__":
-    import threading
-    import webbrowser
+    import threading  # Mở trình duyệt sau khoảng trễ khi chạy ứng dụng trực tiếp.
+    import webbrowser  # Mở trang local mặc định cho nhà phát triển.
 
     threading.Timer(1.0, lambda: webbrowser.open("http://127.0.0.1:5000")).start()
     app.run(host="127.0.0.1", port=5000, debug=False, use_reloader=False)

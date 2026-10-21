@@ -1,14 +1,19 @@
-from flask import jsonify, render_template, request, send_file
-from io import BytesIO
-from mysql.connector import IntegrityError
-from db import cursor
-from security import require_permission, permissions
-from customer_input import (CustomerInputError, FIELDS, REQUIRED, WORKBOOK_HEADERS,
-                            MAX_ROWS, stage, get_batch, revise, commit)
-from customer_file_import import stage_document
-from excel_sync import sync_after_commit
+# Cung cấp form nhập khách, template Excel và API staging/revise/commit.
+from flask import jsonify, render_template, request, send_file  # Dựng trang, nhận JSON và trả file Excel.
+from io import BytesIO  # Tạo workbook template trong bộ nhớ trước khi gửi.
+from mysql.connector import IntegrityError  # Ánh xạ xung đột khóa dữ liệu thành lỗi bản nháp.
+from db import cursor  # Đọc chi nhánh, xe và phiên bản từ MySQL.
+from security import require_permission, permissions  # Bảo vệ API và lọc lựa chọn theo quyền.
+from customer_input import (
+    CustomerInputError,  # Trả lỗi nhập khách với HTTP status phù hợp.
+    FIELDS, REQUIRED, WORKBOOK_HEADERS, MAX_ROWS,  # Dùng chung cấu trúc và giới hạn workbook.
+    stage, get_batch, revise, commit,  # Tạo, đọc, hiệu đính và xác nhận batch.
+)
+from customer_file_import import stage_document  # Tạo batch từ tài liệu khách đã được phân tích.
+from excel_sync import sync_after_commit  # Cập nhật workbook sau commit.
 
 
+# Đăng ký các endpoint của nhóm customer_input để Flask chuyển request vào đúng hàm.
 def register_customer_input(app):
     @app.errorhandler(CustomerInputError)
     def invalid(error):
@@ -22,7 +27,7 @@ def register_customer_input(app):
     @app.get('/api/customer-input/template')
     @require_permission('customer:write')
     def customer_input_template():
-        from openpyxl import Workbook
+        from openpyxl import Workbook  # Đọc hoặc tạo workbook Excel.
         book = Workbook()
         sheet = book.active
         sheet.title = 'Khach_hang'

@@ -1,3 +1,4 @@
+-- Lưu bản nháp nhập thông tin khách hàng trước khi người dùng xác nhận.
 USE honda_chatbot;
 CREATE TABLE IF NOT EXISTS customer_input_batches (
  id BIGINT PRIMARY KEY AUTO_INCREMENT, created_by INT NOT NULL,
@@ -9,6 +10,7 @@ CREATE TABLE IF NOT EXISTS customer_input_batches (
  FOREIGN KEY(created_by) REFERENCES users(id), FOREIGN KEY(document_id) REFERENCES document_uploads(id),
  FOREIGN KEY(chat_session_id) REFERENCES chat_sessions(id), INDEX ix_customer_batch_owner(created_by,status)
 );
+-- Khai báo quyền ghi dữ liệu và gán phạm vi cho các vai trò nghiệp vụ.
 INSERT INTO permissions(code,description)
 SELECT s.code,s.description FROM (
  SELECT 'customer:write' code,'Thêm/cập nhật hồ sơ khách hàng qua bản nháp được xác nhận' description
@@ -17,6 +19,7 @@ SELECT s.code,s.description FROM (
 INSERT INTO role_permissions(role_id,permission_id,data_scope)
 SELECT r.id,p.id,CASE WHEN r.name='super_admin' THEN 'all' ELSE 'branch' END
 FROM roles r JOIN permissions p ON p.code IN ('customer:write','order:write','document:manage')
+-- Đăng ký danh mục tri thức và intent phục vụ thao tác khách hàng.
 WHERE r.name IN ('super_admin','branch_manager','sales_staff')
  AND NOT EXISTS (SELECT 1 FROM role_permissions rp WHERE rp.role_id=r.id AND rp.permission_id=p.id);
 INSERT INTO kb_categories(code,name,required_permission_id)

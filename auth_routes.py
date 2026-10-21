@@ -1,10 +1,12 @@
-import os
-from flask import request,session,redirect,render_template,g,jsonify
-from werkzeug.security import generate_password_hash
-from db import cursor
-from security import authenticate,safe_next,csrf_token,audit
+# Đăng ký đăng nhập, phiên khách, đăng xuất và đổi mật khẩu.
+import os  # Đọc chế độ dev và cấu hình cho phép đăng nhập khách.
+from flask import request, session, redirect, render_template, g, jsonify  # Đọc form/session và trả trang hoặc phản hồi API.
+from werkzeug.security import generate_password_hash  # Hash mật khẩu mới trước khi lưu vào users.
+from db import cursor  # Đọc đường dẫn trang mặc định và cập nhật mật khẩu.
+from security import authenticate, safe_next, csrf_token, audit  # Xác thực thông tin, lọc URL chuyển hướng và ghi audit.
 
 
+# Đăng ký các endpoint của nhóm auth để Flask chuyển request vào đúng hàm.
 def register_auth(app):
     @app.route('/login',methods=['GET','POST'])
     def login():
@@ -22,6 +24,7 @@ def register_auth(app):
                 return redirect(destination or '/chat')
             error='Email hoặc mật khẩu không đúng'
         emails=[]
+        # Chỉ hiển thị tài khoản demo trong môi trường dev; mật khẩu không được đưa vào trang.
         if os.getenv('APP_ENV')=='dev':
             with cursor() as cur:
                 cur.execute('SELECT email FROM users WHERE id BETWEEN 1 AND 9 ORDER BY id');emails=[r['email'] for r in cur.fetchall()]
@@ -38,6 +41,7 @@ def register_auth(app):
 
     @app.route('/change-password',methods=['GET','POST'])
     def change_password():
+        # Chặn user chưa đăng nhập trước khi cho phép thay mật khẩu.
         if not g.user:return redirect('/login')
         error=None
         if request.method=='POST':

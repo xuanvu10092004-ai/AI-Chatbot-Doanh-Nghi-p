@@ -1,14 +1,15 @@
-"""Nhập hàng và xuất lại bản sao Excel sau khi CSDL commit."""
-from flask import g
-from mysql.connector import IntegrityError
-from db import cursor
-from security import permissions, audit
-from dashboard_service import scope_filter
-from operations_routes import OperationRejected, number, text
-from excel_sync import sync_after_commit
+# Ghi phiếu nhập kho, cộng tồn theo chi nhánh và đọc lịch sử trong phạm vi quyền.
+from flask import g  # Lấy user nhân viên đang ghi nhận phiếu.
+from mysql.connector import IntegrityError  # Phân biệt chứng từ trùng do unique constraint.
+from db import cursor  # Ghi phiếu, dòng hàng và số lượng tồn trong transaction.
+from security import permissions, audit  # Kiểm tra quyền và ghi sự kiện nhập kho.
+from dashboard_service import scope_filter  # Lọc lịch sử phiếu theo chi nhánh được cấp.
+from operations_routes import OperationRejected, number, text  # Dùng lại xác thực số và chuỗi của API.
+from excel_sync import sync_after_commit  # Cập nhật workbook sau khi transaction nhập kho thành công.
 
 
 def receive_stock(data):
+    # Chỉ nhân viên có inventory:receive được nhập tại chi nhánh thuộc phạm vi.
     grant = permissions().get('inventory:receive')
     if not g.user or g.user['user_type'] != 'staff' or not grant:
         raise OperationRejected('Bạn không có quyền thực hiện yêu cầu này.', 403)
@@ -28,6 +29,7 @@ def receive_stock(data):
         with cursor() as cur:
             cur.execute('SELECT id FROM branches WHERE id=%s FOR UPDATE', (branch,))
             if not cur.fetchone(): raise OperationRejected('Chi nhánh không hợp lệ.')
+            # Khóa từng dòng tồn trước khi cộng để kiểm tra tràn và tránh ghi đè đồng thời.
             for variant in sorted(canonical):
                 cur.execute('SELECT id FROM product_variants WHERE id=%s', (variant,))
                 if not cur.fetchone(): raise OperationRejected('Mã SP không hợp lệ.')
@@ -48,6 +50,7 @@ def receive_stock(data):
         raise
 
 
+# Tổng hợp số lượng từng phiếu nhập trong 100 phiếu gần nhất thuộc phạm vi quyền.
 def list_receipts():
     where, params = scope_filter('inventory:receive', 'r.branch_id')
     with cursor() as cur:

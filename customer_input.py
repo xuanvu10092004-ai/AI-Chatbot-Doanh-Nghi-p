@@ -1,20 +1,20 @@
-"""Nhập khách hàng có kiểm tra, xem trước và xác nhận; không dùng SQL do LLM sinh."""
+# File này kiểm tra, staging và commit thông tin khách hàng từ form hoặc workbook.
 from __future__ import annotations
-import hashlib
-import json
-import re
-import secrets
-from datetime import date, datetime
-from pathlib import Path
-from zoneinfo import ZoneInfo
+import hashlib  # Tạo snapshot hồ sơ để phát hiện thay đổi giữa preview và commit.
+import json  # Lưu dòng nhập, preview và kết quả đồng bộ trong các batch.
+import re  # Kiểm tra email, điện thoại, mã khách và mã phiên bản.
+import secrets  # Tạo mật khẩu vô hiệu hóa cho user khách mới.
+from datetime import date, datetime  # Chuẩn hóa ngày sinh/ngày đăng ký và tính tuổi.
+from pathlib import Path  # Chuẩn hóa đường dẫn workbook khách hàng.
+from zoneinfo import ZoneInfo  # Lấy ngày hiện tại theo múi giờ Việt Nam.
 
-from flask import g
-from werkzeug.security import generate_password_hash
+from flask import g  # Lấy ID user đang tạo batch và ghi dữ liệu.
+from werkzeug.security import generate_password_hash  # Tạo hash khi cần tạo user mới.
 
-from db import cursor
-from security import permissions, audit
-from document_parser import clean, validate_file, ParseError
-from question_language import normalize
+from db import cursor  # Đọc hồ sơ, khóa batch và lưu khách/đơn trong MySQL.
+from security import permissions, audit  # Áp scope quyền và ghi nhật ký nhập khách.
+from document_parser import clean, validate_file, ParseError  # Chuẩn hóa và xác thực workbook trước khi đọc.
+from question_language import normalize  # So khớp header/trạng thái không phân biệt dấu.
 
 FIELDS = {
  'customer_code':'Mã KH','full_name':'Họ và tên','gender':'Giới tính','birth_date':'Ngày sinh',
@@ -28,6 +28,7 @@ MAX_ROWS = 1000
 WORKBOOK_HEADERS=['Mã KH','Họ và tên','Giới tính','Ngày sinh','Tuổi','Số điện thoại','Email','Tỉnh/Thành phố','Quận/Huyện','Địa chỉ','Nghề nghiệp','Nguồn khách','Chi nhánh phụ trách','Mẫu xe quan tâm','Hình thức thanh toán','Ngày đăng ký','Trạng thái','Mã SP đã mua','Giá trị mua (VNĐ)']
 
 
+# Lỗi nhập khách có HTTP status để route trả thông báo phù hợp.
 class CustomerInputError(ValueError):
     def __init__(self,message,status=400):super().__init__(message);self.status=status
 
@@ -50,6 +51,7 @@ def _branch_allowed(code,branch_id):
     return bool(grant) and (grant['scope']=='all' or grant['scope']=='branch' and grant['branch']==branch_id)
 
 
+# Chuẩn hóa trường, ngày, email, điện thoại và kiểm tra điều kiện đơn hàng của từng dòng.
 def normalize_row(raw):
     if not isinstance(raw,dict):raise CustomerInputError('Dòng dữ liệu không hợp lệ.')
     row={key:clean(raw.get(key)) for key in FIELDS}
@@ -93,8 +95,9 @@ def normalize_row(raw):
     return row,errors
 
 
+# Kiểm tra tiêu đề bắt buộc, giới hạn dòng/cột rồi trả từng dòng theo tên trường chuẩn.
 def read_customer_workbook(path):
-    from openpyxl import load_workbook
+    from openpyxl import load_workbook  # Đọc hoặc tạo workbook Excel.
     try:
         validate_file(Path(path),'xlsx')
         book=load_workbook(path,read_only=True,data_only=True,keep_links=False)
@@ -169,7 +172,7 @@ def preview_rows(cur,rows):
                 if row['interested_model']:
                     cur.execute('SELECT id,model_name FROM products WHERE model_name=%s',(row['interested_model'],));product=cur.fetchone()
                     if not product:
-                        from question_language import product_pattern
+                        from question_language import product_pattern  # Chuẩn hóa câu hỏi và nhận diện mẫu xe.
                         pattern=product_pattern(row['interested_model'])
                         if pattern:
                             cur.execute('SELECT id,model_name FROM products WHERE model_name LIKE %s LIMIT 3',(pattern,));matches=cur.fetchall()
@@ -214,6 +217,7 @@ def _batch(cur,batch_id,lock=False):
     return batch
 
 
+# Lưu bản nháp cùng snapshot xem trước; chưa tạo user hoặc đơn hàng ở bước này.
 def stage(rows,document_id=None,chat_session_id=None):
     with cursor() as cur:
         preview=preview_rows(cur,rows)
@@ -224,6 +228,7 @@ def stage(rows,document_id=None,chat_session_id=None):
     return {'id':batch_id,'version':1,'status':'draft','rows':preview,'valid':all(not r['errors'] for r in preview),'fields':FIELDS}
 
 
+# Đọc batch thuộc user hiện tại và tính lại preview nếu bản nháp còn ở trạng thái draft.
 def get_batch(batch_id):
     with cursor() as cur:
         batch=_batch(cur,batch_id)
@@ -237,7 +242,7 @@ def revise(batch_id,rows,version):
         batch=_batch(cur,batch_id,True)
         if batch['status']!='draft' or version!=batch['version']:raise CustomerInputError('Bản nháp đã thay đổi. Hãy tải lại.',409)
         if batch['document_id']:
-            from document_service import _load
+            from document_service import _load  # Kiểm thử upload, hiệu đính và xuất bản tài liệu.
             document=_load(cur,batch['document_id'],True)
             cur.execute('SELECT document_version FROM customer_import_sources WHERE batch_id=%s',(batch_id,));source=cur.fetchone()
             if source and source['document_version']!=document['version']:
@@ -248,16 +253,17 @@ def revise(batch_id,rows,version):
     return get_batch(batch_id)
 
 
+# Khóa batch, kiểm tra version/snapshot rồi ghi user, hồ sơ và đơn chờ duyệt theo transaction.
 def commit(batch_id,version,confirmed):
     if confirmed is not True:raise CustomerInputError('Cần xác nhận hồ sơ thay đổi và đơn hàng dự kiến trước khi lưu.')
     with cursor() as cur:
-        # Serialize mã KH và đồng bộ trong cùng transaction; không tạo trùng khi xác nhận đồng thời.
+        # Khóa bộ đếm mã KH và ghi cùng transaction để hai lượt commit không cấp trùng mã.
         cur.execute('SELECT version FROM rbac_meta WHERE id=1 FOR UPDATE');cur.fetchone()
         batch=_batch(cur,batch_id,True)
         if batch['status']=='committed':return json.loads(batch['result_json'])
         if batch['status']!='draft' or version!=batch['version']:raise CustomerInputError('Bản nháp đã thay đổi. Hãy tải lại.',409)
         if batch['document_id']:
-            from document_service import _load
+            from document_service import _load  # Kiểm thử upload, hiệu đính và xuất bản tài liệu.
             document=_load(cur,batch['document_id'],True)
             cur.execute('SELECT document_version FROM customer_import_sources WHERE batch_id=%s',(batch_id,));source=cur.fetchone()
             if source and source['document_version']!=document['version']:
@@ -300,6 +306,6 @@ def commit(batch_id,version,confirmed):
                 cur.execute('INSERT INTO customer_import_rows(batch_id,customer_id,row_number,action) VALUES(%s,%s,%s,%s)',(batch_id,user_id,item['row'],item['action']))
             audit(cur,'customer_input_'+item['action'],'user',user_id,before=old,after={'full_name':row['full_name'],'branch_id':item['branch_id'],'batch_id':batch_id},actor=g.user['id'])
         cur.execute("UPDATE customer_input_batches SET status='committed',result_json=%s,version=version+1 WHERE id=%s",(json.dumps(outcome),batch_id))
-    from excel_sync import sync_after_commit
+    from excel_sync import sync_after_commit  # Đọc hoặc ghi workbook đồng bộ từ MySQL.
     outcome['excel_sync'] = sync_after_commit()
     return outcome

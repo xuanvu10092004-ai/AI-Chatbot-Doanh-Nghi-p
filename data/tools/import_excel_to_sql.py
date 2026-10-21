@@ -16,19 +16,21 @@ Sau đó chạy:
     Excel Khach_hang -> users (+ user_roles role customer), customer_profiles (bảng mới), orders, order_items
 Các cột công thức (Tuổi, Giá trị mua, Lợi nhuận, Tồn kho tổng) là dữ liệu dẫn xuất nên KHÔNG nạp.
 """
-import sys
-import datetime as dt
-import pandas as pd
+import sys  # Đọc đường dẫn workbook và file SQL từ đối số dòng lệnh.
+import datetime as dt  # Tính ngày tạo đơn và định dạng ngày Excel thành SQL.
+import pandas as pd  # Đọc các sheet và lọc dữ liệu mẫu trong workbook.
 
 XLSX = sys.argv[1] if len(sys.argv) > 1 else "honda_dataset_khach_hang_san_pham.xlsx"
 OUT = sys.argv[2] if len(sys.argv) > 2 else "honda_import_data.sql"
 
-BRANCH_ID = {"NT01": 1, "NT02": 2, "CR01": 3}                 # khớp bảng branches
+# Ánh xạ mã branch trong workbook sang ID cố định của dữ liệu seed.
+BRANCH_ID = {"NT01": 1, "NT02": 2, "CR01": 3}
+# Ánh xạ nhãn tiếng Việt sang enum segment mà schema lưu.
 SEGMENT = {"Xe số": "xe_so", "Tay ga": "tay_ga", "Côn tay": "con_tay"}
-CUSTOMER_ROLE_ID = 7                                           # role 'customer'
-SALES_BY_BRANCH = {"NT01": 3, "NT02": 4, "CR01": 3}            # user tạo đơn (sales_staff)
-APPROVER_ID = 2                                                # branch_manager duyệt đơn
-USER_ID_OFFSET = 100                                           # KH0001 -> users.id = 101
+CUSTOMER_ROLE_ID = 7  # ID role customer trong dữ liệu seed.
+SALES_BY_BRANCH = {"NT01": 3, "NT02": 4, "CR01": 3}  # Nhân viên tạo đơn theo chi nhánh.
+APPROVER_ID = 2  # Quản lý duyệt các đơn mẫu đã giao.
+USER_ID_OFFSET = 100  # Dịch mã KH0001 thành user ID 101.
 TODAY = dt.date(2026, 10, 12)
 
 DESCRIPTIONS = {
@@ -45,6 +47,7 @@ DESCRIPTIONS = {
 }
 
 
+# Chuyển giá trị pandas/Python thành literal SQL, xử lý NULL, ngày và chuỗi có dấu nháy.
 def q(v):
     """Chuyển giá trị Python thành literal SQL an toàn."""
     if v is None or (isinstance(v, float) and pd.isna(v)) or v is pd.NaT:
@@ -61,7 +64,7 @@ def q(v):
     return f"'{s}'"
 
 
-# ------------------------------------------------------------------ đọc Excel
+# Đọc ba sheet nguồn; giữ số điện thoại ở dạng chuỗi để không mất số 0 đầu.
 sp = pd.read_excel(XLSX, "San_pham")
 tk = pd.read_excel(XLSX, "Ton_kho")
 kh = pd.read_excel(XLSX, "Khach_hang", dtype={"Số điện thoại": str})
@@ -69,7 +72,7 @@ kh = pd.read_excel(XLSX, "Khach_hang", dtype={"Số điện thoại": str})
 tk = tk[tk["Mã SP"].astype(str).str.startswith("SP")]          # bỏ dòng "Tổng"
 sp = sp[sp["Mã SP"].astype(str).str.startswith("SP")]
 
-# products: mỗi mẫu xe duy nhất 1 dòng, id theo thứ tự xuất hiện
+# Tạo mỗi mẫu xe một product ID theo thứ tự gặp trong workbook.
 model_names = list(dict.fromkeys(sp["Mẫu xe"]))
 product_id = {name: i for i, name in enumerate(model_names, 1)}
 first_row = sp.drop_duplicates("Mẫu xe").set_index("Mẫu xe")
@@ -77,6 +80,7 @@ price_by_sku = dict(zip(sp["Mã SP"], sp["Giá niêm yết (VNĐ)"]))
 model_by_sku = dict(zip(sp["Mã SP"], sp["Mẫu xe"]))
 
 
+# Chuyển mã SPxxx trong workbook thành ID số của product_variant.
 def vid(code):
     return int(code[2:])                                        # SP012 -> 12
 
@@ -117,7 +121,7 @@ CREATE TABLE IF NOT EXISTS customer_profiles (
 );
 """)
 
-# ------------------------------------------------------------------ dọn dữ liệu mẫu cũ (chạy lại an toàn)
+# Xóa dữ liệu mẫu cũ theo thứ tự phụ thuộc khóa ngoại trong một transaction.
 w("START TRANSACTION;")
 w("-- Xóa dữ liệu nghiệp vụ mẫu từ file schema và dữ liệu đã nạp lần trước")
 for stmt in [
@@ -130,7 +134,7 @@ for stmt in [
     w(stmt)
 w("")
 
-# ------------------------------------------------------------------ products / specs / variants
+# Tạo sản phẩm, thông số, phiên bản từ các sheet đã đọc.
 w("-- products")
 for name, pid in product_id.items():
     r = first_row.loc[name]
@@ -150,14 +154,14 @@ for _, r in sp.iterrows():
       f"({vid(r['Mã SP'])}, {product_id[r['Mẫu xe']]}, {q(variant_name)}, "
       f"{int(r['Giá niêm yết (VNĐ)'])}, {int(r['Giá vốn (VNĐ)'])});")
 
-# ------------------------------------------------------------------ inventory
+# Tạo một dòng tồn kho cho mỗi phiên bản tại từng branch trong workbook.
 w("\n-- inventory")
 for _, r in tk.iterrows():
     for code in ("NT01", "NT02", "CR01"):
         w("INSERT INTO inventory (branch_id, variant_id, quantity) VALUES "
           f"({BRANCH_ID[code]}, {vid(r['Mã SP'])}, {int(r[code])});")
 
-# ------------------------------------------------------------------ users / roles / profiles
+# Tạo user khách, role và hồ sơ từ sheet Khach_hang.
 w("\n-- users (khách hàng)")
 uid = lambda ma_kh: USER_ID_OFFSET + int(ma_kh[2:])             # KH0001 -> 101
 for _, r in kh.iterrows():
@@ -178,7 +182,7 @@ for _, r in kh.iterrows():
       f"{q(r['Quận/Huyện'])}, {q(r['Địa chỉ'])}, {q(r['Nghề nghiệp'])}, {q(r['Nguồn khách'])}, "
       f"{product_id[r['Mẫu xe quan tâm']]}, {q(r['Hình thức thanh toán'])}, {q(r['Ngày đăng ký'])}, {q(r['Trạng thái'])});")
 
-# ------------------------------------------------------------------ orders cho khách "Đã mua"
+# Chỉ tạo orders/order_items cho khách có mã sản phẩm đã mua.
 w("\n-- orders + order_items (từ khách có trạng thái Đã mua)")
 bought = kh[kh["Mã SP đã mua"].notna()].reset_index(drop=True)
 for i, r in bought.iterrows():

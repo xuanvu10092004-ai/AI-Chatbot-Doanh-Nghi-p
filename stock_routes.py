@@ -1,10 +1,12 @@
-from flask import jsonify,render_template,request,g
-from db import cursor
-from security import require_permission,permissions
-from stock_service import receive_stock,list_receipts
-from operations_routes import OperationRejected
+# Cung cấp trang nhập kho và API tra cứu chi nhánh, phiên bản, phiếu nhập.
+from flask import jsonify, render_template, request, g  # Dựng trang và nhận nội dung phiếu JSON.
+from db import cursor  # Tải lựa chọn chi nhánh và sản phẩm từ MySQL.
+from security import require_permission, permissions  # Kiểm tra quyền và lọc chi nhánh được chọn.
+from stock_service import receive_stock, list_receipts  # Giao ghi nhận và liệt kê phiếu cho service kho.
+from operations_routes import OperationRejected  # Trả lỗi xác thực phiếu theo định dạng API.
 
 
+# Đăng ký các endpoint của nhóm stock để Flask chuyển request vào đúng hàm.
 def register_stock(app):
     @app.get('/stock-receipts')
     @require_permission('inventory:receive')

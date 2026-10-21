@@ -1,27 +1,33 @@
+# File này quản lý kết nối MySQL và cung cấp cursor/transaction dùng chung cho các module nghiệp vụ.
+# Tách pool app và text-to-SQL để tài khoản read-only không ghi dữ liệu.
 from __future__ import annotations
 
-import os
-import time
-from threading import Lock
-from pathlib import Path
-from contextlib import contextmanager
-from contextvars import ContextVar
-from typing import Any, Iterator
+import os  # Đọc tên database, user và mật khẩu từ biến môi trường.
+import time  # Chờ ngắn khi connection pool tạm thời hết kết nối.
+from threading import Lock  # Bảo vệ thao tác khởi tạo pool dùng chung.
+from pathlib import Path  # Tạo đường dẫn tới file .env.
+from contextlib import contextmanager  # Cho phép dùng cursor và transaction với with.
+from contextvars import ContextVar  # Lưu connection transaction riêng cho từng request.
+from typing import Any, Iterator  # Mô tả kiểu dữ liệu dùng trong file.
 
-import mysql.connector
-from dotenv import load_dotenv
-from mysql.connector import MySQLConnection
-from mysql.connector.pooling import MySQLConnectionPool
-from mysql.connector.errors import PoolError
+import mysql.connector  # Driver thực hiện kết nối và chạy lệnh MySQL.
+from dotenv import load_dotenv  # Nạp cấu hình cục bộ từ file .env.
+from mysql.connector import MySQLConnection  # Kiểu connection mà driver trả về.
+from mysql.connector.pooling import MySQLConnectionPool  # Pool giúp các request dùng lại connection.
+from mysql.connector.errors import PoolError  # Báo pool tạm thời không có connection rảnh.
 
 
+# Nạp file .env nằm cạnh source; giá trị bí mật không ghi trong mã.
 load_dotenv(Path(__file__).resolve().parent / '.env')
+# Tách pool app và text-to-SQL để tài khoản read-only không ghi dữ liệu.
 _APP_POOL: MySQLConnectionPool | None = None
 _TEXT_SQL_POOL: MySQLConnectionPool | None = None
 _POOL_LOCK = Lock()
+# Lưu connection transaction đang mở cho các cursor lồng trong cùng request.
 _TRANSACTION = ContextVar('app_transaction',default=None)
 
 
+# Kiểm tra biến môi trường bắt buộc trước khi dùng nó tạo connection.
 def _required(name: str) -> str:
     value = os.getenv(name)
     if value is None:
@@ -29,6 +35,7 @@ def _required(name: str) -> str:
     return value
 
 
+# Gom thông số chung của MySQL; credential được thêm riêng theo role.
 def _base_config() -> dict[str, Any]:
     return {
         "host": _required("DB_HOST"),
@@ -40,11 +47,13 @@ def _base_config() -> dict[str, Any]:
     }
 
 
+# Dùng khóa để hai request không khởi tạo trùng một connection pool.
 def _pool(role: str) -> MySQLConnectionPool:
     with _POOL_LOCK:
         return _get_or_create_pool(role)
 
 
+# Tái sử dụng pool đã có; nếu chưa có thì chọn credential theo role và tạo một lần.
 def _get_or_create_pool(role: str) -> MySQLConnectionPool:
     global _APP_POOL, _TEXT_SQL_POOL
     if role == "app" and _APP_POOL is not None:
@@ -68,6 +77,7 @@ def _get_or_create_pool(role: str) -> MySQLConnectionPool:
     return pool
 
 
+# Chỉ cho phép role app hoặc text-to-SQL để không dùng nhầm quyền kết nối.
 def get_connection(role: str = "app") -> MySQLConnection:
     if role not in {"app", "text_to_sql"}:
         raise ValueError("role phải là app hoặc text_to_sql")
@@ -83,11 +93,13 @@ def get_connection(role: str = "app") -> MySQLConnection:
             if time.monotonic() >= deadline:
                 raise
             time.sleep(0.02)
+    # Nhánh này dùng chatbot_ro và đặt timeout cho truy vấn do LLM sinh.
     if role == 'text_to_sql':
         try:
             with connection.cursor() as cur:
                 cur.execute('SET @ai_branch = NULL')
                 cur.execute('SET @ai_user = NULL')
+                # MySQL và MariaDB dùng tên timeout khác nhau, nên cần biết loại server.
                 cur.execute('SELECT VERSION()')
                 version = cur.fetchone()[0]
                 if 'MariaDB' in version:
@@ -101,6 +113,7 @@ def get_connection(role: str = "app") -> MySQLConnection:
 
 
 @contextmanager
+# Cursor độc lập tự commit/rollback; cursor trong transaction dùng connection của transaction cha.
 def cursor(role: str = "app", dictionary: bool = True) -> Iterator[Any]:
     shared = _TRANSACTION.get() if role=='app' else None
     connection = shared or get_connection(role)
@@ -119,6 +132,7 @@ def cursor(role: str = "app", dictionary: bool = True) -> Iterator[Any]:
 
 
 @contextmanager
+# Gom nhiều thao tác ghi để một lỗi có thể rollback toàn bộ thay đổi.
 def transaction():
     """Một transaction cho công cụ và trạng thái xác nhận; cursor lồng không tự commit."""
     if _TRANSACTION.get() is not None:
@@ -137,6 +151,7 @@ def transaction():
         connection.close()
 
 
+# Dùng parameter binding cho giá trị động; context manager sẽ lo commit hoặc rollback.
 def execute_write(query: str, params: tuple[Any, ...] = ()) -> None:
     with cursor("app", dictionary=False) as db_cursor:
         db_cursor.execute(query, params)

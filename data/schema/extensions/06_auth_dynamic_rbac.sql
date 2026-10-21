@@ -1,19 +1,24 @@
+-- Mở rộng thuộc tính đăng nhập, phạm vi quyền và nhật ký quản trị động.
 USE honda_chatbot;
+-- Bổ sung trạng thái khóa tài khoản và thông tin đăng nhập gần nhất.
 ALTER TABLE users ADD last_login_at DATETIME NULL,
  ADD failed_login_count INT NOT NULL DEFAULT 0, ADD locked_until DATETIME NULL,
  ADD must_change_password BOOLEAN NOT NULL DEFAULT FALSE, ADD password_updated_at DATETIME NULL;
 ALTER TABLE roles ADD is_system BOOLEAN NOT NULL DEFAULT FALSE,
+-- Ghi nhận phạm vi dữ liệu và thời hạn gán vai trò.
  ADD is_active BOOLEAN NOT NULL DEFAULT TRUE,
  ADD landing_path VARCHAR(100) NOT NULL DEFAULT '/dashboard', ADD priority INT NOT NULL DEFAULT 100;
 ALTER TABLE role_permissions ADD data_scope ENUM('all','branch','own') NOT NULL DEFAULT 'all';
 ALTER TABLE user_roles ADD expires_at DATETIME NULL;
 UPDATE roles SET is_system=TRUE WHERE name IN ('super_admin','branch_manager','sales_staff','technician','accountant','marketing','customer','guest');
+-- Tạo nhật ký thay đổi RBAC để truy vết thao tác quản trị.
 UPDATE roles SET landing_path='/chat' WHERE name IN ('customer','guest');
 UPDATE roles SET priority=id*10;
 UPDATE role_permissions rp JOIN roles r ON r.id=rp.role_id
 SET rp.data_scope=CASE WHEN r.name IN ('sales_staff','technician','branch_manager') THEN 'branch' WHEN r.name='customer' THEN 'own' ELSE 'all' END;
 CREATE TABLE rbac_audit_log (
  id BIGINT AUTO_INCREMENT PRIMARY KEY, actor_user_id INT NULL, action VARCHAR(80) NOT NULL,
+-- Cập nhật các quyền bổ sung cho dashboard và quản trị RBAC.
  target_type VARCHAR(40) NOT NULL, target_id INT NULL, before_json JSON NULL, after_json JSON NULL,
  ip_address VARCHAR(45) NULL, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
  INDEX ix_rbac_audit_created(created_at), FOREIGN KEY(actor_user_id) REFERENCES users(id)
@@ -25,6 +30,7 @@ INSERT INTO permissions(code,description) VALUES
 INSERT INTO role_permissions(role_id,permission_id,data_scope)
 SELECT r.id,p.id,CASE WHEN r.name IN ('branch_manager','sales_staff','technician') THEN 'branch' ELSE 'all' END
 FROM roles r JOIN permissions p ON p.code='dashboard:view'
+-- Tạo các view quyền dùng chung cho kiểm tra truy cập và tài liệu.
 WHERE r.name IN ('super_admin','branch_manager','sales_staff','technician','accountant','marketing');
 INSERT INTO role_permissions(role_id,permission_id,data_scope)
 SELECT r.id,p.id,'all' FROM roles r JOIN permissions p ON p.code='dashboard:finance' WHERE r.name IN ('super_admin','accountant');
@@ -44,6 +50,7 @@ SELECT DISTINCT vp.user_id,d.id AS doc_id,d.title,c.code AS category
 FROM v_user_permissions vp JOIN permissions p ON p.code=vp.permission_code
 JOIN kb_categories c ON c.required_permission_id=p.id JOIN kb_documents d ON d.category_id=c.id
 WHERE d.branch_id IS NULL OR vp.data_scope='all' OR (vp.data_scope='branch' AND d.branch_id=vp.scope_branch_id);
+-- Khai báo các mục điều hướng cùng quyền bắt buộc tương ứng.
 CREATE TABLE nav_items (
  code VARCHAR(50) PRIMARY KEY,label VARCHAR(100) NOT NULL,path VARCHAR(100) NOT NULL,
  required_permission_id INT NULL,sort_order INT NOT NULL DEFAULT 100,is_enabled BOOLEAN NOT NULL DEFAULT TRUE,

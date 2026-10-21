@@ -1,11 +1,12 @@
-"""Thay đổi RBAC được serialize, audit và version trong cùng transaction."""
-from datetime import datetime,timezone
-from flask import g
-from werkzeug.security import generate_password_hash
-from db import cursor
-from security import audit,permissions
+# Kiểm tra bất biến RBAC rồi lưu thay đổi tài khoản, vai trò và nhật ký audit.
+from datetime import datetime, timezone  # Đổi hạn vai trò sang UTC trước khi ghi MySQL.
+from flask import g  # Lấy danh tính người đang thực hiện thay đổi trong request.
+from werkzeug.security import generate_password_hash  # Lưu mật khẩu dưới dạng hash, không lưu bản rõ.
+from db import cursor  # Gom các thao tác ghi RBAC trong transaction của MySQL.
+from security import audit, permissions  # Ghi nhật ký và so quyền người thao tác với thay đổi yêu cầu.
 
 
+# Lỗi nghiệp vụ được route đổi thành phản hồi từ chối mà không lộ chi tiết CSDL.
 class AdminRejected(ValueError):pass
 
 
@@ -14,11 +15,13 @@ def bool_value(value):
     return bool(value)
 
 
+# Chỉ chấp nhận chuỗi mật khẩu từ 10 đến 256 ký tự rồi trả về hash để lưu.
 def validate_password(password):
     if not isinstance(password,str) or len(password)<10 or len(password)>256:raise AdminRejected('Mật khẩu cần 10–256 ký tự.')
     return generate_password_hash(password)
 
 
+# Đảm bảo thao tác không xóa admin cuối, tự khóa user hay tự gỡ quyền RBAC.
 def check_invariants(cur,actor,had_manage):
     cur.execute("SELECT COUNT(DISTINCT user_id) AS n FROM v_user_permissions WHERE role_name='super_admin'")
     if cur.fetchone()['n']<1:raise AdminRejected('Không được xóa hoặc hạ quyền quản trị viên cuối cùng.')
@@ -34,6 +37,7 @@ def check_invariants(cur,actor,had_manage):
 
 
 def mutate(kind,target_id,data,operation='save'):
+    # Chụp người thao tác và trạng thái quyền trước khi khóa metadata RBAC.
     actor=g.user['id'];had_manage='rbac:manage' in permissions()
     if kind in {'user','assignment'}:
         grant=permissions()['user:manage']
@@ -45,6 +49,7 @@ def mutate(kind,target_id,data,operation='save'):
             if 'home_branch_id' in data and grant['scope']=='branch' and data['home_branch_id']!=grant['branch']:raise AdminRejected('Chi nhánh ngoài phạm vi quản trị.')
             if not target_id and grant['scope']=='own':raise AdminRejected('Không có quyền tạo tài khoản mới.')
     with cursor() as cur:
+        # Khóa version toàn cục để các thay đổi quyền đồng thời được tuần tự hóa.
         cur.execute('SELECT version FROM rbac_meta WHERE id=1 FOR UPDATE');cur.fetchone()
         before=None;after=None
         if kind=='role':
@@ -122,6 +127,7 @@ def mutate(kind,target_id,data,operation='save'):
 
 
 def set_roles(cur,user_id,roles,replace=True):
+    # Kiểm tra từng role và chặn gán quyền rộng hơn phạm vi của người quản trị.
     if not isinstance(roles,list):raise AdminRejected('Danh sách vai trò không hợp lệ.')
     for assignment in roles:
         cur.execute('SELECT name FROM roles WHERE id=%s',(int(assignment['role_id']),));role=cur.fetchone()

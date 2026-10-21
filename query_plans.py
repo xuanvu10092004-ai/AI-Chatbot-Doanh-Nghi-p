@@ -1,12 +1,12 @@
-"""Bộ lập kế hoạch truy vấn, có nhánh tồn kho xác định và an toàn."""
-import re
+import re  # Nhận diện branch code và số liệu trong câu hỏi tồn kho.
 
-from query_planner import plan_query as legacy_plan_query, NeedsGeneratedQuery
-from question_language import normalize, product_pattern, asks_available_stock
-from inventory_policy import asks_low_stock, LOW_STOCK_THRESHOLD
+from query_planner import plan_query as legacy_plan_query, NeedsGeneratedQuery  # Dùng lại plan cũ cho intent không phải tồn kho.
+from question_language import normalize, product_pattern, asks_available_stock  # Chuẩn hóa ngôn ngữ và nhận diện xe/tồn khả dụng.
+from inventory_policy import asks_low_stock, LOW_STOCK_THRESHOLD  # Áp quy ước xe sắp hết hàng thống nhất.
 
 
 def plan_query(question: str, intent: str) -> tuple[str, tuple]:
+    # Tạo truy vấn tồn kho theo chi nhánh/xe/trạng thái; intent khác chuyển sang planner cũ.
     if intent != 'ask_stock':
         return legacy_plan_query(question, intent)
 

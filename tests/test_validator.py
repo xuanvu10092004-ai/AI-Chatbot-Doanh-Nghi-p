@@ -1,6 +1,6 @@
-import pytest
+import pytest  # Khai báo fixture, tham số hóa test và kiểm tra kết quả.
 
-from sql_safety import validate_sql
+from sql_safety import validate_sql  # Kiểm tra validator và timeout truy vấn SQL.
 
 
 VIEWS = frozenset({"v_ai_products", "v_ai_inventory", "v_ai_customers", "v_ai_orders", "v_ai_product_costs"})

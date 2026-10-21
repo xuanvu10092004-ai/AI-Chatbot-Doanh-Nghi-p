@@ -1,88 +1,65 @@
-/*
- * style.css - Stylesheet cho giao diện AI Chatbot Doanh nghiệp
- * Định nghĩa style cho: body, tiêu đề, thẻ thống kê (stat-card),
- * khung chat (chat-box), và các bong bóng chat (user/bot message).
- */
-
-/* ----------------------------------------------------------
-   Toàn trang: màu nền xám nhạt, font chữ mặc định
-   ---------------------------------------------------------- */
+/* Quy tắc giao diện cũ cho trang, thẻ thống kê và khung hội thoại. */
+/* Nền và kiểu chữ mặc định của các trang dùng stylesheet này. */
 body {
-    background-color: #f4f7fb; /* Nền xám xanh nhạt, dễ chịu cho mắt */
+    background-color: #f4f7fb; /* Nền xám xanh nhạt cho toàn trang. */
     font-family: Arial, sans-serif;
 }
 
-/* ----------------------------------------------------------
-   Tiêu đề trang: màu xám đậm
-   ---------------------------------------------------------- */
+/* Tiêu đề cấp một dùng màu đậm để tách khỏi phần nội dung. */
 h1 {
     font-weight: bold;
-    color: #1f2937; /* Màu xám đậm (Tailwind gray-800) */
+    color: #1f2937; /* Màu chữ tiêu đề. */
 }
 
-/* ----------------------------------------------------------
-   Thẻ thống kê (stat-card): hiển thị module AI trên Dashboard
-   Có bo tròn góc và đổ bóng nhẹ
-   ---------------------------------------------------------- */
+/* Thẻ thống kê dashboard cũ nếu template còn sử dụng class này. */
 .stat-card {
     padding: 20px;
     text-align: center;
-    border: none;            /* Bỏ viền mặc định của Bootstrap */
-    border-radius: 12px;     /* Bo tròn góc */
+    border: none;            /* Bỏ viền ngoài thẻ thống kê. */
+    border-radius: 12px;     /* Bo tròn các góc thẻ. */
     background: white;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05); /* Đổ bóng nhẹ */
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05); /* Tách thẻ khỏi nền trang. */
 }
 
-/* Tiêu đề bên trong stat-card: màu xanh Bootstrap primary */
+/* Nhấn tiêu đề bên trong thẻ thống kê. */
 .stat-card h5 {
     color: #0d6efd;
     font-weight: bold;
 }
 
-/* ----------------------------------------------------------
-   Khung chat (chat-box): bao toàn bộ khu vực chatbot
-   ---------------------------------------------------------- */
+/* Khung cũ bao toàn bộ khu vực hội thoại. */
 .chat-box {
     border: none;
     border-radius: 12px;
-    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.08); /* Đổ bóng mềm hơn stat-card */
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.08); /* Làm nổi khung hội thoại. */
 }
 
-/* ----------------------------------------------------------
-   Khu vực hiển thị tin nhắn (chat-messages)
-   Có thanh cuộn dọc khi nội dung vượt chiều cao
-   ---------------------------------------------------------- */
+/* Giới hạn chiều cao lịch sử và cho phép cuộn khi có nhiều tin nhắn. */
 .chat-messages {
-    height: 300px;           /* Chiều cao cố định */
-    overflow-y: auto;        /* Cuộn dọc khi nội dung dài */
-    background: #f9fafb;     /* Nền trắng xám nhạt */
+    height: 300px;           /* Giữ chiều cao khu vực tin nhắn ổn định. */
+    overflow-y: auto;        /* Cho phép cuộn lịch sử dài. */
+    background: #f9fafb;     /* Nền tương phản nhẹ với bong bóng chat. */
     padding: 15px;
     border-radius: 10px;
 }
 
-/* ----------------------------------------------------------
-   Bong bóng tin nhắn người dùng (user-message)
-   Màu xanh, căn phải (margin-left: auto)
-   ---------------------------------------------------------- */
+/* Tin nhắn người dùng căn về phía cuối khung hội thoại. */
 .user-message {
-    background: #0d6efd;     /* Màu xanh Bootstrap primary */
+    background: #0d6efd;     /* Màu nền tin nhắn người dùng. */
     color: white;
     padding: 10px 14px;
     border-radius: 12px;
     margin-bottom: 10px;
-    max-width: 75%;          /* Giới hạn chiều rộng tối đa */
-    margin-left: auto;       /* Đẩy sang phải */
+    max-width: 75%;          /* Tránh một tin chiếm toàn bộ chiều ngang. */
+    margin-left: auto;       /* Căn tin nhắn người dùng sang phải. */
 }
 
-/* ----------------------------------------------------------
-   Bong bóng tin nhắn bot (bot-message)
-   Màu xám nhạt, căn trái (mặc định)
-   ---------------------------------------------------------- */
+/* Tin nhắn trợ lý căn trái và giới hạn chiều rộng để dễ đọc. */
 .bot-message {
-    background: #e5e7eb;     /* Màu xám nhạt (Tailwind gray-200) */
-    color: #111827;          /* Màu chữ xám đậm (Tailwind gray-900) */
+    background: #e5e7eb;     /* Nền bong bóng tin nhắn trợ lý. */
+    color: #111827;          /* Giữ chữ dễ đọc trên nền sáng. */
     padding: 10px 14px;
     border-radius: 12px;
     margin-bottom: 10px;
-    max-width: 75%;          /* Giới hạn chiều rộng tối đa */
+    max-width: 75%;          /* Giới hạn chiều rộng bong bóng trợ lý. */
 }

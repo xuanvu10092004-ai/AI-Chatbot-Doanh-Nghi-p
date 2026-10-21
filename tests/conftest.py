@@ -1,8 +1,8 @@
-import os
-import pytest
-from flask.testing import FlaskClient
-from app import app
-from db import cursor
+import os  # Đọc biến môi trường hoặc thông tin hệ điều hành được dùng trong file.
+import pytest  # Khai báo fixture, tham số hóa test và kiểm tra kết quả.
+from flask.testing import FlaskClient  # Dùng client Flask để gửi request trong kiểm thử.
+from app import app  # Dùng ứng dụng Flask đang được kiểm thử.
+from db import cursor  # Mở cursor hoặc connection MySQL.
 
 
 class AuthenticatedClient(FlaskClient):

@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-import pytest
+import pytest  # Khai báo fixture, tham số hóa test và kiểm tra kết quả.
 
-from access_control import authorize_intent, create_session
-from db import get_connection
+from access_control import authorize_intent, create_session  # Dùng session, intent và quyền của chatbot.
+from db import get_connection  # Mở cursor hoặc connection MySQL.
 
 
 @pytest.fixture()

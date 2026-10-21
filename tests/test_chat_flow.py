@@ -1,14 +1,14 @@
-import os
-import pytest
-from mysql.connector import Error
+import os  # Đọc biến môi trường hoặc thông tin hệ điều hành được dùng trong file.
+import pytest  # Khai báo fixture, tham số hóa test và kiểm tra kết quả.
+from mysql.connector import Error  # Dùng driver MySQL và kiểu lỗi/kết nối database.
 
-from app import app
-from db import cursor, get_connection
-from access_control import detect_intent, permitted_views
-from query_plans import plan_query
-from sql_service import _execute_text_to_sql
-from rag_service import _search_query
-from schema_context import build_schema_context
+from app import app  # Dùng ứng dụng Flask đang được kiểm thử.
+from db import cursor, get_connection  # Mở cursor hoặc connection MySQL.
+from access_control import detect_intent, permitted_views  # Dùng session, intent và quyền của chatbot.
+from query_plans import plan_query  # Tạo kế hoạch truy vấn tồn kho theo câu hỏi.
+from sql_service import _execute_text_to_sql  # Thực thi câu hỏi SQL hoặc truy vấn đã kiểm tra.
+from rag_service import _search_query  # Tạo truy vấn RAG và lọc nguồn theo quyền.
+from schema_context import build_schema_context  # Tạo schema prompt từ metadata MySQL.
 
 
 @pytest.fixture
@@ -127,8 +127,8 @@ def test_database_failure_is_controlled(client, monkeypatch):
 
 
 def test_prompt_is_sent_to_model(monkeypatch):
-    import ai_service
-    from types import SimpleNamespace
+    import ai_service  # Thay cấu hình/client để test không gọi dịch vụ ngoài.
+    from types import SimpleNamespace  # Tạo response giả có cấu trúc giống Groq SDK.
     calls = []
     def completion(**kwargs):
         calls.append(kwargs)

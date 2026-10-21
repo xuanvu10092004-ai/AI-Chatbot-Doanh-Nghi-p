@@ -1,6 +1,7 @@
+# File này đọc metadata từ information_schema để tạo context cho prompt SQL.
 from __future__ import annotations
 
-from typing import Any
+from typing import Any  # Mô tả connection và các hàng metadata trả về từ information_schema.
 
 
 AI_VIEW_PATTERN = "v_ai_%"
@@ -20,6 +21,7 @@ SCHEMA_SYNONYMS = {
 
 
 def _fetch_rows(connection: Any, query: str, params: tuple[Any, ...]) -> list[dict[str, Any]]:
+    # Đóng cursor kể cả khi truy vấn metadata phát sinh lỗi.
     cursor = connection.cursor(dictionary=True)
     try:
         cursor.execute(query, params)
@@ -36,7 +38,7 @@ def _format_synonyms() -> str:
 
 
 def build_schema_context(connection: Any, database: str, allowed_views: frozenset[str] | None = None) -> str:
-    """Build prompt context from metadata for v_ai_* views only."""
+    # Chỉ đọc metadata của view v_ai_* và giao tiếp tục với tập quyền được truyền vào.
     views = _fetch_rows(
         connection,
         """
@@ -67,6 +69,7 @@ def build_schema_context(connection: Any, database: str, allowed_views: frozense
     )
 
     comments = {row["TABLE_NAME"]: row.get("TABLE_COMMENT") or "" for row in views}
+    # Ưu tiên mô tả tiếng Việt đã biên tập trong từ điển, sau đó mới dùng COMMENT của MySQL.
     dictionary = _fetch_rows(connection, 'SELECT view_name, column_name, description_vi FROM ai_data_dictionary', ())
     descriptions = {(row['view_name'], row['column_name']): row['description_vi'] for row in dictionary}
     grouped: dict[str, list[dict[str, Any]]] = {name: [] for name in view_names}
@@ -96,7 +99,7 @@ def build_schema_context(connection: Any, database: str, allowed_views: frozense
 
 
 def allowed_ai_views(connection: Any, database: str) -> frozenset[str]:
-    """Return the metadata-derived whitelist used by SQL validation."""
+    # Tạo whitelist tự động từ view AI thật sự tồn tại trong schema.
     rows = _fetch_rows(
         connection,
         """

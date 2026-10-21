@@ -1,14 +1,19 @@
-from flask import jsonify, render_template, request, send_file
-from mysql.connector import Error as DatabaseError
+from flask import jsonify, render_template, request, send_file  # Nhận upload/form và trả JSON, HTML hoặc file gốc.
+from mysql.connector import Error as DatabaseError  # Chuyển lỗi lưu file/database thành phản hồi dịch vụ.
 
-from db import cursor
-from document_parser import MAX_BYTES
-from document_service import (DocumentError, upload_document, list_documents, get_document,
-                              process_document, save_review, publish_document, stored_path, _load)
-from security import require_permission, permissions
+from db import cursor  # Đọc metadata để tạo lookup danh mục, chi nhánh và file.
+from document_parser import MAX_BYTES  # Dùng cùng giới hạn kích thước với bộ parser.
+from document_service import (
+    DocumentError,  # Ánh xạ lỗi file thành status HTTP.
+    upload_document, list_documents, get_document,  # Tải file và đọc danh sách/chi tiết theo quyền.
+    process_document, save_review, publish_document,  # Trích xuất, hiệu đính và xuất bản.
+    stored_path, _load,  # Kiểm tra quyền và lấy đường dẫn file gốc.
+)
+from security import require_permission, permissions  # Bảo vệ route và lọc lookup theo quyền hiện tại.
 
 
 def document_request_limits():
+    # Nới giới hạn riêng cho upload và nhập khách; request khác giữ giới hạn mặc định.
     if request.endpoint in {'document_upload','chat_customer_upload'}:
         request.max_content_length = MAX_BYTES + 1024 * 1024
     elif request.endpoint == 'document_review':
@@ -17,6 +22,7 @@ def document_request_limits():
         request.max_content_length = 4 * 1024 * 1024
 
 
+# Đăng ký các endpoint của nhóm documents để Flask chuyển request vào đúng hàm.
 def register_documents(app):
     @app.errorhandler(DocumentError)
     def rejected(error):

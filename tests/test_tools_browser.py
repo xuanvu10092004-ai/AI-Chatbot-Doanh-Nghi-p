@@ -1,14 +1,14 @@
 """Luồng thật desktop/mobile: nhập kho và đính kèm khách ngay trong chat."""
-import os
-import re
-from pathlib import Path
-import pytest
+import os  # Đọc biến môi trường hoặc thông tin hệ điều hành được dùng trong file.
+import re  # Tìm và chuẩn hóa mẫu văn bản bằng biểu thức chính quy.
+from pathlib import Path  # Tạo và kiểm tra đường dẫn file trong dự án.
+import pytest  # Khai báo fixture, tham số hóa test và kiểm tra kết quả.
 playwright=pytest.importorskip('playwright.sync_api')
-from db import cursor
-from test_customer_input_browser import customer_server
-from test_customer_input import clean_customer_input,BATCHES
-from test_document_uploads import document_storage
-from test_chat_tools_imports import tool_cleanup,make_customer_file,no_live_model
+from db import cursor  # Mở cursor hoặc connection MySQL.
+from test_customer_input_browser import customer_server  # Dùng server fixture và trạng thái batch khách.
+from test_customer_input import clean_customer_input,BATCHES  # Dùng fixture và helper tạo/dọn batch nhập khách.
+from test_document_uploads import document_storage  # Dùng fixture lưu trữ và helper upload tài liệu.
+from test_chat_tools_imports import tool_cleanup,make_customer_file,no_live_model  # Dùng fixture nhập liệu và công cụ chat.
 
 
 @pytest.mark.parametrize('width,height',[(1440,1000),(390,844)])

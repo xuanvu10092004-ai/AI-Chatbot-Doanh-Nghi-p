@@ -1,15 +1,18 @@
+# File này gom các truy vấn đọc phục vụ dashboard và màn hình tổng quan.
 from __future__ import annotations
 
-from typing import Any
+from typing import Any  # Khai báo kiểu dữ liệu cho tham số và kết quả.
 
-from db import cursor
+from db import cursor  # Mở cursor hoặc connection MySQL.
 
 
+# Báo cho route biết một màn hình cũ chưa có bảng phù hợp trong schema hiện tại.
 class SchemaExtensionRequired(RuntimeError):
     """Raised when an unsupported legacy module needs a future schema extension."""
 
 
 
+# Đếm dữ liệu từ nguồn whitelist; riêng sản phẩm đếm model khác nhau thay vì phiên bản.
 def get_count(source: str) -> int:
     allowed_sources = {
         "customers": "v_ai_customers",
@@ -27,6 +30,7 @@ def get_count(source: str) -> int:
         return int(db_cursor.fetchone()["total"])
 
 
+# Gom các số đếm dùng cho dashboard vào một cấu trúc thống nhất.
 def get_dashboard_stats() -> dict[str, int]:
     return {
         "customers": get_count("customers"),
@@ -38,8 +42,9 @@ def get_dashboard_stats() -> dict[str, int]:
     }
 
 
+# Lấy phiên bản còn 1 đến ngưỡng tồn thấp và phiên bản hết hàng trong view tồn kho.
 def get_low_stock_products(limit: int = 5) -> list[dict[str, Any]]:
-    from inventory_policy import LOW_STOCK_THRESHOLD
+    from inventory_policy import LOW_STOCK_THRESHOLD  # Dùng quy tắc xác định tình trạng tồn kho.
     bounded_limit = max(1, min(int(limit), 100))
     with cursor("app") as db_cursor:
         # Sắp hết hàng: quantity > 0 AND quantity < 10
@@ -71,6 +76,7 @@ def get_low_stock_products(limit: int = 5) -> list[dict[str, Any]]:
         return low_stock + out_of_stock
 
 
+# Trả khách ở các trạng thái tiềm năng, đang tư vấn hoặc đã mua theo tên.
 def get_potential_customers(limit: int = 5) -> list[dict[str, Any]]:
     bounded_limit = max(1, min(int(limit), 100))
     with cursor("app") as db_cursor:

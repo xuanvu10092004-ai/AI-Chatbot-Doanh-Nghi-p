@@ -1,21 +1,22 @@
-"""Quản lý bản nháp tài liệu, giới hạn file và duyệt trước khi đưa vào RAG."""
+# File này quản lý file, metadata, duyệt và phân quyền tài liệu.
 from __future__ import annotations
 
-import hashlib
-import json
-import subprocess
-import sys
-import uuid
-from pathlib import Path
+import hashlib  # Tính SHA-256 và kích thước file nhận tải lên.
+import json  # Lưu kết quả parser và payload danh sách khách dưới dạng JSON.
+import subprocess  # Chạy parser trong tiến trình riêng với timeout.
+import sys  # Dùng đúng trình thông dịch Python hiện tại cho subprocess.
+import uuid  # Tạo tên file lưu trữ không trùng với tên người dùng.
+from pathlib import Path  # Tạo, kiểm tra và bảo vệ đường dẫn file tài liệu.
 
-from flask import current_app, g
+from flask import current_app, g  # Tạo request, response hoặc client Flask.
 
-from db import cursor
-from dashboard_service import scope_filter
-from document_parser import MAX_BYTES, ParseError, clean, validate_file
-from security import permissions, audit
+from db import cursor  # Mở cursor hoặc connection MySQL.
+from dashboard_service import scope_filter  # Dùng truy vấn widget và scope quyền.
+from document_parser import MAX_BYTES, ParseError, clean, validate_file  # Dùng parser và giới hạn xử lý file.
+from security import permissions, audit  # Dùng xác thực, permission hoặc audit của backend.
 
 
+# Lỗi nghiệp vụ tài liệu mang HTTP status để route phản hồi đúng mã.
 class DocumentError(ValueError):
     def __init__(self, message, status=400):
         super().__init__(message)
@@ -23,6 +24,7 @@ class DocumentError(ValueError):
 
 
 def storage_root():
+    # Dùng thư mục cấu hình hoặc instance/documents và tạo nếu chưa có.
     root = Path(current_app.config.get('DOCUMENT_STORAGE', Path(current_app.instance_path) / 'documents')).resolve()
     root.mkdir(parents=True, exist_ok=True)
     return root
@@ -36,6 +38,7 @@ def stored_path(row):
     return path
 
 
+# Xác thực tiêu đề, danh mục, permission danh mục và scope chi nhánh.
 def check_metadata(title, category_id, branch_id):
     if not isinstance(title, str) or not 1 <= len(clean(title)) <= 255:
         raise DocumentError('Tiêu đề bắt buộc, tối đa 255 ký tự.')
@@ -74,6 +77,7 @@ def _scope():
 
 
 def _load(cur, document_id, lock=False):
+    # Lấy file trong scope quản lý rồi kiểm tra lại quyền đọc của danh mục.
     where, params = _scope()
     cur.execute("SELECT d.*,c.name AS category_name,c.code AS category_code,b.code AS branch_code,EXISTS(SELECT 1 FROM customer_input_batches cb WHERE cb.document_id=d.id AND cb.status='committed') AS customer_synced FROM document_uploads d "
                 'JOIN kb_categories c ON c.id=d.category_id JOIN permissions p ON p.id=c.required_permission_id '
@@ -101,6 +105,7 @@ def public_row(row, detail=False):
     return result
 
 
+# Đếm và phân trang file theo quyền danh mục, chi nhánh và người tải lên.
 def list_documents(page=1):
     where, params = _scope()
     # Một quyền quản lý toàn hệ thống không được mở rộng scope danh mục.
@@ -123,12 +128,14 @@ def list_documents(page=1):
     return {'rows': rows, 'total': total, 'page': page, 'size': 25}
 
 
+# Trả metadata chi tiết qua bộ lọc trường công khai trước khi gửi route.
 def get_document(document_id):
     with cursor() as cur:
         return public_row(_load(cur, document_id), True)
 
 
 def upload_document(file, title, category_id, branch_id):
+    # Ghi file theo tên ngẫu nhiên, xác thực định dạng rồi mới lưu metadata vào CSDL.
     title, category_id, branch_id = check_metadata(title, category_id, branch_id)
     if file is None or not file.filename:
         raise DocumentError('Vui lòng chọn file để tải lên.')
@@ -164,6 +171,7 @@ def upload_document(file, title, category_id, branch_id):
 
 
 def process_document(document_id):
+    # Khóa file, đổi trạng thái processing, chạy parser có timeout rồi lưu kết quả.
     with cursor() as cur:
         row = _load(cur, document_id, True)
         stale = False
@@ -197,6 +205,7 @@ def process_document(document_id):
     return get_document(document_id)
 
 
+# Không nhận nội dung rỗng, quá lớn hoặc còn placeholder công thức/ô lỗi.
 def validate_review_content(content):
     if not isinstance(content, str) or not clean(content) or len(clean(content).encode('utf-8')) > 60000:
         raise DocumentError('Nội dung bắt buộc, không rỗng và tối đa 60.000 byte UTF-8 để lưu vào kho tri thức.')
@@ -205,6 +214,7 @@ def validate_review_content(content):
     return clean(content)
 
 
+# Lưu nội dung đã đối chiếu theo version; danh sách khách đi qua luồng nhập riêng.
 def save_review(document_id, data):
     content = validate_review_content(data.get('content'))
     if data.get('confirmed') is not True:

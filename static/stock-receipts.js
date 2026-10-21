@@ -1,3 +1,4 @@
+// Dựng phiếu nhập nhiều dòng, yêu cầu xác nhận rồi tải lại lịch sử nhập kho.
 'use strict';
 (()=>{const el=id=>document.getElementById(id),node=(tag,text)=>{const n=document.createElement(tag);if(text!==undefined)n.textContent=String(text);return n;};let lookup;
 const tell=(text,error=false)=>{el('stockFeedback').textContent=text;el('stockFeedback').className=error?'error':'success';};

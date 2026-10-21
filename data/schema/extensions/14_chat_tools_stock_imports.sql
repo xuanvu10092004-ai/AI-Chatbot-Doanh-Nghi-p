@@ -1,3 +1,4 @@
+-- Lưu phiếu nhập, lịch hẹn và các bản nháp thao tác do chatbot tạo.
 USE honda_chatbot;
 CREATE TABLE IF NOT EXISTS stock_receipts (
  id BIGINT AUTO_INCREMENT PRIMARY KEY,branch_id INT NOT NULL,created_by INT NOT NULL,
@@ -14,6 +15,7 @@ CREATE TABLE IF NOT EXISTS stock_receipt_items (
 CREATE TABLE IF NOT EXISTS appointment_requests (
  id BIGINT AUTO_INCREMENT PRIMARY KEY,session_id INT NOT NULL,customer_id INT NULL,branch_id INT NOT NULL,
  kind ENUM('maintenance','consultation') NOT NULL,full_name VARCHAR(150) NOT NULL,
+-- Lưu nguồn và từng dòng của các lô nhập khách hàng để đối soát.
  phone VARCHAR(20) NOT NULL,email VARCHAR(255) NULL,scheduled_at DATETIME NOT NULL,
  notes VARCHAR(1000) NULL,status ENUM('scheduled','confirmed','completed','cancelled') NOT NULL DEFAULT 'scheduled',
  version INT NOT NULL DEFAULT 1,created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -22,6 +24,7 @@ CREATE TABLE IF NOT EXISTS appointment_requests (
  FOREIGN KEY(branch_id) REFERENCES branches(id)
 ) COMMENT='Lịch bảo dưỡng và tư vấn từ chat; khách vãng lai gắn với phiên chat';
 CREATE TABLE IF NOT EXISTS chat_action_drafts (
+-- Gán quyền nhập kho và thêm mục nhập hàng vào giao diện.
  id BIGINT AUTO_INCREMENT PRIMARY KEY,session_id INT NOT NULL,user_id INT NULL,
  tool_name VARCHAR(60) NOT NULL,arguments_json JSON NOT NULL,
  status ENUM('draft','committed','cancelled') NOT NULL DEFAULT 'draft',result_json JSON NULL,
@@ -30,6 +33,7 @@ CREATE TABLE IF NOT EXISTS chat_action_drafts (
  INDEX ix_action_session(session_id,status)
 ) COMMENT='Lệnh công cụ đã xem trước; xác nhận có khóa, quyền được đọc lại khi thực thi';
 CREATE TABLE IF NOT EXISTS customer_import_sources (
+-- Đăng ký các intent dùng công cụ có kiểm soát và quyền tương ứng.
  batch_id BIGINT PRIMARY KEY,document_version INT NOT NULL,warnings_json JSON NOT NULL,
  FOREIGN KEY(batch_id) REFERENCES customer_input_batches(id) ON DELETE CASCADE
 );

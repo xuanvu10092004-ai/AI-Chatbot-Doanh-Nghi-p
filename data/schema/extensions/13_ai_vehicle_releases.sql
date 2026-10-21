@@ -1,3 +1,4 @@
+-- Mở rộng view sản phẩm AI với đời xe và trạng thái vòng đời.
 USE honda_chatbot;
 CREATE OR REPLACE VIEW v_ai_products AS
 SELECT p.id AS product_id,p.model_name,pv.id AS variant_id,pv.variant_name,
@@ -7,6 +8,7 @@ SELECT p.id AS product_id,p.model_name,pv.id AS variant_id,pv.variant_name,
  r.model_year,COALESCE(r.lifecycle,'current') AS lifecycle
 FROM products p JOIN product_variants pv ON pv.product_id=p.id
 LEFT JOIN product_specs ps ON ps.product_id=p.id
+-- Cập nhật từ điển dữ liệu để mô hình hiểu các trường bổ sung.
 LEFT JOIN vehicle_releases r ON r.variant_id=pv.id;
 INSERT INTO ai_data_dictionary(view_name,column_name,description_vi) VALUES
  ('v_ai_products','model_year','Năm đời xe; NULL là chưa cập nhật, không tự suy đoán năm'),

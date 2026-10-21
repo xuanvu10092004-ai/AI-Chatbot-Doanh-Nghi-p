@@ -1,3 +1,4 @@
+// Tạo và hiệu đính bản nháp khách; chỉ commit sau khi người dùng xác nhận.
 'use strict';
 (() => {
  const el=id=>document.getElementById(id),node=(tag,text)=>{const n=document.createElement(tag);if(text!==undefined)n.textContent=String(text);return n;};
@@ -6,6 +7,7 @@
  const message=(text,error=false)=>{el('customerInputFeedback').textContent=text;el('customerInputFeedback').className=error?'error':'';};
  async function api(url,method='GET',data){const response=await fetch(url,{method,headers:{'Content-Type':'application/json','X-CSRF-Token':document.querySelector('meta[name="csrf-token"]').content},...(data?{body:JSON.stringify(data)}:{})});const result=await response.json();if(!response.ok)throw new Error(result.message||'Chưa thực hiện được yêu cầu.');return result;}
  const blank=()=>Object.fromEntries(Object.keys(lookup.fields).map(k=>[k,k==='status'?(quick?'Đã mua':'Tiềm năng'):k==='registered_at'?new Date().toLocaleDateString('sv-SE'):k==='branch_code'&&lookup.branches.length===1?lookup.branches[0].code:'']));
+ // Mọi chỉnh sửa đều hủy xác nhận cũ để buộc kiểm tra lại bản nháp.
  function invalidate(){el('commitCustomerBatch').disabled=true;el('confirmCustomerBatch').checked=false;}
  function renderList(){const table=node('table'),head=node('thead'),hr=node('tr'),body=node('tbody');['Dòng','Mã KH','Họ tên','Email','Chi nhánh','Thao tác'].forEach(t=>hr.append(node('th',t)));head.append(hr);rows.forEach((row,i)=>{const tr=node('tr');[i+1,row.customer_code||'Cấp mới',row.full_name,row.email,row.branch_code].forEach(v=>tr.append(node('td',v)));const td=node('td'),button=node('button','Sửa');button.type='button';button.className='secondary';button.addEventListener('click',()=>edit(i));td.append(button);tr.append(td);body.append(tr);});table.append(head,body);el('customerBatchList').replaceChildren(table);}
  function edit(index){selected=index;for(const key of Object.keys(lookup.fields))el('customerField_'+key).value=key==='purchase_amount'&&rows[index][key]?new Intl.NumberFormat('vi-VN').format(Number(rows[index][key])):rows[index][key]??'';el('customerRowForm').scrollIntoView({block:'nearest'});}

@@ -1,17 +1,19 @@
+# Các tiện ích hỗ trợ chuẩn bị dữ liệu, cấu hình và kiểm tra triển khai.
 """Cấp kết nối MySQL cho backend trong LAN, không thay đổi dữ liệu nghiệp vụ."""
 from __future__ import annotations
 
-import argparse
-import ipaddress
-import os
-import sys
-from pathlib import Path
+import argparse  # Đọc mạng LAN cần cấp quyền từ CLI.
+import ipaddress  # Xác thực CIDR IPv4 riêng trước khi tạo account host.
+import os  # Đọc user/password DB từ môi trường.
+import sys  # Thêm project root vào sys.path và in lỗi ra stderr.
+from pathlib import Path  # Tìm root dự án để import init_db.
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from init_db import connect, get_config
+from init_db import connect, get_config  # Tái sử dụng cấu hình và kết nối MySQL của ứng dụng.
 
 
+# Tạo user ứng dụng và read-only giới hạn vào mạng LAN đã được chỉ định.
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--network', required=True, help='Mạng LAN IPv4, ví dụ 192.168.10.0/24')

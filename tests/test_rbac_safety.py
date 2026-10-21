@@ -1,5 +1,5 @@
-import os
-from db import cursor
+import os  # Đọc biến môi trường hoặc thông tin hệ điều hành được dùng trong file.
+from db import cursor  # Mở cursor hoặc connection MySQL.
 
 
 def test_new_user_must_change_password_and_audit_has_no_hash(auth_client):
@@ -40,8 +40,8 @@ def test_rbac_changes_increment_version_atomically(auth_client):
 
 
 def test_own_scope_filters_chatbot_views():
-    from sql_service import _execute_text_to_sql
-    from access_control import permitted_views
+    from sql_service import _execute_text_to_sql  # Thực thi câu hỏi SQL hoặc truy vấn đã kiểm tra.
+    from access_control import permitted_views  # Dùng session, intent và quyền của chatbot.
     rows=_execute_text_to_sql('SELECT customer_id FROM v_ai_orders',allowed_views=permitted_views(1),own_user_id=101)
     assert all(r['customer_id']==101 for r in rows)
     with cursor() as c:c.execute('SELECT COUNT(*) AS n FROM orders WHERE customer_id=101');expected=c.fetchone()['n']
@@ -49,8 +49,8 @@ def test_own_scope_filters_chatbot_views():
 
 
 def test_app_database_user_has_no_ddl():
-    from mysql.connector import Error
-    import pytest
+    from mysql.connector import Error  # Dùng driver MySQL và kiểu lỗi/kết nối database.
+    import pytest  # Khai báo fixture, tham số hóa test và kiểm tra kết quả.
     with cursor() as c:
         c.execute('SELECT CURRENT_USER() AS who');assert c.fetchone()['who'].split('@')[0]==os.environ['DB_USER']
         with pytest.raises(Error) as error:c.execute('CREATE TABLE forbidden_test_table(id INT)')

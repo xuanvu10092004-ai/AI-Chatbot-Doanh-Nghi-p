@@ -1,10 +1,10 @@
-from io import BytesIO
-import pdfplumber
-import pytest
+from io import BytesIO  # Tạo stream trong bộ nhớ cho upload hoặc PDF.
+import pdfplumber  # Đọc nội dung PDF để xác nhận chứng từ.
+import pytest  # Khai báo fixture, tham số hóa test và kiểm tra kết quả.
 
-from db import cursor
-from test_customer_input import clean_customer_input,customer,stage_client,commit_client,BATCHES
-from test_document_uploads import document_storage
+from db import cursor  # Mở cursor hoặc connection MySQL.
+from test_customer_input import clean_customer_input,customer,stage_client,commit_client,BATCHES  # Dùng fixture và helper tạo/dọn batch nhập khách.
+from test_document_uploads import document_storage  # Dùng fixture lưu trữ và helper upload tài liệu.
 
 
 def test_quick_chat_creates_order_only_after_confirmation(auth_client,clean_customer_input):

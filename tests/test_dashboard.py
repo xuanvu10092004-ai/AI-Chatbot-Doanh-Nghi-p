@@ -1,5 +1,5 @@
-import pytest
-from db import cursor
+import pytest  # Khai báo fixture, tham số hóa test và kiểm tra kết quả.
+from db import cursor  # Mở cursor hoặc connection MySQL.
 
 
 @pytest.mark.parametrize('user_id,branch',[(3,1),(4,2),(6,None)])
@@ -29,7 +29,7 @@ def test_technician_widgets_and_api_denial(auth_client):
 
 def test_all_widget_routes_and_customer_status(auth_client):
     auth_client.login(1)
-    from dashboard_service import WIDGETS
+    from dashboard_service import WIDGETS  # Dùng truy vấn widget và scope quyền.
     for name in WIDGETS:assert auth_client.get('/api/dashboard/'+name).status_code==200
     with cursor() as c:
         c.execute('SELECT status AS label,COUNT(*) AS value FROM customer_profiles GROUP BY status ORDER BY value DESC,label');expected=c.fetchall()

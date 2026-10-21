@@ -1,3 +1,4 @@
+-- Lưu tài liệu tải lên, trạng thái trích xuất và quy trình duyệt nội dung.
 USE honda_chatbot;
 CREATE TABLE IF NOT EXISTS document_uploads (
  id BIGINT PRIMARY KEY AUTO_INCREMENT,
@@ -14,12 +15,14 @@ CREATE TABLE IF NOT EXISTS document_uploads (
  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
  processing_started_at DATETIME NULL,
  INDEX ix_document_owner(uploaded_by,created_at), INDEX ix_document_branch(branch_id,status),
+-- Cấp quyền quản lý tài liệu cho các vai trò được phép.
  FOREIGN KEY(uploaded_by) REFERENCES users(id), FOREIGN KEY(category_id) REFERENCES kb_categories(id),
  FOREIGN KEY(branch_id) REFERENCES branches(id), FOREIGN KEY(reviewed_by) REFERENCES users(id),
  FOREIGN KEY(published_doc_id) REFERENCES kb_documents(id)
 ) COMMENT='Tài liệu tải lên và bản nháp trích xuất; chỉ bản đã duyệt mới vào kho tri thức';
 
 INSERT INTO permissions(code,description)
+-- Đưa mục Tài liệu vào menu sau khi quyền tương ứng đã tồn tại.
 SELECT 'document:manage','Tải lên, xem, hiệu đính và duyệt tài liệu trong phạm vi được cấp'
 WHERE NOT EXISTS (SELECT 1 FROM permissions WHERE code='document:manage');
 INSERT INTO role_permissions(role_id,permission_id,data_scope)

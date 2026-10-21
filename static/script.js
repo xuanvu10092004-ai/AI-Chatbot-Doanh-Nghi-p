@@ -1,1 +1,1 @@
-﻿// Chat interaction is implemented in chat.js; this legacy asset contains no identity override.
+﻿// Tài sản cũ không chứa xử lý chat; luồng giao diện hiện tại nằm trong chat.js.

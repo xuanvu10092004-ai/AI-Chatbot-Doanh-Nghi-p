@@ -1,15 +1,15 @@
-"""Công cụ danh mục xe và lịch sửa chữa: SQL cố định, CSRF, scope và audit."""
-from datetime import datetime, timedelta
-from zoneinfo import ZoneInfo
-from decimal import Decimal, InvalidOperation
+from datetime import datetime, timedelta  # Kiểm tra thời điểm đặt lịch và giới hạn ngày.
+from zoneinfo import ZoneInfo  # Áp múi giờ Việt Nam cho lịch dịch vụ.
+from decimal import Decimal, InvalidOperation  # Kiểm tra số nguyên/giá trị tiền không mất độ chính xác.
 
-from flask import g, jsonify, render_template, request
-from mysql.connector import IntegrityError
-from db import cursor
-from security import require_permission, permissions, audit
-from dashboard_service import scope_filter
+from flask import g, jsonify, render_template, request  # Đọc request, danh tính và trả JSON/template.
+from mysql.connector import IntegrityError  # Nhận lỗi ràng buộc từ thao tác ghi danh mục/lịch.
+from db import cursor  # Truy vấn danh mục xe, khách hàng và lịch hẹn.
+from security import require_permission, permissions, audit  # Kiểm tra scope và ghi nhật ký thay đổi.
+from dashboard_service import scope_filter  # Áp phạm vi chi nhánh hoặc user cho lịch.
 
 
+# Lỗi kiểm tra nghiệp vụ mang HTTP status để Flask trả mã phù hợp.
 class OperationRejected(ValueError):
     def __init__(self, message, status=400):
         super().__init__(message)
@@ -45,6 +45,7 @@ def number(data, key, minimum, maximum):
         raise OperationRejected('Giá trị số không hợp lệ: ' + key) from None
 
 
+# Đăng ký các endpoint của nhóm operations để Flask chuyển request vào đúng hàm.
 def register_operations(app):
     @app.errorhandler(OperationRejected)
     def rejected(error):
@@ -73,6 +74,7 @@ def register_operations(app):
     @app.route('/api/catalog',methods=['POST'])
     @app.route('/api/catalog/<int:variant_id>',methods=['PUT'])
     @require_permission('product:manage')
+# Tạo hoặc sửa mẫu/phiên bản xe, kiểm tra version và ghi audit không chứa giá vốn.
     def save_vehicle(variant_id=None,tool_data=None):
         if permissions()['product:manage']['scope'] != 'all':
             raise OperationRejected('Danh mục dùng chung cần quyền toàn hệ thống.',403)
@@ -123,7 +125,7 @@ def register_operations(app):
             if before:before.pop('cost_price',None)
             audit(cur,'catalog_update' if before else 'catalog_create','variant',variant_id,before=before,
                   after={k:data.get(k) for k in ('model_name','variant_name','list_price','model_year','lifecycle')},actor=g.user['id'])
-        from excel_sync import sync_after_commit
+        from excel_sync import sync_after_commit  # Đọc hoặc ghi workbook đồng bộ từ MySQL.
         sync_after_commit()
         return jsonify(id=variant_id),200 if before else 201
 
@@ -160,6 +162,7 @@ def register_operations(app):
 
     @app.post('/api/bookings')
     @require_permission('booking:create')
+# Tạo lịch sửa xe sau khi kiểm tra phạm vi khách, chi nhánh và thời gian hẹn.
     def create_booking(tool_data=None):
         data=payload() if tool_data is None else tool_data
         branch=number(data,'branch_id',1,2**31-1)
@@ -194,6 +197,7 @@ def register_operations(app):
 
     @app.patch('/api/bookings/<int:booking_id>')
     @require_permission('booking:read')
+# Cập nhật trạng thái lịch theo chuyển tiếp hợp lệ và version hiện hành.
     def update_booking(booking_id,tool_data=None):
         data=payload() if tool_data is None else tool_data
         status=data.get('status')

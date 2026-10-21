@@ -1,3 +1,4 @@
+// Gửi câu hỏi/file tới backend rồi dựng câu trả lời, nguồn và bản xem trước bằng DOM an toàn.
 'use strict';
 const form=document.getElementById('chatForm');
 form.addEventListener('submit',async event=>{
@@ -9,6 +10,7 @@ form.addEventListener('submit',async event=>{
   messages.scrollTop=messages.scrollHeight;
   bot.setAttribute('aria-busy','true');
   try{
+    // File khách gửi multipart; câu hỏi văn bản gửi JSON cùng dữ liệu xác nhận lệnh.
     let response;if(attachment){const upload=new FormData();upload.append('file',attachment);response=await fetch('/api/chat/customer-file',{method:'POST',headers:{'X-CSRF-Token':document.querySelector('meta[name="csrf-token"]').content},body:upload});document.getElementById('chatCustomerFile').value='';document.getElementById('chatAttachmentName').textContent='';}else response=await fetch('/chat',{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':document.querySelector('meta[name="csrf-token"]').content},body:JSON.stringify({question,...confirmation})});
     const data=await response.json();
     // Dựng đậm/nghiêng bằng DOM an toàn, không parse HTML của LLM.

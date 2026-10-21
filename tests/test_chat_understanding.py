@@ -1,9 +1,9 @@
 """Câu hỏi trong ảnh phải trả đúng dữ liệu MySQL và giữ phạm vi quyền."""
-import pytest
+import pytest  # Khai báo fixture, tham số hóa test và kiểm tra kết quả.
 
-from access_control import detect_intent
-from db import cursor
-from question_language import product_patterns
+from access_control import detect_intent  # Dùng session, intent và quyền của chatbot.
+from db import cursor  # Mở cursor hoặc connection MySQL.
+from question_language import product_patterns  # Chuẩn hóa câu hỏi và nhận diện mẫu xe.
 
 
 @pytest.mark.parametrize('question', [

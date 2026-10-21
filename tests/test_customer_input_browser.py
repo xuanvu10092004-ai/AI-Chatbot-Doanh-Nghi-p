@@ -1,16 +1,16 @@
-import os
-from threading import Thread
-from pathlib import Path
+import os  # Đọc biến môi trường hoặc thông tin hệ điều hành được dùng trong file.
+from threading import Thread  # Tạo hoặc đồng bộ các luồng chạy đồng thời.
+from pathlib import Path  # Tạo và kiểm tra đường dẫn file trong dự án.
 
-import pytest
-from werkzeug.serving import make_server
+import pytest  # Khai báo fixture, tham số hóa test và kiểm tra kết quả.
+from werkzeug.serving import make_server  # Khởi chạy server Flask để trình duyệt kiểm thử truy cập.
 
 playwright=pytest.importorskip('playwright.sync_api',reason='Cần Playwright kiểm thử nhập khách hàng')
-from app import app
-from db import cursor
-from test_customer_input import clean_customer_input,BATCHES
-from customer_input import WORKBOOK_HEADERS,FIELDS
-from test_document_uploads import document_storage
+from app import app  # Dùng ứng dụng Flask đang được kiểm thử.
+from db import cursor  # Mở cursor hoặc connection MySQL.
+from test_customer_input import clean_customer_input,BATCHES  # Dùng fixture và helper tạo/dọn batch nhập khách.
+from customer_input import WORKBOOK_HEADERS,FIELDS  # Dùng quy tắc kiểm tra và lưu batch nhập khách.
+from test_document_uploads import document_storage  # Dùng fixture lưu trữ và helper upload tài liệu.
 
 
 @pytest.fixture
@@ -49,7 +49,7 @@ def test_customer_form_and_chat_creation(customer_server,width,height,tmp_path):
             page.goto(customer_server+'/documents');page.locator('#documentCategory option').filter(has_text='Thông tin / Danh sách khách hàng').wait_for(state='attached')
             page.locator('#documentCategory').select_option(label='Thông tin / Danh sách khách hàng')
             assert page.locator('#customerTemplateLink').is_visible()
-            from openpyxl import Workbook
+            from openpyxl import Workbook  # Đọc hoặc tạo workbook Excel.
             book=Workbook();sheet=book.active;sheet.title='Khach_hang';sheet.append(WORKBOOK_HEADERS)
             values={'full_name':'Khách từ file','phone':'0907654321','email':f'filebrowser{width}@customer-input.test','branch_code':'NT01','registered_at':'2026-10-10','status':'Đã mua','purchased_sku':'SP014','purchase_amount':56500000}
             reverse={label:key for key,label in FIELDS.items()};reverse['Mã SP đã mua']='purchased_sku';sheet.append([values.get(reverse.get(label)) for label in WORKBOOK_HEADERS])

@@ -1,3 +1,4 @@
+// Tải danh sách khách/tồn kho theo bộ lọc, hiển thị thống kê và lịch sử nhập file.
 'use strict';
 
 let page = 1;
@@ -61,6 +62,7 @@ function renderRows(rows) {
 }
 
 async function load() {
+  // Giữ bộ lọc hiện tại và thêm batch nhập nếu trang được mở từ lịch sử khách.
   tableBox.textContent = 'Đang tải…'; retryButton.disabled = true;
   const params = new URLSearchParams(new FormData(form)); params.set('page', page);
   const imported = new URLSearchParams(location.search).get('import_batch'); if (imported) params.set('import_batch', imported);

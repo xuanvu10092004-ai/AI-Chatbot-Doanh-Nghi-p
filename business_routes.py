@@ -1,12 +1,14 @@
-from flask import request,render_template,jsonify
-from db import cursor
-from security import require_permission
-from dashboard_service import scope_filter
-from inventory_policy import LOW_STOCK_THRESHOLD
-from excel_sync import sync_after_commit
+# Cung cấp danh sách khách hàng hoặc tồn kho có lọc, phân trang và thống kê.
+from flask import request, render_template, jsonify  # Đọc bộ lọc trang và trả HTML/JSON.
+from db import cursor  # Chạy truy vấn danh sách, tổng số và phân phối theo chi nhánh.
+from security import require_permission  # Bảo vệ route bằng quyền phía backend.
+from dashboard_service import scope_filter  # Tạo điều kiện dữ liệu theo phạm vi user.
+from inventory_policy import LOW_STOCK_THRESHOLD  # Dùng ngưỡng tồn thấp thống nhất với chính sách kho.
+from excel_sync import sync_after_commit  # Đồng bộ workbook sau khi đã có thay đổi dữ liệu.
 
 
 def records(kind,low_stock=False):
+    # Xác định bảng và cột cho một trong hai tập dữ liệu được API hỗ trợ.
     page=max(1,int(request.args.get('page',1)));size=max(1,min(100,int(request.args.get('size',20))))
     if kind=='customers':
         where,params=scope_filter('customer:read','u.home_branch_id','u.id')
@@ -25,6 +27,7 @@ def records(kind,low_stock=False):
         if low_stock:where+=' AND i.quantity>0 AND i.quantity<%s';params+=(LOW_STOCK_THRESHOLD,)
     if request.args.get('branch'):
         where+=' AND b.code=%s';params+=(request.args['branch'],)
+    # Cột sắp xếp chỉ được lấy từ whitelist; từ khóa tìm kiếm được bind riêng.
     if request.args.get('q'):
         where+=' AND ('+' OR '.join(column+' LIKE %s' for column in searchable)+')';params+=tuple('%'+request.args['q']+'%' for _ in searchable)
     sort=request.args.get('sort','name');direction=request.args.get('direction','asc')
@@ -43,6 +46,7 @@ def records(kind,low_stock=False):
     return dict(rows=rows,total=total,page=page,size=size,summary=summary)
 
 
+# Đăng ký các endpoint của nhóm business để Flask chuyển request vào đúng hàm.
 def register_business(app):
     for kind,permission in [('customers','customer:read'),('inventory','inventory:read')]:
         def page(dataset=kind):

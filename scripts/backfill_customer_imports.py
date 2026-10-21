@@ -1,7 +1,9 @@
+# Các tiện ích hỗ trợ chuẩn bị dữ liệu, cấu hình và kiểm tra triển khai.
 """Khôi phục liên kết lịch sử nhập file từ kết quả commit cũ, không tạo lại khách."""
-import json
+import json  # Đọc hoặc ghi dữ liệu JSON trong luồng xử lý của file.
 
 
+# Khôi phục liên kết dòng khách từ batch đã commit; INSERT IGNORE giúp chạy lặp an toàn.
 def backfill(connection):
     count=0
     with connection.cursor(dictionary=True) as cur:

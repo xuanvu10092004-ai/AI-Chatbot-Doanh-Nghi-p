@@ -1,10 +1,10 @@
 """Bổ sung AB 125: kiểm chứng dữ liệu, quyền và chạy lại trên MySQL thật."""
-from pathlib import Path
+from pathlib import Path  # Tạo và kiểm tra đường dẫn file trong dự án.
 
-import pytest
+import pytest  # Khai báo fixture, tham số hóa test và kiểm tra kết quả.
 
-from db import cursor, get_connection
-from init_db import execute_script, verify_counts
+from db import cursor, get_connection  # Mở cursor hoặc connection MySQL.
+from init_db import execute_script, verify_counts  # Dùng cấu hình, script SQL và kiểm tra schema khởi tạo.
 
 
 EXTENSION = Path(__file__).resolve().parents[1] / 'data/schema/extensions/08_air_blade_125_seed.sql'

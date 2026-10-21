@@ -1,13 +1,13 @@
 """MySQL thật: công cụ chat, nhập kho, phân luồng và nhập ba định dạng khách hàng."""
-import json
-from io import BytesIO
-from datetime import datetime,timedelta
-from pathlib import Path
-from zoneinfo import ZoneInfo
-import pytest
-from db import cursor
-from test_customer_input import clean_customer_input,BATCHES
-from test_document_uploads import document_storage
+import json  # Đọc hoặc ghi dữ liệu JSON trong luồng xử lý của file.
+from io import BytesIO  # Tạo stream trong bộ nhớ cho upload hoặc PDF.
+from datetime import datetime,timedelta  # Tạo, so sánh hoặc định dạng ngày giờ.
+from pathlib import Path  # Tạo và kiểm tra đường dẫn file trong dự án.
+from zoneinfo import ZoneInfo  # Tính thời gian theo múi giờ Việt Nam.
+import pytest  # Khai báo fixture, tham số hóa test và kiểm tra kết quả.
+from db import cursor  # Mở cursor hoặc connection MySQL.
+from test_customer_input import clean_customer_input,BATCHES  # Dùng fixture và helper tạo/dọn batch nhập khách.
+from test_document_uploads import document_storage  # Dùng fixture lưu trữ và helper upload tài liệu.
 
 
 @pytest.fixture(autouse=True)
@@ -182,20 +182,20 @@ def make_customer_file(fmt,email='file@customer-input.test'):
     values=['Khách Tệp Kiểm Thử','0901234567',email,'NT01','10/10/2026','Tiềm năng']
     out=BytesIO()
     if fmt=='xlsx':
-        from openpyxl import Workbook
+        from openpyxl import Workbook  # Đọc hoặc tạo workbook Excel.
         book=Workbook();sheet=book.active;sheet.title='Danh_sach';sheet.append(headers);sheet.append(values);book.save(out)
     elif fmt=='docx':
-        from docx import Document
+        from docx import Document  # Tạo tài liệu Word mẫu có bảng và nội dung.
         doc=Document();table=doc.add_table(rows=1,cols=len(headers))
         for cell,value in zip(table.rows[0].cells,headers):cell.text=value
         for cell,value in zip(table.add_row().cells,values):cell.text=value
         doc.save(out)
     else:
-        from reportlab.platypus import SimpleDocTemplate,Table,TableStyle
-        from reportlab.lib.pagesizes import A4,landscape
-        from reportlab.pdfbase import pdfmetrics
-        from reportlab.pdfbase.ttfonts import TTFont
-        from reportlab.lib import colors
+        from reportlab.platypus import SimpleDocTemplate,Table,TableStyle  # Dựng bảng khách trong PDF upload.
+        from reportlab.lib.pagesizes import A4,landscape  # Chọn trang ngang để vừa các cột.
+        from reportlab.pdfbase import pdfmetrics  # Đăng ký font tiếng Việt cho PDF.
+        from reportlab.pdfbase.ttfonts import TTFont  # Nạp font cục bộ dùng trong fixture.
+        from reportlab.lib import colors  # Vẽ lưới bảng để parser nhận diện cột.
         pdfmetrics.registerFont(TTFont('ImportNoto',str(Path('static/vendor/fonts/NotoSans-Regular.ttf'))))
         table=Table([headers,values],colWidths=[130,95,210,70,95,100])
         table.setStyle(TableStyle([('FONTNAME',(0,0),(-1,-1),'ImportNoto'),('FONTSIZE',(0,0),(-1,-1),9),('GRID',(0,0),(-1,-1),1,colors.black),('TOPPADDING',(0,0),(-1,-1),8),('BOTTOMPADDING',(0,0),(-1,-1),8)]))
@@ -236,8 +236,8 @@ def test_chat_attachment_and_commit_without_toolbar(auth_client,clean_customer_i
 
 
 def test_scan_and_missing_required_fields_do_not_create_customers(auth_client,clean_customer_input):
-    from customer_file_import import extracted_rows
-    from customer_input import CustomerInputError
+    from customer_file_import import extracted_rows  # Chuyển tài liệu thành bản nháp nhập khách.
+    from customer_input import CustomerInputError  # Dùng quy tắc kiểm tra và lưu batch nhập khách.
     with pytest.raises(CustomerInputError):extracted_rows({'blocks':[]})
     auth_client.login(3)
     response=auth_client.post('/api/chat/customer-file',data={'title':'Kiểm thử parser scan khách','file':(BytesIO(Path('data/samples/documents/scan.pdf').read_bytes()),'scan.pdf')})
@@ -245,8 +245,8 @@ def test_scan_and_missing_required_fields_do_not_create_customers(auth_client,cl
 
 
 def test_backfill_committed_file_history_is_idempotent(auth_client,clean_customer_input):
-    from init_db import get_config,connect
-    from scripts.backfill_customer_imports import backfill
+    from init_db import get_config,connect  # Dùng cấu hình, script SQL và kiểm tra schema khởi tạo.
+    from scripts.backfill_customer_imports import backfill  # Khôi phục lịch sử các dòng khách đã commit.
     auth_client.login(3)
     response=auth_client.post('/api/chat/customer-file',data={'title':'Kiểm thử parser backfill','file':(make_customer_file('xlsx','backfill@customer-input.test'),'old.xlsx')})
     batch=response.json['customer_draft'];BATCHES.add(batch['id'])
@@ -259,12 +259,12 @@ def test_backfill_committed_file_history_is_idempotent(auth_client,clean_custome
 
 
 def test_existing_customer_contact_update_does_not_erase_purchase_or_optional_data(auth_client,clean_customer_input):
-    from test_customer_input import customer,stage_client,commit_client
+    from test_customer_input import customer,stage_client,commit_client  # Dùng fixture và helper tạo/dọn batch nhập khách.
     auth_client.login(3)
     original=stage_client(auth_client,[customer('preserve@customer-input.test',status='Đã mua',purchased_sku='SP014',purchase_amount=56500000,address='Địa chỉ cần giữ')]).json
     result=commit_client(auth_client,original).json;target=result['customer_ids'][0]
     # File chỉ cập nhật liên hệ, không có cột mua xe/địa chỉ/trạng thái.
-    from docx import Document
+    from docx import Document  # Tạo tài liệu Word mẫu có bảng và nội dung.
     doc=Document();table=doc.add_table(rows=2,cols=3)
     for cell,value in zip(table.rows[0].cells,['Họ và tên','Số điện thoại','Email']):cell.text=value
     for cell,value in zip(table.rows[1].cells,['Tên đã cập nhật','0909876543','preserve@customer-input.test']):cell.text=value
@@ -304,8 +304,8 @@ def test_password_in_command_is_redacted_and_not_sent_to_model(auth_client,tool_
 
 
 def test_580_customer_file_commits_all_rows_once_and_creates_no_usable_password(auth_client,clean_customer_input):
-    from openpyxl import Workbook
-    import os
+    from openpyxl import Workbook  # Đọc hoặc tạo workbook Excel.
+    import os  # Đọc biến môi trường hoặc thông tin hệ điều hành được dùng trong file.
     auth_client.login(3)
     book=Workbook();sheet=book.active;sheet.title='Khach_hang'
     sheet.append(['Họ và tên','Số điện thoại','Email','Chi nhánh phụ trách','Ngày đăng ký','Trạng thái'])
@@ -329,8 +329,8 @@ def test_580_customer_file_commits_all_rows_once_and_creates_no_usable_password(
 
 
 def test_file_above_1000_rows_still_rejected(tmp_path):
-    from openpyxl import Workbook
-    from customer_input import read_customer_workbook,CustomerInputError
+    from openpyxl import Workbook  # Đọc hoặc tạo workbook Excel.
+    from customer_input import read_customer_workbook,CustomerInputError  # Dùng quy tắc kiểm tra và lưu batch nhập khách.
     book=Workbook();sheet=book.active;sheet.title='Khach_hang';sheet.append(['Họ và tên'])
     for _ in range(1001):sheet.append(['Quá giới hạn'])
     path=tmp_path/'too-many.xlsx';book.save(path)

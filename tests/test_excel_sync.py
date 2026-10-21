@@ -1,6 +1,6 @@
-from openpyxl import load_workbook
+from openpyxl import load_workbook  # Đọc hoặc tạo workbook Excel.
 
-from excel_sync import SYNCED_WORKBOOK, export_synced_workbook
+from excel_sync import SYNCED_WORKBOOK, export_synced_workbook  # Đọc hoặc ghi workbook đồng bộ từ MySQL.
 
 
 def test_synced_workbook_contains_current_database_data():

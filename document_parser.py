@@ -1,13 +1,13 @@
-"""Trích xuất cục bộ vào cấu trúc chung; không truy cập mạng hay ghi CSDL."""
+# File này đọc PDF, DOCX, XLSX và chuyển nội dung thành dữ liệu có thể tìm kiếm.
 from __future__ import annotations
 
-import json
-import re
-import sys
-import unicodedata
-from datetime import date, datetime
-from pathlib import Path
-from zipfile import ZipFile, BadZipFile
+import json  # Xuất kết quả parser dạng JSON cho tiến trình gọi.
+import re  # Loại ký tự điều khiển trong văn bản được trích xuất.
+import sys  # Đọc đối số file và ghi kết quả từ CLI subprocess.
+import unicodedata  # Chuẩn hóa chữ tiếng Việt về Unicode NFC.
+from datetime import date, datetime  # Định dạng ngày và thời gian lấy từ Excel.
+from pathlib import Path  # Kiểm tra file và chuẩn hóa đường dẫn tài liệu.
+from zipfile import ZipFile, BadZipFile  # Kiểm tra cấu trúc DOCX/XLSX và giới hạn archive.
 
 MAX_BYTES = 10 * 1024 * 1024
 MAX_PAGES = 200
@@ -16,12 +16,14 @@ MAX_CHARS = 200000
 PARSER_VERSION = '1.0'
 
 
+# Lỗi parse có mã ổn định để service lưu trạng thái lỗi cho file.
 class ParseError(ValueError):
     def __init__(self, code, message):
         self.code = code
         super().__init__(message)
 
 
+# Chuẩn hóa ngày, Unicode và ký tự điều khiển trước khi lưu nội dung trích xuất.
 def clean(value) -> str:
     if value is None:
         return ''
@@ -34,6 +36,7 @@ def clean(value) -> str:
     return '\n'.join(line.rstrip() for line in text.split('\n')).strip()
 
 
+# Kiểm tra đuôi, chữ ký file và cấu trúc archive trước khi bộ đọc mở tài liệu.
 def validate_file(path: Path, file_format: str):
     if file_format not in {'pdf', 'docx', 'xlsx'}:
         raise ParseError('unsupported_format', 'Chỉ hỗ trợ PDF, DOCX và XLSX; không nhận DOC/XLS cũ hoặc file có macro.')
@@ -80,7 +83,8 @@ def _text_from_words(words):
 
 
 def _pdf(path, add_text, add_table, warnings):
-    import pdfplumber
+    # Trích văn bản/bảng theo trang; ghi cảnh báo khi trang scan hoặc có ảnh.
+    import pdfplumber  # Đọc nội dung PDF để xác nhận chứng từ.
     missing = []
     with pdfplumber.open(path) as pdf:
         total = len(pdf.pages)
@@ -120,8 +124,9 @@ def _pdf(path, add_text, add_table, warnings):
 
 
 def _docx(path, add_text, add_table, warnings):
-    from docx import Document
-    from docx.table import Table
+    # Đọc đoạn văn, bảng, header/footer và báo các cấu trúc Office chưa hỗ trợ đầy đủ.
+    from docx import Document  # Tạo tài liệu Word mẫu có bảng và nội dung.
+    from docx.table import Table  # Tạo tài liệu Word mẫu có bảng và nội dung.
     document = Document(path)
     for index, block in enumerate(document.iter_inner_content(), 1):
         if isinstance(block, Table):
@@ -150,7 +155,8 @@ def _docx(path, add_text, add_table, warnings):
 
 
 def _xlsx(path, add_text, add_table, warnings):
-    from openpyxl import load_workbook
+    # Đọc giá trị công thức đã lưu, ghi cảnh báo với ô chưa tính và sheet ẩn.
+    from openpyxl import load_workbook  # Đọc hoặc tạo workbook Excel.
     book = load_workbook(path, read_only=True, data_only=False, keep_links=False)
     cached = load_workbook(path, read_only=True, data_only=True, keep_links=False)
     missing_formulas, hidden = [], []
@@ -181,7 +187,6 @@ def _xlsx(path, add_text, add_table, warnings):
                     else:
                         output.append(cell.value)
                 rows.append(output)
-            # Giữ nguyên dòng/ô trống bên trong; chỉ bỏ vùng trống cuối sheet.
             while rows and not any(v is not None and v != '' for v in rows[-1]):
                 rows.pop()
             if rows:
@@ -200,7 +205,9 @@ def _xlsx(path, add_text, add_table, warnings):
         cached.close()
 
 
+# Chuẩn hóa đầu vào trong bước parse_document để các phép so khớp phía sau dùng cùng một dạng.
 def parse_document(path: str | Path, file_format: str | None = None):
+    # Giới hạn kích thước văn bản/bảng và đóng gói nội dung cùng cảnh báo chất lượng.
     path = Path(path)
     file_format = file_format or path.suffix.lower().lstrip('.')
     validate_file(path, file_format)

@@ -1,3 +1,4 @@
+// Hiển thị định dạng chatbot bằng DOM cố định, không phân tích HTML từ model.
 'use strict';
 /* Chỉ dựng DOM từ văn bản, không dùng innerHTML với phản hồi AI.
  * Tài liệu và LLM đều có thể chứa HTML độc hại. Bộ định dạng nhỏ này chỉ

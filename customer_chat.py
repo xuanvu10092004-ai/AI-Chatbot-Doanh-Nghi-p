@@ -1,15 +1,16 @@
-"""Thu thập khách hàng qua hội thoại; chỉ gọi công cụ ghi được backend kiểm tra."""
-import json
-import re
-from flask import g
-from db import cursor
-from security import permissions
-from question_language import normalize,product_pattern
-from customer_input import FIELDS,REQUIRED,today,stage,get_batch,revise,commit,CustomerInputError,normalize_row,_existing
-from access_control import authorize_intent
-from excel_sync import sync_after_commit
+# Nhận lệnh nhập khách qua chat, kiểm tra quyền và cập nhật bản nháp cho user hiện tại.
+import json  # Đọc kết quả batch đã lưu trong MySQL.
+import re  # Tách trường và nhận diện lệnh nhập/xác nhận/hủy.
+from flask import g  # Lấy user sở hữu bản nháp trong request hiện tại.
+from db import cursor  # Tìm batch draft đang mở theo session và user.
+from security import permissions  # Áp scope customer:write khi khởi tạo bản nháp.
+from question_language import normalize, product_pattern  # Chuẩn hóa lệnh và nhận diện tên xe trong câu trả lời.
+from customer_input import FIELDS, REQUIRED, today, stage, get_batch, revise, commit, CustomerInputError, normalize_row, _existing  # Dùng lại kiểm tra và lifecycle batch khách.
+from access_control import authorize_intent  # Kiểm tra quyền nhập khách trước khi xử lý câu hỏi.
+from excel_sync import sync_after_commit  # Đồng bộ workbook sau khi commit thành công.
 
 
+# Chuẩn hóa đầu vào trong bước parse_customer_values để các phép so khớp phía sau dùng cùng một dạng.
 def parse_customer_values(text):
     """Tách các trường có nhãn hoặc tên, email, điện thoại; giữ nguyên địa chỉ."""
     labels={normalize(label):key for key,label in FIELDS.items()}

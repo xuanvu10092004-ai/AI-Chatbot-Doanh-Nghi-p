@@ -1,13 +1,15 @@
+# File này tìm tài liệu theo quyền của user và trả bằng chứng cho luồng RAG.
 from __future__ import annotations
 
-import re
+import re  # Tách từ khóa tìm kiếm và nhận diện cụm tiếng Việt.
 
-from access_control import authorize_intent, detect_intent
-from db import cursor
+from access_control import authorize_intent, detect_intent  # Dùng session, intent và quyền của chatbot.
+from db import cursor  # Mở cursor hoặc connection MySQL.
 
 MAX_DOCS = 3
 
 
+# Chuẩn hóa đầu vào trong bước extract_keywords để các phép so khớp phía sau dùng cùng một dạng.
 def extract_keywords(question: str) -> list[str]:
     stopwords = {
         "là", "là gì", "gì", "như", "thế", "nào", "có", "không", "và",
@@ -16,14 +18,15 @@ def extract_keywords(question: str) -> list[str]:
         "biết", "xem", "tìm", "về", "theo", "đến",
         "tài", "liệu", "thủ", "tục", "hướng", "dẫn", "chính", "sách",
         # 'Chương trình' là cụm dẫn nhập, không phải chủ đề truy xuất.
-        # Giữ lại 'khuyến mãi' để tránh khớp nhầm 'quy trình' kỹ thuật.
         "chương", "trình",
     }
     words = [word for word in re.findall(r"[\wÀ-ỹ-]+", question.casefold()) if len(word) >= 3]
     return [word for word in words if word not in stopwords] or [question]
 
 
+# Tạo câu SQL tìm trong title/content nhưng vẫn nối với v_user_kb_access để không lộ tài liệu ngoài quyền.
 def _search_query(question: str, user_id: int | None, use_like: bool = False) -> tuple[str, tuple[object, ...]]:
+    # Guest chỉ tìm trong tài liệu public; user đăng nhập phải khớp view v_user_kb_access.
     keywords = " ".join(extract_keywords(question))
     if use_like:
         words = extract_keywords(question)[:12]
@@ -65,6 +68,7 @@ def _search_query(question: str, user_id: int | None, use_like: bool = False) ->
     )
 
 
+# Ghi audit quyền trước khi tìm tài liệu và chỉ trả nguồn nằm trong tập user được đọc.
 def search_documents(question: str, user_id: int | None = None, session_id: int | None = None) -> str:
     """Retrieve permission-filtered evidence and include document sources."""
     if session_id is None:
