@@ -1,6 +1,7 @@
 -- Giới hạn view dữ liệu theo người dùng hoặc chi nhánh trong phiên hiện tại.
 USE honda_chatbot;
-CREATE OR REPLACE FUNCTION fn_session_user() RETURNS INT NOT DETERMINISTIC NO SQL RETURN @ai_user;
+DROP FUNCTION IF EXISTS fn_session_user;
+CREATE FUNCTION fn_session_user() RETURNS INT NOT DETERMINISTIC NO SQL RETURN @ai_user;
 -- View khách hàng chỉ trả về bản ghi thuộc phạm vi của user đang truy cập.
 CREATE OR REPLACE VIEW v_ai_customers AS
 SELECT u.id AS customer_id,u.email,u.full_name,u.phone,u.user_type,u.home_branch_id,u.home_branch_id AS branch_id,

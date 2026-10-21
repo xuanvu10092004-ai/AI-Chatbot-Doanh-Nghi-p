@@ -1,5 +1,7 @@
 USE honda_chatbot;
-CREATE OR REPLACE FUNCTION fn_session_branch() RETURNS INT
+-- DROP + CREATE tương thích cả MySQL 8.0 và MariaDB (MySQL không có OR REPLACE FUNCTION).
+DROP FUNCTION IF EXISTS fn_session_branch;
+CREATE FUNCTION fn_session_branch() RETURNS INT
 NOT DETERMINISTIC NO SQL RETURN @ai_branch;
 
 -- Các view v_ai_* là bề mặt dữ liệu dành cho AI. Không view nào phát lộ cost_price,
