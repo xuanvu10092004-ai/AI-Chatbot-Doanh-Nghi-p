@@ -25,7 +25,7 @@ def plan_query(question: str, intent: str) -> tuple[str, tuple]:
 
     low = asks_low_stock(question)
     empty = not low and ('het hang' in q or 'bang 0' in q)
-    count = any(term in q for term in ('bao nhieu', 'tong so', 'may phien ban', 'may chiec', 'may xe', 'so luong', 'how many'))
+    count = any(term in q for term in ('bao nhieu', 'tong', 'may phien ban', 'may chiec', 'may xe', 'so luong', 'how many'))
     detail = 'chi tiet' in q or 'theo san pham' in q or 'theo mau' in q
     if low:
         conditions.append('quantity > 0 AND quantity < %s'); params.append(LOW_STOCK_THRESHOLD)
@@ -34,10 +34,12 @@ def plan_query(question: str, intent: str) -> tuple[str, tuple]:
     elif asks_available_stock(question) and not count:
         conditions.append('quantity > 0')
 
-    if count and not detail:
-        aggregate = 'SUM(quantity) AS total_stock'
+    if empty and count:
+        aggregate = 'COUNT(*) AS empty_inventory_rows'
     elif count and ('dong' in q or 'ban ghi' in q):
         aggregate = 'COUNT(*) AS inventory_rows'
+    elif count and not detail:
+        aggregate = 'SUM(quantity) AS total_stock'
     else:
         aggregate = 'branch_code, branch_name, model_name, variant_name, quantity'
     sql = f'SELECT {aggregate} FROM v_ai_inventory'
