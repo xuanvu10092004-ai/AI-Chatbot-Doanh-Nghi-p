@@ -1,4 +1,5 @@
 # File này chuẩn hóa câu hỏi và chọn luồng SQL, RAG hoặc thao tác nghiệp vụ.
+import re  # Nhận diện câu hỏi mơ hồ cần hỏi lại trước khi truy xuất.
 import unicodedata  # Chuẩn hóa Unicode và bỏ dấu tiếng Việt khi phân loại từ khóa.
 from question_language import wants_sql  # Nhận diện câu hỏi xe/số liệu cần truy vấn SQL.
 
@@ -147,10 +148,31 @@ def detect_module(question):
 
 # Kết hợp intent, từ khóa và module để trả loại truy vấn cùng nhãn giao diện.
 def route_question(question):
+    # Câu chỉ nói “tất cả” chưa đủ rõ đối tượng; hỏi lại thay vì truy xuất nhầm dữ liệu.
+    _, question_no_accent = normalize_question(question)
+    if re.fullmatch(r'(?:cho toi\s+)?(?:xem|hay|giup toi|liet ke|tra cuu)?\s*tat ca(?: di| nhe)?[?!. ]*', question_no_accent):
+        return {'question': question, 'type': 'CLARIFY', 'module': 'AI Chat'}
+    # Phân biệt yêu cầu ngoài phạm vi với yêu cầu tấn công/vượt quyền.
+    if re.search(r"\b(?:luong|du lieu y te|du doan doanh thu|viet ma doc|ma doc)\b", question_no_accent):
+        return {'question': question, 'type': 'OUT_OF_SCOPE', 'module': 'AI Chat'}
+    # Chặn sớm yêu cầu phá hoại, vượt quyền hoặc lộ bí mật trước mọi route dữ liệu.
+    if re.search(r"\b(?:drop\s+table|delete(?:\s+from)?|update(?:\s+\w+)?|sleep\s*\(|password_hash|bo qua.*quyen|dung.{0,20}quyen|xet quyen|mat khau|khong co quyen|truy cap.*(?:bang|users)|doanh thu.*(?:tat ca|chi nhanh))\b", question_no_accent):
+        return {'question': question, 'type': 'DENY', 'module': 'AI Chat'}
+    if re.search(r"\b(?:tai lieu|huong dan|quy dinh|bao hanh|bao duong|ky thuat|sua chua|quy trinh|thay dau)\b", question_no_accent):
+        return {'question': question, 'type': 'RAG', 'module': 'RAG Documents'}
+    if re.fullmatch(r"(?:danh sach|danh sach dau|ho tro toi viec nay|xem lai thong tin do|tra cuu nhanh duoc khong|toi muon hoi them|co bao nhieu|kiem tra giup nhe|gia the nao|con hang khong|tra giup toi cai nay|xem toan bo giup minh|cho biet tinh hinh|tim cho toi o cua hang|cai nao dang co)\W*", question_no_accent):
+        return {'question': question, 'type': 'CLARIFY', 'module': 'AI Chat'}
     # Dùng intent nghiệp vụ trước, sau đó mới fallback sang bộ phân loại từ khóa.
+    # Nhận diện các cách hỏi mơ hồ phổ biến trong hội thoại tự nhiên, nhưng không bắt nhầm câu có đối tượng nghiệp vụ.
+    if re.fullmatch(r"(?:cho coi|cho xem)\s+(?:het|tat ca)(?:\s+di|\s+nhe|\s+giup toi|\s+giup minh)?\W*", question_no_accent):
+        return {'question': question, 'type': 'CLARIFY', 'module': 'AI Chat'}
+    if re.fullmatch(r"(?:minh\s+can\s+)?kiem tra(?:\s+giup(?:\s+minh|\s+toi)?)?(?:\s+lai)?\W*", question_no_accent):
+        return {'question': question, 'type': 'CLARIFY', 'module': 'AI Chat'}
     from access_control import detect_intent  # Dùng session, intent và quyền của chatbot.
     intent = detect_intent(question)
     if intent in {'ask_stock', 'ask_order_status', 'ask_customer_info', 'ask_cost_margin'}:
+        question_type = 'SQL'
+    elif intent == 'ask_price_list':
         question_type = 'SQL'
     elif intent in {'ask_promotion', 'ask_sales_policy', 'ask_tech_procedure', 'ask_finance_procedure', 'ask_hr_policy'}:
         question_type = 'RAG'

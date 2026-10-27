@@ -1,4 +1,11 @@
-# Đăng ký đăng nhập, phiên khách, đăng xuất và đổi mật khẩu.
+"""HTTP endpoints for signing in, guest access, signing out, and password changes.
+
+The route layer reads submitted credentials and delegates authentication to
+``security``. Successful identity is stored in Flask's signed session; the
+current user and permissions are loaded for each request by
+``initialize_request``.
+"""
+
 import os  # Đọc chế độ dev và cấu hình cho phép đăng nhập khách.
 from flask import request, session, redirect, render_template, g, jsonify  # Đọc form/session và trả trang hoặc phản hồi API.
 from werkzeug.security import generate_password_hash  # Hash mật khẩu mới trước khi lưu vào users.
@@ -8,8 +15,10 @@ from security import authenticate, safe_next, csrf_token, audit  # Xác thực t
 
 # Đăng ký các endpoint của nhóm auth để Flask chuyển request vào đúng hàm.
 def register_auth(app):
+    """Attach authentication endpoints to the Flask application."""
     @app.route('/login',methods=['GET','POST'])
     def login():
+        """Authenticate a form submission and route the user to their landing page."""
         error=None
         if request.method=='POST':
             user=authenticate(request.form.get('email',''),request.form.get('password',''))
@@ -32,15 +41,18 @@ def register_auth(app):
 
     @app.post('/guest')
     def guest_login():
+        """Start a guest session only when public guest access is configured."""
         if os.getenv('ALLOW_GUEST_CHAT','false').lower()!='true':return jsonify(error='guest-disabled'),403
         session.clear();session['guest']=True;csrf_token();return redirect('/chat')
 
     @app.post('/logout')
     def logout():
+        """Clear the current browser session and return to the login page."""
         session.clear();return redirect('/login')
 
     @app.route('/change-password',methods=['GET','POST'])
     def change_password():
+        """Require an authenticated user and store only a hash for a new password."""
         # Chặn user chưa đăng nhập trước khi cho phép thay mật khẩu.
         if not g.user:return redirect('/login')
         error=None

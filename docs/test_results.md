@@ -1,3 +1,83 @@
+# Kiểm chứng CSDL dùng chung LAN - 21/10/2026
+
+Môi trường thật: Windows, Python 3.13, MariaDB 10.4.32. Các mục từ ngày 14/10/2026 trở xuống là lịch sử. Lần này sửa lỗi kết nối/dữ liệu giữa các máy, không thay schema chuẩn và không đưa mật khẩu vào source.
+
+Nguyên nhân đã kiểm tra: `.env` dùng loopback nên mỗi máy có database riêng; IP máy chủ đã đổi từ mạng `192.168.10.0/24` sang `192.168.100.187/24` nhưng account LAN cũ chưa đổi. Khởi tạo trước đây bỏ qua cập nhật credential chatbot nếu migration 03 đã chạy. File dump cũ trong Git không có migration/view/routine, không dùng làm cơ chế đồng bộ.
+
+| Kiểm chứng | Kết quả thật |
+|---|---|
+| `python init_db.py --reset` | Đạt; áp dụng 13 extension theo thứ tự 02–14; 11 mẫu, 31 phiên bản, 93 tồn kho, 80 hồ sơ khách, 30 đơn |
+| `python -m pytest -q` qua `scripts/verify_with_snapshot.py` | **310 passed in 61.92s (0:01:01)** |
+| Chạy không có API key: `test_ai.py`, `tests/test_groq_queries.py` | **5 skipped in 0.01s**; không gửi yêu cầu LLM |
+| Extension 02, 03, 04 chạy trực tiếp 2 lần/file | Đạt; số lượng dữ liệu không đổi; khôi phục view bổ sung 05/07/13 sau kiểm tra |
+| Đổi mật khẩu, chạy cấp account lặp lại, thu hồi quyền bảng gốc cấp nhầm | Đạt trên MySQL thật bằng account tạm; mật khẩu cũ bị từ chối 1045, quyền đọc bảng/ghi của chatbot bị từ chối 1142 |
+| Đổi mật khẩu khi migration 03 đã được ghi nhận | Đạt; kết nối mới dùng mật khẩu mới thành công; test trả lại credential gốc |
+| Guest và user 5 hỏi giá vốn, audit denied; sales user 3 đọc tồn; guest không thấy tài liệu sales | Đạt; bộ test quyền/backend hiện có |
+| Validator chặn DROP, nhiều statement, bảng ngoài whitelist và truy vấn nguy hiểm | Đạt; giữ nguyên assertion |
+| Truy vấn tổng tồn, đếm dòng hết hàng, bộ lọc trạng thái khách hàng và thống kê | Đạt đối chiếu SQL gốc; sửa tổng hợp sai và bộ lọc bị bỏ qua |
+| Dữ liệu ADV trong test đồng bộ Excel/chat | Fixture tự tạo và dọn trên MySQL; không phụ thuộc dữ liệu được nhập riêng trên một máy |
+| Xuất workbook | Chỉ xuất khách có hồ sơ; không trộn tài khoản demo thiếu hồ sơ; mỗi test giữ/khôi phục workbook |
+| Khôi phục sau reset/test | Hash và số dòng **mọi bảng** khớp snapshot; database thực tế trở lại 31 đơn; workbook khớp byte trước lần chạy có bảo vệ |
+| Kết nối TCP qua `192.168.100.187:3306` từ chính máy chủ | Đạt với account LAN riêng cho app/chatbot; máy chủ MySQL `THUONG`, đủ 13 migration, đọc 5 view và hàm scope; bảng `users` bị chặn với chatbot |
+| Tạo firewall rule có giới hạn LAN | Chưa áp dụng được: Windows trả `Access is denied`, System Error 5; phiên hiện tại không có quyền Administrator |
+| Kết nối từ máy thành viên khác | Chưa kiểm chứng được; cần chạy `python scripts/check_shared_mysql.py` từ máy đó với cùng IP máy chủ |
+
+10 câu chuẩn dưới đây dùng `tests/test_chat_flow.py::STANDARD_CASES`: đáp án kỳ vọng được tính bằng SQL trên bảng gốc ở mỗi lần chạy, đối chiếu với truy vấn qua view và câu trả lời API; không nhập tay đáp án.
+
+| Câu hỏi | SQL tính đáp án kỳ vọng | Kết quả |
+|---|---|---|
+| SH 160i giá bao nhiêu? | `SELECT pv.list_price FROM product_variants pv JOIN products p ON p.id=pv.product_id WHERE p.model_name=%s ORDER BY pv.list_price` | Đạt |
+| Có bao nhiêu khách hàng đã mua xe? | `SELECT COUNT(*) FROM customer_profiles WHERE status=%s` | Đạt |
+| Tổng số đơn hàng? | `SELECT COUNT(*) FROM orders` | Đạt |
+| Tổng tồn kho toàn hệ thống? | `SELECT SUM(quantity) FROM inventory` | Đạt |
+| Mỗi phân khúc có bao nhiêu phiên bản? | `SELECT p.segment,COUNT(*) FROM products p JOIN product_variants pv ON pv.product_id=p.id GROUP BY p.segment ORDER BY p.segment` | Đạt |
+| Mẫu xe nào có giá niêm yết cao nhất? | `SELECT p.model_name,pv.variant_name,pv.list_price FROM products p JOIN product_variants pv ON pv.product_id=p.id ORDER BY pv.list_price DESC LIMIT 1` | Đạt |
+| Tổng doanh thu thuần của các đơn? | `SELECT SUM(oi.quantity*oi.unit_price-o.discount_amount) FROM orders o JOIN order_items oi ON oi.order_id=o.id` | Đạt |
+| Bao nhiêu khách hàng chọn trả góp? | `SELECT COUNT(*) FROM customer_profiles WHERE payment_preference=%s` | Đạt |
+| Có bao nhiêu dòng tồn kho đang hết hàng? | `SELECT COUNT(*) FROM inventory WHERE quantity=0` | Đạt |
+| Vision 110 có bao nhiêu phiên bản? | `SELECT COUNT(*) FROM products p JOIN product_variants pv ON pv.product_id=p.id WHERE p.model_name=%s` | Đạt |
+
+Trích kết quả lệnh thực tế (script chạy reset và pytest, luôn restore trong `finally`):
+
+```text
+> python init_db.py --reset
+Applied 02_ai_views.sql
+Applied 03_chatbot_ro_user.sql
+Applied 04_indexes.sql
+Applied 05_ai_product_details.sql
+Applied 06_auth_dynamic_rbac.sql
+Applied 07_own_scope_views.sql
+Applied 08_air_blade_125_seed.sql
+Applied 09_document_uploads.sql
+Applied 10_customer_input.sql
+Applied 11_sales_invoices.sql
+Applied 12_catalog_bookings.sql
+Applied 13_ai_vehicle_releases.sql
+Applied 14_chat_tools_stock_imports.sql
+MySQL schema and seed completed.
+products: 11 (expected 11)
+product_variants: 31 (expected 31)
+inventory: 93 (expected 93)
+customers: 80 (expected 80)
+customer_profiles: 80 (expected 80)
+orders: 30 (expected 30)
+> python -m pytest -q
+310 passed in 61.92s (0:01:01)
+Restoring verified snapshot...
+RESTORE VERIFIED: all table contents match the pre-reset snapshot.
+RESTORE VERIFIED: source/export workbook bytes restored.
+```
+
+File mới: `mysql_accounts.py`, `scripts/check_shared_mysql.py`, `tests/test_mysql_deployment.py`. File sửa: `init_db.py`, extension 02/07, `scripts/configure_shared_mysql.py`, `scripts/allow_mysql_lan.ps1`, `scripts/verify_with_snapshot.py`, `business_routes.py`, `query_plans.py`, `sql_service.py`, `excel_sync.py`, `tests/conftest.py`, hai test Excel/chat tồn kho, `pytest.ini`, `.env.example`, `README.md`, báo cáo này.
+
+DDL hàm scope dùng DROP IF EXISTS + CREATE thay cho OR REPLACE FUNCTION, theo [cú pháp MySQL 8.0](https://dev.mysql.com/doc/refman/8.0/en/create-procedure.html). Đã chạy thật trên MariaDB; chưa có server MySQL 8 riêng để xác nhận toàn bộ hệ thống trên engine đó.
+
+Lưu ý dữ liệu/file: `check_db.py` và workbook nguồn đã có thay đổi chưa commit trước phiên này, không đưa vào commit bản vá. Lần kiểm thử đầu dùng công cụ cũ đã tái ghi Excel nguồn; nội dung đã được tái xuất từ database gốc sau restore, không khẳng định giữ nguyên byte workbook trước lần chạy đầu. Các lần chạy sau giữ/khôi phục byte workbook, đồng thời xác nhận hash database. Không thể báo git status sạch khi còn thay đổi của người dùng; không xóa hoặc commit gộp chúng.
+
+Để hoàn tất phía máy thành viên: đặt `DB_HOST=192.168.100.187`, dùng credential app/chatbot của máy chủ và chạy `python scripts/check_shared_mysql.py`, rồi khởi động lại backend. Máy chủ cần bật. Nếu cổng bị chặn, chạy PowerShell **Administrator** với lệnh firewall trong README. Các rule `mysqld` có sẵn được giữ nguyên; không khẳng định script đã giới hạn toàn bộ quyền mạng của những rule đó.
+
+---
+
 # Kiểm chứng logo, câu trả lời và tài khoản - 14/10/2026
 
 ## Bổ sung đồng bộ khách hàng, nhập nhanh và chứng từ bán hàng - 14/10/2026
@@ -491,3 +571,70 @@ File sửa: `db.py`, `security.py`, `access_control.py`, `app.py`, `operations_r
 
 Giới hạn: PDF ảnh quét chưa OCR; nghiệp vụ chưa triển khai (báo giá/cơ hội) không trở thành công cụ chat; phiếu nhập chưa hạch toán giá vốn/công nợ. Chat không chạy mã/SQL ghi tùy ý. Xác nhận file thực tế còn chờ người dùng xem trước vì có 81 hồ sơ được cập nhật. Giữ nguyên file tạm Excel của người dùng ngoài commit, không `git push`.
 
+
+## Bổ sung hiệu ứng tương tác trang đăng nhập - 22/10/2026
+
+Phạm vi chỉ gồm frontend: thêm static/login-effects.js, bổ sung CSS hiệu ứng trong static/portal.css và liên kết script trong `templates/login.html`. Không thay đổi backend, route, session, CSRF, xác thực, database, form hoặc hành vi nút đăng nhập/khách.
+
+| Kiểm tra | Kết quả |
+|---|---|
+| Nền gradient, vật thể trang trí và parallax theo chuột | Đã bổ sung |
+| Kéo-thả vật thể trang trí | Đã bổ sung; chỉ xử lý trên vùng trang trí, không chặn form |
+| Hover/focus và hiệu ứng xuất hiện | Đã bổ sung |
+| prefers-reduced-motion | Đã bổ sung |
+| Không CDN/dependency mới | Đạt; dùng CSS và JavaScript nội bộ |
+| `node --check static/login-effects.js` | Đạt |
+| git diff --check | Đạt |
+| Toàn bộ pytest | Chưa chạy lại trong lần thay đổi frontend này |
+
+Các kết quả 200/263/290 test pass ở những mục phía trên là kết quả lịch sử của các lần kiểm chứng trước, không phải kết quả mới của mục này.
+
+## AI Evaluation & Training Readiness (22/10/2026)
+
+| Hạng mục | Kết quả |
+|---|---|
+| Dataset seed có ground truth | Đạt, 200 câu JSONL |
+| Validate schema dataset | Đạt |
+| Intent baseline | 200/200 |
+| Route baseline | 200/200 |
+| SQL plan safety shape | 200/200 |
+| Pytest pipeline + chat understanding | 41 passed |
+
+Đây là benchmark route/planner trên câu hỏi đã duyệt, không phải fine-tuning và không chứng minh số liệu nghiệp vụ cố định. Tập `evaluation` được tách khỏi `development`; muốn mở rộng lên 1.000+ câu cần bổ sung các lỗi thật sau mỗi vòng benchmark.
+## AI Training Pilot (22/10/2026)
+
+| Hạng mục | Kết quả |
+|---|---|
+| System audit | Đã ghi nhận trong `reports/ai_training/system_audit.md` |
+| Dataset pilot | 150 câu, đủ trường ground truth |
+| Split | Development 100 / Validation 25 / Test 25 |
+| Offline preflight | 150/150 route và intent/plan shape đạt |
+| Pytest pilot + benchmark | 43 passed |
+| Groq/live SQL/RAG groundedness | NOT_RUN; cần API key và fixture/snapshot read-only |
+
+## Phase 2 Real AI Evaluation (22/10/2026)
+
+| Hạng mục | Kết quả thực tế |
+|---|---|
+| Smoke | 10 case, 7 SELECT thực tế, 3 preflight |
+| Toàn bộ pilot | 150 case |
+| SELECT qua `chatbot_ro` | 105 thực thi, 0 lỗi |
+| SQL cần Groq/template | 0 BLOCKED ở planner deterministic; Groq vẫn chưa gọi |
+| Groq request | 0; `GROQ_API_KEY` không có |
+| Latency SELECT | Trung bình 2.51 ms, P95 6.39 ms |
+| Flask E2E/RAG | BLOCKED vì chưa có database fixture cô lập |
+
+Các báo cáo chi tiết nằm trong `reports/ai_training/real_*.md` và `failure_analysis.md`. Không ghi row values hoặc PII vào báo cáo.
+## Phase 3 Real AI Evaluation & Integration (22/10/2026)
+
+| Hạng mục | Kết quả |
+|---|---|
+| SQL SELECT thật qua `chatbot_ro` | 105/105, lỗi 0 |
+| Per-case redacted records | 150 records |
+| Groq LLM | BLOCKED, thiếu `GROQ_API_KEY` |
+| RAG groundedness | BLOCKED, thiếu fixture tài liệu/session cô lập |
+| Flask full E2E | BLOCKED, chưa có database fixture cô lập |
+| Generalization route | 30/30 sau sửa root-cause; 26/30 baseline |
+| Regression tests | 67 passed (routing + pilot + question upgrade) |
+
+Phase 3 được đánh dấu **PARTIAL / BLOCKED**, không tuyên bố Real LLM accuracy hay fine-tuning.

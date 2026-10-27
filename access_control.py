@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os  # Đọc biến môi trường hoặc thông tin hệ điều hành được dùng trong file.
+import re  # Nhận diện cách diễn đạt tự nhiên sau khi chuẩn hóa tiếng Việt.
 from typing import Any  # Mô tả kiểu dữ liệu cho lịch sử hội thoại và kết quả phân quyền.
 
 from db import cursor  # Mở cursor MySQL để lưu session, message và quyết định quyền.
@@ -10,7 +11,7 @@ from db import cursor  # Mở cursor MySQL để lưu session, message và quy�
 # Ánh xạ cụm từ người dùng thường nhập sang mã intent lưu trong chatbot_intents.
 INTENT_RULES = (
     ("ask_cost_margin", ("giá vốn", "gia von", "biên lợi nhuận", "bien loi nhuan", "giá nhập", "giá mua vào")),
-    ("ask_stock", ("tồn kho", "ton kho", "còn hàng", "con hang", "kho hàng", "kho hang")),
+    ("ask_stock", ("tồn kho", "ton kho", "còn hàng", "con hang", "kho hàng", "kho hang", "kiểm hàng", "kiem hang", "kiểm tra hàng", "kiem tra hang", "kiểm kê", "kiem ke", "danh sách tồn", "danh sach ton")),
     ("ask_order_status", ("đơn hàng", "don hang", "đơn của", "don cua")),
     ("ask_order_status", ("doanh thu", "thuần")),
     ("ask_stock", ("hết hàng", "het hang", "trong kho", "sắp hết", "tồn thấp")),
@@ -20,15 +21,80 @@ INTENT_RULES = (
     ("ask_finance_procedure", ("hoàn tiền", "hoan tien", "tài chính", "tai chinh")),
     ("ask_hr_policy", ("nhân sự", "nhan su", "nghỉ phép", "nghi phep")),
     ("ask_promotion", ("khuyến mãi", "khuyen mai", "trả góp", "tra gop")),
-    ("ask_price_list", ("giá", "gia", "mẫu xe", "mau xe", "phiên bản", "phien ban")),
+    ("ask_price_list", ("giá", "gia", "mẫu xe", "mau xe", "phiên bản", "phien ban", "sản phẩm", "san pham")),
 )
 
+# Các mẫu ngữ nghĩa đơn giản giúp hiểu câu hỏi đời thường trước khi dùng bộ từ khóa cũ.
+# Mẫu chỉ phân loại ý định; quyền và truy vấn SQL vẫn được kiểm tra ở các bước sau.
+NATURAL_INTENT_RULES = (
+    ('ask_cost_margin', (r'\b(?:gia von|gia nhap|gia mua vao|bien loi nhuan)\b',)),
+    ('ask_stock', (
+        r'\bkiem(?: tra| ke)?\b.*\b(?:hang|xe|kho|ton)\b',
+        r'\b(?:kho|ton kho)\b.*\b(?:con|co|het|thieu|xe|hang|nao)\b',
+        r'\b(?:xe|hang)\b.*\b(?:con hang|con xe|o dau|chi nhanh|dai ly|cua hang)\b',
+        r'\bcon\b.*\b(?:o dau|chi nhanh|dai ly|cua hang)\b',
+        r'\b(?:chi nhanh|dai ly|cua hang)\b.*\b(?:con|co|het)\b',
+        r'\b(?:sap het|het hang|con hang|con xe)\b',
+        r'\bcon\b.*\b(?:may|bao nhieu|chiec|xe|hang)\b',
+        r'\b(?:kho|ton)\b.*\b(?:duoi|it|thap|muc)\b',
+        r'\bton kho\b',
+        r'\b(?:tim|xem|liet ke|cho toi)\b.*\b(?:con|het|ton)\b',
+        r'\b(?:chi nhanh|dai ly|cua hang)\b.*\b(?:co|dang co|nhung xe)\b',
+        r'\b(?:so luong bang 0|het ton|da het|con rat it)\b',
+    )),
+    ('ask_customer_info', (
+        r'\b(?:khach|khach hang|nguoi mua|ho so khach)\b',
+        r'\b(?:ai|nguoi nao)\b.*\b(?:da mua|dang tu van|cho tu van)\b',
+    )),
+    ('ask_order_status', (
+        r'\b(?:don|don hang|phieu ban)\b.*\b(?:nao|nay|minh|toi|den dau|trang thai)\b',
+        r'\b(?:don hang|doanh thu)\b',
+        r'\b(?:tong|tat ca|bao nhieu)\b.*\b(?:don|don hang|giao dich)\b',
+        r'\b(?:don|don hang)\b.*\b(?:bao nhieu|tong|tat ca)\b',
+        r'\b(?:dem|so luong|xem so)\b.*\bdon\b',
+        r'\b(?:doanh so|ban duoc|tong tien ban hang|ban hang)\b',
+        r'\b(?:kiem tra|xem|theo doi)\b.*\b(?:tinh trang|trang thai)\b.*\bdon\b',
+        r'\b(?:don|cac don)\b.*\b(?:cho|xu ly|xong)\b',
+    )),
+    ('ask_price_list', (
+        r'\b(?:san pham|mau xe|phien ban|danh muc|bang gia|thong so)\b',
+        r'\b(?:xem|tim|tra|tra cuu|cho toi|giup toi)\b.*\b(?:xe|mau|san pham|phien ban)\b',
+        r'\b(?:xe|mau)\b.*\b(?:gia|ban|dang ban|thong so)\b',
+    )),
+)
+
+
+def _detect_natural_intent(normalized: str) -> str | None:
+    # Các cụm đặc biệt được ưu tiên để tránh nhầm ý định tự nhiên.
+    if re.search(r"\b(?:gia von|gia nhap|nhap vao gia|nhap gia|chi phi von|xem cost|cost|xem von)\b", normalized):
+        return "ask_cost_margin"
+    if re.search(r"\b(?:doanh so|doanh thu|ban duoc|tong tien ban hang)\b", normalized):
+        return "ask_order_status"
+    if re.search(r"\b(?:kiem tra|xem|theo doi)\b.*\b(?:tinh trang|trang thai)\b.*\bdon\b", normalized):
+        return "ask_order_status"
+    if re.search(r"\b(?:ton tai|gan het)\b", normalized):
+        return "ask_stock"
+    if re.search(r"\b(?:nt01|nt02|cr01)\b.*\b(?:dang co|co hang|hang xe|nhung xe|o dau)\b", normalized):
+        return "ask_stock"
+    if re.search(r"\b(?:mau xe|xe ga|tay ga|xe so)\b.*\b(?:con|het|so luong)\b", normalized):
+        return "ask_stock"
+    if re.search(r"\b(?:khach hang|du lieu khach|nguoi da mua|nguoi mua|ho so khach)\b", normalized):
+        return "ask_customer_info"
+    if re.search(r"\b(?:xe con tay|xe ga|tay ga|xe so)\b.*\b(?:gia|bao nhieu)\b", normalized):
+        return "ask_price_list"
+    for intent_code, patterns in NATURAL_INTENT_RULES:
+        if any(re.search(pattern, normalized) for pattern in patterns):
+            return intent_code
+    return None
 
 # Dựa vào từ khóa và ngữ cảnh để chọn nhánh xử lý cho detect_intent.
 def detect_intent(question: str) -> str:
     # Import tại chỗ để module ngôn ngữ không tạo vòng import khi khởi động ứng dụng.
     from question_language import normalize, asks_available_stock  # Chuẩn hóa câu hỏi và nhận diện mẫu xe.
     normalized = normalize(question)
+    natural_intent = _detect_natural_intent(normalized)
+    if natural_intent:
+        return natural_intent
     for intent_code, keywords in INTENT_RULES:
         # Ưu tiên bộ nhận diện tồn kho để phân biệt câu hỏi còn hàng với giá xe.
         if intent_code == 'ask_stock' and asks_available_stock(question):

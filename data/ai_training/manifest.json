@@ -1,0 +1,10 @@
+{
+  "total": 150,
+  "splits": {
+    "development": 100,
+    "validation": 25,
+    "test": 25
+  },
+  "source": "human_reviewed_seed_plus_explicit_safety_cases",
+  "fine_tuned": false
+}

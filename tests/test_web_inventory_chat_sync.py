@@ -3,7 +3,7 @@ from query_plans import plan_query  # Tạo kế hoạch truy vấn tồn kho th
 from sql_service import answer_sql_question  # Thực thi câu hỏi SQL hoặc truy vấn đã kiểm tra.
 
 
-def test_chat_reads_web_inventory_for_adv_at_cr01():
+def test_chat_reads_web_inventory_for_adv_at_cr01(adv_inventory):
     question = 'xe ADV 160 ở kho CR01 có mấy chiếc'
     sql, params = plan_query(question, 'ask_stock')
     assert 'SUM(quantity) AS total_stock' in sql

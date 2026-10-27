@@ -1,3 +1,10 @@
+"""Turn extracted customer documents into reviewable import drafts.
+
+This module is the adapter between document extraction and customer-input
+validation. It never commits customer records itself: staff must review and
+confirm the returned batch through the customer-input workflow.
+"""
+
 import json  # Lưu cảnh báo trích xuất cạnh bản nháp nhập khách.
 import re  # Tách header và dòng văn bản có nhãn từ nội dung tài liệu.
 from flask import g  # Lấy user nhân viên sở hữu batch nhập file.
@@ -9,6 +16,7 @@ from security import permissions  # Chặn nhập file khi thiếu quyền khác
 
 
 def header_key(value):
+    """Map a spreadsheet/document column label to a supported customer field."""
     label=normalize(str(value or ''))
     label=re.sub(r'\s*\*\s*$','',label)
     aliases={normalize(v):k for k,v in FIELDS.items()}
@@ -20,6 +28,13 @@ def header_key(value):
 
 # Chuẩn hóa đầu vào trong bước extracted_rows để các phép so khớp phía sau dùng cùng một dạng.
 def extracted_rows(extraction,branch_code=None):
+    """Convert parser blocks into customer rows without guessing table layouts.
+
+    A recognized table header establishes the column mapping for following
+    rows. If no usable table rows exist, labeled text is parsed as a fallback.
+    Missing optional values receive explicit defaults and warnings; malformed
+    or ambiguous tables are rejected instead of being silently reshaped.
+    """
     output=[];warnings=[]
     mapping=None
     for block in extraction.get('blocks',[]):
@@ -62,6 +77,15 @@ def extracted_rows(extraction,branch_code=None):
 
 # Chỉ nhân viên có quyền đọc/ghi được staging danh sách khách từ tài liệu đã trích xuất.
 def stage_document(document_id,chat_session_id=None):
+    """Create or reuse a draft batch from an authorized customer document.
+
+    The flow checks staff permissions and document category, reuses a draft
+    for the same document version when possible, converts the stored extraction
+    into rows, preserves existing fields omitted by the upload, then stages
+    the rows and records source-version/warning metadata. Persistence of actual
+    customer changes is intentionally left to ``customer_input.commit`` after
+    an explicit review and confirmation.
+    """
     if not g.user or g.user['user_type']!='staff' or not {'customer:write','document:manage'}<=permissions().keys():
         raise CustomerInputError('Bạn không có quyền thực hiện yêu cầu này.',403)
     with transaction():

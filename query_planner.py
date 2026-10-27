@@ -23,7 +23,7 @@ def plan_query(question: str, intent: str) -> tuple[str, tuple]:
         return ('SELECT model_name, variant_name, list_price, engine_cc, fuel_consumption_l100km, '
                 'fuel_tank_l, weight_kg, brake_type, warranty FROM v_ai_products WHERE ('
                 + conditions + ') ORDER BY model_name, list_price'), tuple(patterns)
-    if intent != 'ask_stock' and any(w in q for w in ('so sanh', 'trung binh', 'theo thang', 'theo ngay', 'sap xep', 'dau tien', 'gan nhat', 'top ', 'duoi ', 'tren ', 'tu ', 'den ')):
+    if intent != 'ask_stock' and (any(w in q for w in ('so sanh', 'trung binh', 'theo thang', 'theo ngay', 'sap xep', 'dau tien', 'gan nhat', 'top ', 'tren ', 'den ')) or re.search(r'\\btu\\s+\\d', q)):
         raise NeedsGeneratedQuery()
     count = any(w in q for w in ('bao nhieu', 'tong so', 'may phien ban', 'how many'))
     price = any(w in q for w in ('gia', 'bao nhieu tien', 'bao tien'))
@@ -43,6 +43,8 @@ def plan_query(question: str, intent: str) -> tuple[str, tuple]:
         if 'da mua' in q: return 'SELECT COUNT(*) AS purchased_customers FROM v_ai_customers WHERE customer_status = %s', ('Đã mua',)
         if 'tra gop' in q: return 'SELECT COUNT(*) AS installment_customers FROM v_ai_customers WHERE payment_preference = %s', ('Trả góp',)
         if count: return 'SELECT COUNT(*) AS customers FROM v_ai_customers', ()
+        if any(term in q for term in ('tra khach', 'tra cuu khach', 'danh sach khach', 'tat ca khach', 'khach hang nao', 'liet ke khach', 'ho so khach', 'danh sach nguoi mua', 'kiem tra du lieu khach', 'tra cuu toan bo khach', 'tim thong tin khach', 'khach da luu', 'xem cac khach')):
+            return 'SELECT * FROM v_ai_customers ORDER BY customer_id', ()
         if any(w in q for w in ('tiem nang', 'tu van', 'ngung lien he')):
             status = 'Tiềm năng' if 'tiem nang' in q else 'Đang tư vấn' if 'tu van' in q else 'Ngừng liên hệ'
             return 'SELECT customer_id, full_name, customer_status, home_branch_code FROM v_ai_customers WHERE customer_status = %s', (status,)
@@ -78,8 +80,12 @@ def plan_query(question: str, intent: str) -> tuple[str, tuple]:
     if pattern:
         if count and not price and 'thong tin' not in q: return 'SELECT COUNT(*) AS variants FROM v_ai_products WHERE model_name LIKE %s', (pattern,)
         return f'SELECT * FROM {view} WHERE model_name LIKE %s ORDER BY list_price', (pattern,)
+    under = re.search(r"\bduoi\s+(\d+)\s*(?:trieu|tr)\b", q)
+    if under and any(term in q for term in ('xe ga', 'tay ga', 'xe so', 'xe con')):
+        segment = 'tay_ga' if any(term in q for term in ('xe ga', 'tay ga')) else 'xe_so' if 'xe so' in q else 'con_tay'
+        return 'SELECT model_name, variant_name, list_price FROM v_ai_products WHERE segment = %s AND list_price < %s ORDER BY list_price', (segment, int(under.group(1)) * 1000000)
     for synonym, segment in (('xe ga', 'tay_ga'), ('tay ga', 'tay_ga'), ('xe so', 'xe_so'), ('xe con', 'con_tay')):
         if synonym in q: return 'SELECT model_name, variant_name, list_price FROM v_ai_products WHERE segment = %s ORDER BY model_name, list_price', (segment,)
     if count and not price: return 'SELECT COUNT(*) AS variants FROM v_ai_products', ()
-    if q in ('gia xe', 'bang gia', 'gia cac mau xe', 'danh sach xe', 'danh sach mau xe'): return f'SELECT * FROM {view} ORDER BY model_name, list_price', ()
+    if q in ('gia xe', 'bang gia', 'gia cac mau xe', 'danh sach xe', 'danh sach mau xe') or any(term in q for term in ('tra san pham', 'tra cuu san pham', 'danh sach san pham', 'tat ca san pham', 'toan bo bang gia', 'mau xe dang ban', 'danh muc san pham', 'nhung mau xe nao', 'danh sach cac mau xe', 'cac phien ban xe', 'xem danh sach xe', 'xem tat ca mau xe')): return f'SELECT * FROM {view} ORDER BY model_name, list_price', ()
     raise NeedsGeneratedQuery()
