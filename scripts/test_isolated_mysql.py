@@ -6,6 +6,7 @@ stay under ignored data/exports for inspection. No credentials are printed.
 import os
 from pathlib import Path
 import socket
+import shutil
 import subprocess
 import sys
 import time
@@ -27,6 +28,11 @@ def main():
         raise RuntimeError('Cần MariaDB Windows với mysqld/mysql_install_db để tạo server riêng.')
     folder = ROOT / 'data/exports' / ('isolated-mysql-' + uuid4().hex)
     folder.mkdir(parents=True)
+    workspace = folder / 'workspace'
+    # Tests write workbooks/screenshots; keep these private for the entire run.
+    shutil.copytree(ROOT, workspace, ignore=shutil.ignore_patterns(
+        '.git', '.env', '.venv', 'venv', '__pycache__', '.pytest_cache*',
+        'exports', '.codex', '.agents', 'instance'))
     datadir = folder / 'mysql-data'
     before = fingerprints(config)
     snapshot = folder / 'source.sql'
@@ -64,7 +70,7 @@ def main():
             raise RuntimeError('Timeout khởi động server test.')
         private_env = dict(os.environ, DB_HOST='127.0.0.1', DB_PORT=str(port),
                            ADMIN_DB_USER='root', ADMIN_DB_PASSWORD='', MYSQL_PWD='',
-                           GROQ_API_KEY='', APP_ENV='dev')
+                           GROQ_API_KEY=os.getenv('GROQ_API_KEY','') if '--live-llm' in sys.argv else '', APP_ENV='dev')
         with snapshot.open('rb') as stream:
             subprocess.run([str(client), '--host=127.0.0.1', '--port=' + str(port),
                             '--user=root', '--binary-mode'], stdin=stream, env=private_env, check=True)
@@ -77,9 +83,16 @@ def main():
         finally:
             connection.close()
         print('ISOLATED MariaDB port=' + str(port) + '; source copied, never reset.', flush=True)
+        if '--seed' in sys.argv:
+            print('> python init_db.py --reset (PRIVATE server only)', flush=True)
+            subprocess.run([sys.executable, '-X', 'utf8', 'init_db.py', '--reset'],
+                           cwd=workspace, env=private_env, check=True)
+            subprocess.run([sys.executable, '-X', 'utf8', '-c',
+                            'from excel_sync import export_synced_workbook; export_synced_workbook()'],
+                           cwd=workspace, env=private_env, check=True)
         # Only additive extensions for this feature, on the private copy.
         result = subprocess.run([sys.executable, '-X', 'utf8', '-m', 'pytest', '-q',
-                                 *sys.argv[1:]], cwd=ROOT, env=private_env)
+                                 *(arg for arg in sys.argv[1:] if arg not in {'--seed','--live-llm'})], cwd=workspace, env=private_env)
         print('pytest exit code:', result.returncode, flush=True)
         return result.returncode
     finally:
@@ -90,7 +103,10 @@ def main():
             process.kill()
             process.wait()
         log.close()
-        print('Source table contents unchanged:', fingerprints(config) == before, flush=True)
+        unchanged = fingerprints(config) == before
+        print('Source table contents unchanged:', unchanged, flush=True)
+        if not unchanged:
+            raise RuntimeError('Database nguồn thay đổi trong lúc test; không tự ghi đè dữ liệu nguồn.')
 
 
 if __name__ == '__main__':

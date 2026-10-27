@@ -194,8 +194,10 @@ def chat():
         engine = 'database'
         if denied or no_evidence:
             answer = context
-        elif isinstance(context, QueryEvidence) and os.getenv('GROQ_API_KEY'):
-            answer = context.display
+        elif isinstance(context, QueryEvidence):
+            # Preserve the legacy dev response contract; neither path asks the
+            # language model to rewrite database quantities, prices or dates.
+            answer = str(context) if not os.getenv('GROQ_API_KEY') and os.getenv('APP_ENV')=='dev' else context.display
             engine = context.engine
         elif not os.getenv('GROQ_API_KEY') and os.getenv('APP_ENV') == 'dev':
             answer = context

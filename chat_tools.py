@@ -322,6 +322,10 @@ def confirm_action(action_id,session_id,confirmation,secret=None):
         if row['expired'] or row['status']!='draft':raise OperationRejected('Lệnh đã hết hạn hoặc bị hủy. Hãy nhập lại.',409)
         if confirmation and confirmation!=(row['id'],row['version']):raise OperationRejected('Bản xem trước đã thay đổi.',409)
         data=json.loads(row['arguments_json'])
+        if '_condition' in data:
+            from chat_workflows import check_condition
+            matched,_=check_condition(data.pop('_condition'),lock=True)
+            if not matched:raise OperationRejected('Điều kiện đã thay đổi, không thực hiện lệnh. Hãy kiểm tra lại.',409)
         if '_rbac_version' in data:
             with cursor() as cur:cur.execute('SELECT version FROM rbac_meta WHERE id=1 FOR UPDATE');version=cur.fetchone()['version']
             if data.pop('_rbac_version')!=version:raise OperationRejected('Quyền hoặc tài khoản đã thay đổi. Hãy tạo lại lệnh để xem trước.',409)
@@ -344,10 +348,36 @@ def handle_tool_chat(question,session_id,confirmation=None,secret=None):
         if q in {'xac nhan','dong y','dong y thuc hien','huy','bo qua'} and state.get('action_id'):
             question=('Hủy lệnh ' if q in {'huy','bo qua'} else 'Xác nhận lệnh ')+str(state['action_id'])
             confirmation=confirmation or (state['action_id'],state['action_version'])
-        result=_handle_tool_chat(question,session_id,confirmation,secret,state)
+        from chat_workflows import start_workflow,advance_workflow
+        execute=lambda text:_handle_tool_chat(text,session_id,None,None,state)
+        try:
+            control=bool(re.fullmatch(r'(?:xac nhan|huy) lenh\s*#?\d+',normalize(question)))
+            if not control and start_workflow(question,state,session_id):
+                result=advance_workflow(state,session_id,execute)
+            else:
+                result=_handle_tool_chat(question,session_id,confirmation,secret,state)
+                workflow=state.get('workflow')
+                action_match=re.fullmatch(r'xac nhan lenh\s*#?(\d+)',normalize(question))
+                if workflow and action_match and result and result.get('result') and workflow.get('waiting_action')==int(action_match[1]):
+                    workflow['completed'].append(result)
+                    workflow['remaining'].pop(0);workflow.pop('waiting_action',None)
+                    state.pop('active_tool',None);state.pop('arguments',None)
+                    next_reply=advance_workflow(state,session_id,execute)
+                    next_reply.setdefault('result',result['result'])
+                    if next_reply is not result:next_reply['answer']=result['answer']+' '+next_reply['answer']
+                    result=next_reply
+                elif workflow and normalize(question).startswith('huy lenh'):
+                    state.pop('workflow',None)
+                elif workflow and result and result.get('action_draft'):
+                    workflow['waiting_action']=result['action_draft']['id']
+        except OperationRejected as error:
+            denied=error.status in {403,404}
+            if denied:
+                with cursor() as cur:cur.execute("INSERT INTO chatbot_audit_log(session_id,user_id,decision,reason) VALUES(%s,%s,'denied',%s)",(session_id,g.user['id'] if g.user else None,'Quy trình hoặc điều kiện ngoài quyền được cấp'))
+            result={'type':'clarification','answer':DENIED if denied else str(error),'access_denied':denied,'rows':[]}
         if result and result.get('action_draft'):
             draft=result['action_draft'];state.update(action_id=draft['id'],action_version=draft['version'])
-        if result and result.get('result'):
+        if result and result.get('result') and not result.get('action_draft') and result.get('type')!='clarification':
             state.pop('active_tool',None);state.pop('arguments',None)
         return result
 

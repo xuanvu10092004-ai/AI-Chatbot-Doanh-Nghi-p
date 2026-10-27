@@ -139,7 +139,8 @@ def resolve(question, state, catalog):
         # Only literal evidence is accepted from the model; typed conversion is backend-owned.
         fields = set(TOOLS[name][4].split()) | {'product_ref', 'customer_ref', 'order_ref', 'appointment_ref'}
         safe = {k: v for k, v in args.items() if k in fields and isinstance(v, (str, int, float))
-                and not isinstance(v, bool) and str(v).strip() and normalize(str(v)) in q}
+                and not isinstance(v, bool) and str(v).strip() and normalize(str(v)) in q
+                and (not isinstance(v,(int,float)) or re.search(r'(?<!\d)'+re.escape(str(v))+r'(?!\d)',q))}
         return Resolution(name, {**safe, **local_arguments(question, name)})
     except Exception:
         return Resolution(clarification='Dịch vụ hiểu ngôn ngữ AI chưa sẵn sàng. Hãy dùng tên lệnh và các trường “Tên trường: giá trị”.', unavailable=True)

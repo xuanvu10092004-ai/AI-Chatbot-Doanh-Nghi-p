@@ -8,6 +8,7 @@ from threading import Lock  # Bảo vệ thao tác khởi tạo pool dùng chung
 from pathlib import Path  # Tạo đường dẫn tới file .env.
 from contextlib import contextmanager  # Cho phép dùng cursor và transaction với with.
 from contextvars import ContextVar  # Lưu connection transaction riêng cho từng request.
+from uuid import uuid4
 from typing import Any, Iterator  # Mô tả kiểu dữ liệu dùng trong file.
 
 import mysql.connector  # Driver thực hiện kết nối và chạy lệnh MySQL.
@@ -136,7 +137,17 @@ def cursor(role: str = "app", dictionary: bool = True) -> Iterator[Any]:
 def transaction():
     """Một transaction cho công cụ và trạng thái xác nhận; cursor lồng không tự commit."""
     if _TRANSACTION.get() is not None:
-        yield
+        # A dialogue may catch a tool error and commit its clarification/audit.
+        connection=_TRANSACTION.get()
+        savepoint='tool_'+uuid4().hex
+        with connection.cursor() as cur:cur.execute('SAVEPOINT '+savepoint)
+        try:
+            yield
+        except Exception:
+            with connection.cursor() as cur:cur.execute('ROLLBACK TO SAVEPOINT '+savepoint)
+            raise
+        finally:
+            with connection.cursor() as cur:cur.execute('RELEASE SAVEPOINT '+savepoint)
         return
     connection=get_connection('app')
     token=_TRANSACTION.set(connection)
