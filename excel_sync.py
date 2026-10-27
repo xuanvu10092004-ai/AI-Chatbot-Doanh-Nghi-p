@@ -36,7 +36,7 @@ def _rows() -> dict[str, list[tuple[Any, ...]]]:
                    cp.address, cp.occupation, cp.lead_source, b.code AS branch_code,
                    p.model_name, cp.payment_preference, cp.registered_at, cp.status
             FROM users u
-            LEFT JOIN customer_profiles cp ON cp.user_id = u.id
+            JOIN customer_profiles cp ON cp.user_id = u.id
             LEFT JOIN branches b ON b.id = u.home_branch_id
             LEFT JOIN products p ON p.id = cp.interested_product_id
             WHERE u.user_type = 'customer'

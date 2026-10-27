@@ -10,6 +10,7 @@ from typing import Iterator  # Khai báo kiểu dữ liệu cho tham số và k�
 
 import mysql.connector  # Dùng driver MySQL và kiểu lỗi/kết nối database.
 from dotenv import load_dotenv  # Nạp cấu hình từ file .env.
+from mysql_accounts import ensure_account, provision_accounts
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent
@@ -37,12 +38,24 @@ def get_config() -> dict[str, object]:
         "CHATBOT_RO_PASSWORD",
         "APP_DB_PASSWORD",
         "DEMO_ACCOUNT_PASSWORD",
+        "ADMIN_DB_USER",
+        "ADMIN_DB_PASSWORD",
     )
     missing = [name for name in required if os.getenv(name) is None]
     if missing:
         raise RuntimeError(f"Thiếu biến môi trường: {', '.join(missing)}")
     if len(os.environ['DEMO_ACCOUNT_PASSWORD'])<10:
         raise RuntimeError('DEMO_ACCOUNT_PASSWORD must contain at least 10 characters')
+    if not os.environ['DB_PASSWORD'] or os.environ['APP_DB_PASSWORD'] != os.environ['DB_PASSWORD']:
+        raise RuntimeError('APP_DB_PASSWORD phải trùng DB_PASSWORD và không rỗng')
+    if not os.environ['CHATBOT_RO_PASSWORD']:
+        raise RuntimeError('CHATBOT_RO_PASSWORD không được rỗng')
+    if os.getenv('CHATBOT_RO_USER', 'chatbot_ro') != 'chatbot_ro':
+        raise RuntimeError('CHATBOT_RO_USER phải là chatbot_ro')
+    if not os.environ['ADMIN_DB_USER'] or not os.environ['DB_USER'] or os.environ['DB_USER'] in {
+        'root', 'chatbot_ro', os.environ['ADMIN_DB_USER']
+    }:
+        raise RuntimeError('DB_USER phải là tài khoản ứng dụng riêng, khác tài khoản quản trị và chatbot_ro')
 
     database = os.environ["DB_NAME"]
     if database != "honda_chatbot":
@@ -51,12 +64,13 @@ def get_config() -> dict[str, object]:
     return {
         "host": os.environ["DB_HOST"],
         "port": int(os.environ["DB_PORT"]),
-        "user": os.getenv('ADMIN_DB_USER', os.environ["DB_USER"]),
-        "password": os.getenv('ADMIN_DB_PASSWORD', os.environ["DB_PASSWORD"]),
+        "user": os.environ['ADMIN_DB_USER'],
+        "password": os.environ['ADMIN_DB_PASSWORD'],
         "chatbot_ro_password": os.environ["CHATBOT_RO_PASSWORD"],
         "database": database,
         "charset": "utf8mb4",
         "collation": "utf8mb4_unicode_ci",
+        "connection_timeout": 5,
     }
 
 
@@ -172,12 +186,14 @@ def execute_script(
         cursor.close()
 
 
-def apply_extensions(connection, password: str) -> None:
+def apply_extensions(connection, password: str) -> set[str]:
     # Áp dụng extension theo số thứ tự và bỏ qua migration đã ghi nhận.
     applied=set()
     with connection.cursor() as cur:
         cur.execute('CREATE TABLE IF NOT EXISTS schema_migrations(filename VARCHAR(255) PRIMARY KEY, applied_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)')
     connection.commit()
+    # Các extension sau cần account này để GRANT. Cập nhật ngay cả khi 03 đã chạy.
+    ensure_account(connection, 'chatbot_ro', password, 'localhost')
     for extension in sorted((PROJECT_ROOT / "data/schema/extensions").glob("[0-9][0-9]_*.sql")):
         with connection.cursor() as cur:
             cur.execute('SELECT filename FROM schema_migrations WHERE filename=%s',(extension.name,))
@@ -186,11 +202,6 @@ def apply_extensions(connection, password: str) -> None:
                     execute_script(connection, extension)
                 print(f'Skipped {extension.name}')
                 continue
-        if extension.name == "03_chatbot_ro_user.sql":
-            with connection.cursor() as cur:
-                cur.execute("CREATE USER IF NOT EXISTS 'chatbot_ro'@'localhost' IDENTIFIED BY %s", (password,))
-                cur.execute("ALTER USER 'chatbot_ro'@'localhost' IDENTIFIED BY %s", (password,))
-                cur.execute("REVOKE ALL PRIVILEGES, GRANT OPTION FROM 'chatbot_ro'@'localhost'")
         execute_script(connection, extension)
         with connection.cursor() as cur:
             cur.execute('INSERT INTO schema_migrations(filename) VALUES(%s)',(extension.name,))
@@ -255,19 +266,8 @@ def main() -> int:
         if initialize or '06_auth_dynamic_rbac.sql' in applied:
             from scripts.seed_demo_passwords import seed  # Đặt lại mật khẩu demo sau khi seed schema.
             seed(connection)
-        app_password=os.getenv('APP_DB_PASSWORD')
-        if not app_password:
-            raise RuntimeError('APP_DB_PASSWORD is required')
-        if app_password != os.environ['DB_PASSWORD']:
-            raise RuntimeError('APP_DB_PASSWORD phải trùng DB_PASSWORD')
-        app_user = os.environ['DB_USER']
-        if not app_user or app_user == config['user'] or app_user in {'root', 'chatbot_ro'}:
-            raise RuntimeError('DB_USER phải là tài khoản ứng dụng riêng, khác tài khoản quản trị và chatbot_ro')
-        with connection.cursor() as cur:
-            cur.execute("CREATE USER IF NOT EXISTS %s@'localhost' IDENTIFIED BY %s", (app_user, app_password))
-            cur.execute("ALTER USER %s@'localhost' IDENTIFIED BY %s", (app_user, app_password))
-            cur.execute("REVOKE ALL PRIVILEGES, GRANT OPTION FROM %s@'localhost'", (app_user,))
-            cur.execute("GRANT SELECT,INSERT,UPDATE,DELETE ON honda_chatbot.* TO %s@'localhost'", (app_user,))
+        provision_accounts(connection, os.environ['DB_USER'], os.environ['DB_PASSWORD'],
+                           str(config['chatbot_ro_password']))
         counts = verify_counts(connection)
     except Exception as exc:
         if connection is not None and connection.is_connected():
@@ -295,4 +295,6 @@ def main() -> int:
 
 
 if __name__ == "__main__":
+    sys.stdout.reconfigure(encoding='utf-8')
+    sys.stderr.reconfigure(encoding='utf-8')
     raise SystemExit(main())
