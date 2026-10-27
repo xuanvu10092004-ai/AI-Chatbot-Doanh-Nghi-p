@@ -141,3 +141,7 @@ button,.button-link{border-radius:5px}
 @keyframes inner-particle-flow-b{0%{opacity:0;transform:translate3d(var(--inner-p0-x),var(--inner-p0-y),0) scale(.5)}10%{opacity:.72}38%{opacity:.9;transform:translate3d(var(--inner-p1-x),var(--inner-p1-y),0) scale(.95)}68%{opacity:.68;transform:translate3d(var(--inner-p2-x),var(--inner-p2-y),0) scale(.86)}100%{opacity:0;transform:translate3d(var(--inner-p3-x),var(--inner-p3-y),0) scale(.48)}}
 @media(max-width:640px){.inner-stream-dot{transform:scale(.82)}.login-inner-particles{opacity:.68}}
 @media(prefers-reduced-motion:reduce){.inner-stream-dot{animation:none;opacity:.14}.login-inner-particles{transform:none;transition:none}}
+#customerEditor { width: min(840px, calc(100vw - 2rem)); max-height: 90dvh; overflow: auto; border: 1px solid #d9dee7; border-radius: 12px; padding: 1.25rem; }
+#customerEditor::backdrop { background: rgb(0 0 0 / 35%); }
+#customerEditFields { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 230px), 1fr)); gap: .8rem; }
+#customerEditFields label { display: flex; flex-direction: column; gap: .3rem; min-width: 0; }

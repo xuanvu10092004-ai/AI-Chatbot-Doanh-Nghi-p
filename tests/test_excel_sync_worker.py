@@ -138,18 +138,28 @@ def test_crash_after_replace_before_ack_is_recoverable(output,monkeypatch):
 def test_many_committed_writes_have_one_consistent_final_export(output,monkeypatch):
     from concurrent.futures import ThreadPoolExecutor
     import excel_sync
+    with cursor() as cur:
+        cur.execute('SELECT branch_id,variant_id,quantity FROM inventory WHERE variant_id<=8');before=cur.fetchall()
     def update(index):
-        with cursor() as cur:cur.execute('UPDATE inventory SET quantity=quantity WHERE variant_id=%s',(index%8+1,))
-    with ThreadPoolExecutor(max_workers=4) as pool:list(pool.map(update,range(24)))
-    calls=[];write=excel_sync._write_workbook
-    monkeypatch.setattr(excel_sync,'_write_workbook',lambda *a:(calls.append(True),write(*a))[1])
-    assert process_sync()['status']=='completed' and calls==[True]
-    book=load_workbook(output,read_only=True,data_only=True)
+        with cursor() as cur:cur.execute('UPDATE inventory SET quantity=quantity+1 WHERE variant_id=%s',(index%8+1,))
     try:
-        products={row[0]:row[16] for row in book['San_pham'].iter_rows(min_row=2,values_only=True)}
-        inventory={row[0]:row[6] for row in book['Ton_kho'].iter_rows(min_row=2,values_only=True)}
-        assert products==inventory
-    finally:book.close()
+        with ThreadPoolExecutor(max_workers=4) as pool:list(pool.map(update,range(24)))
+        calls=[];write=excel_sync._write_workbook
+        monkeypatch.setattr(excel_sync,'_write_workbook',lambda *a:(calls.append(True),write(*a))[1])
+        assert process_sync()['status']=='completed' and calls==[True]
+        book=load_workbook(output,read_only=True,data_only=True)
+        try:
+            products={row[0]:row[16] for row in book['San_pham'].iter_rows(min_row=2,values_only=True)}
+            inventory={row[0]:row[6] for row in book['Ton_kho'].iter_rows(min_row=2,values_only=True)}
+            assert products==inventory
+            with cursor() as cur:
+                cur.execute('SELECT variant_id,SUM(quantity) AS n FROM inventory GROUP BY variant_id')
+                assert inventory=={f"SP{r['variant_id']:03d}":r['n'] for r in cur.fetchall()}
+            assert sum(inventory[f"SP{r['variant_id']:03d}"] for r in before if r['branch_id']==1)==sum(r['quantity'] for r in before)+len(before)*3
+        finally:book.close()
+    finally:
+        with cursor() as cur:
+            for row in before:cur.execute('UPDATE inventory SET quantity=%s WHERE branch_id=%s AND variant_id=%s',(row['quantity'],row['branch_id'],row['variant_id']))
 
 
 def test_worker_subprocess_exports_without_flask_or_browser():

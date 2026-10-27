@@ -29,6 +29,10 @@ _TRANSACTION = ContextVar('app_transaction',default=None)
 _AFTER_COMMIT = ContextVar('app_after_commit',default=None)
 
 
+def transaction_active():
+    return _TRANSACTION.get() is not None
+
+
 def defer_until_commit(callback):
     callbacks=_AFTER_COMMIT.get()
     if callbacks is None:return False

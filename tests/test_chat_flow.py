@@ -76,7 +76,7 @@ def test_readonly_database_privileges(sql):
     (None, {'v_ai_products'}),
     (5, {'v_ai_products', 'v_ai_inventory'}),
     (3, {'v_ai_products', 'v_ai_inventory', 'v_ai_orders', 'v_ai_customers'}),
-    (6, {'v_ai_products', 'v_ai_orders', 'v_ai_product_costs'}),
+    (6, {'v_ai_products', 'v_ai_orders', 'v_ai_product_costs', 'v_ai_inventory', 'v_ai_customers'}),  # Extension 15 baseline cấp quyền đọc kế toán.
 ])
 def test_permission_whitelist(user, expected):
     assert permitted_views(user) == expected

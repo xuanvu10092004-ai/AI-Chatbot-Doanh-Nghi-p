@@ -320,4 +320,6 @@ def commit(batch_id,version,confirmed):
         cur.execute("UPDATE customer_input_batches SET status='committed',result_json=%s,version=version+1 WHERE id=%s",(json.dumps(outcome),batch_id))
     from excel_sync import sync_after_commit  # Đọc hoặc ghi workbook đồng bộ từ MySQL.
     outcome['excel_sync'] = sync_after_commit()
+    with cursor() as cur:
+        cur.execute('UPDATE customer_input_batches SET result_json=%s WHERE id=%s',(json.dumps(outcome,default=str),batch_id))
     return outcome

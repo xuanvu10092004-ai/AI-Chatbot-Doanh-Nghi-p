@@ -1,5 +1,6 @@
 """One permission boundary and transaction for customer editing and soft deletion."""
 from functools import wraps
+from datetime import date,datetime
 
 from flask import g, jsonify
 from mysql.connector import IntegrityError
@@ -53,7 +54,11 @@ def _load(cur,customer_id,lock=False):
 
 def get_customer(customer_id):
     require_customer_admin()
-    with cursor() as cur:return _load(cur,customer_id)
+    with cursor() as cur:return _public(_load(cur,customer_id))
+
+
+def _public(record):
+    return {key:value.isoformat() if isinstance(value,(date,datetime)) else value for key,value in record.items()}
 
 
 def validate_changes(cur,before,changes):
@@ -61,6 +66,8 @@ def validate_changes(cur,before,changes):
     writable=set(FIELDS)-{'purchased_sku','purchase_amount'}
     if not isinstance(changes,dict) or set(changes)-writable:
         raise CustomerError('Thông tin sửa khách hàng không hợp lệ; không sửa đơn mua lịch sử qua hồ sơ.')
+    if any(value is not None and not isinstance(value,(str,date)) for value in changes.values()):
+        raise CustomerError('Trường hồ sơ phải là văn bản hoặc ngày hợp lệ.')
     merged={key:before.get(key) for key in writable};merged.update(changes)
     row,errors=normalize_row(merged)
     # Profile editing never creates or alters historical purchases.
@@ -89,9 +96,9 @@ def mutate_customer(customer_id,operation,version,changes=None,confirmed=False):
             cur.execute('SELECT version FROM rbac_meta WHERE id=1 FOR UPDATE');cur.fetchone()
             before=_load(cur,customer_id,True)
             if operation=='delete' and before['deleted_at']:
-                return {'customer':before,'already_deleted':True,'excel_sync':_sync_status()}
+                return {'customer':_public(before),'already_deleted':True,'excel_sync':_sync_status()}
             if operation=='restore' and not before['deleted_at']:
-                return {'customer':before,'already_restored':True,'excel_sync':_sync_status()}
+                return {'customer':_public(before),'already_restored':True,'excel_sync':_sync_status()}
             if isinstance(version,bool) or not isinstance(version,int) or version!=before['version']:
                 raise CustomerError('Hồ sơ đã thay đổi. Hãy tải lại trước khi xác nhận.',409)
             if operation=='update':
@@ -112,7 +119,7 @@ def mutate_customer(customer_id,operation,version,changes=None,confirmed=False):
                 cur.execute('UPDATE customer_admin_state SET deleted_at=NULL,deleted_by=NULL,restored_at=NOW(),version=version+1 WHERE customer_id=%s',(customer_id,))
             after=_load(cur,customer_id)
             audit(cur,'customer_'+operation,'customer',customer_id,before,after,actor=g.user['id'])
-    return {'customer':after,'excel_sync':_sync_status()}
+    return {'customer':_public(after),'excel_sync':_sync_status()}
 
 
 def _sync_status():
@@ -128,6 +135,12 @@ def register_customers(app):
     @app.get('/api/customers/<int:customer_id>')
     @customer_admin_only
     def customer_detail(customer_id):return jsonify(customer=get_customer(customer_id))
+
+    @app.get('/api/excel-sync')
+    @customer_admin_only
+    def excel_sync_status():
+        from excel_sync_worker import sync_status
+        return jsonify(sync_status())
 
     @app.patch('/api/customers/<int:customer_id>')
     @customer_admin_only

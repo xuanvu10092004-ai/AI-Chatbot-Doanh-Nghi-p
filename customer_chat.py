@@ -7,7 +7,6 @@ from security import permissions  # Áp scope customer:write khi khởi tạo b�
 from question_language import normalize, product_pattern  # Chuẩn hóa lệnh và nhận diện tên xe trong câu trả lời.
 from customer_input import FIELDS, REQUIRED, today, stage, get_batch, revise, commit, CustomerInputError, normalize_row, _existing  # Dùng lại kiểm tra và lifecycle batch khách.
 from access_control import authorize_intent  # Kiểm tra quyền nhập khách trước khi xử lý câu hỏi.
-from excel_sync import sync_after_commit  # Đồng bộ workbook sau khi commit thành công.
 
 
 # Chuẩn hóa đầu vào trong bước parse_customer_values để các phép so khớp phía sau dùng cùng một dạng.

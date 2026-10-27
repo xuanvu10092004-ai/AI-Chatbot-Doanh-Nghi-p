@@ -6,7 +6,7 @@ import logging
 from pathlib import Path
 import time
 
-from db import cursor, get_connection, _TRANSACTION
+from db import cursor, get_connection, transaction_active
 
 
 def sync_status():
@@ -15,15 +15,16 @@ def sync_status():
         cur.execute('SELECT COUNT(*) AS n FROM excel_sync_changes WHERE processed_at IS NULL');pending=cur.fetchone()['n']
     if not state:raise RuntimeError('Cần migration excel_sync_outbox.')
     status='failed' if state['status']=='failed' else 'running' if state['status']=='running' else 'pending' if pending else 'completed' if state['last_success_at'] else 'pending'
-    return {'status':status,'pending':pending,'last_success_at':state['last_success_at'],
+    result={'status':status,'pending':pending,'last_success_at':state['last_success_at'],
             'last_worker_at':state['last_worker_at'],'error':state['last_error'],
             'attempts':state['attempts'],'next_retry_at':state['next_retry_at'],
             'watermark':state['last_change_id'],'path':state['output_path']}
+    return {key:value.isoformat() if isinstance(value,datetime) else value for key,value in result.items()}
 
 
 def process_sync(force=False,path=None):
     from excel_sync import SYNCED_WORKBOOK,SOURCE_WORKBOOK,_rows,_write_workbook
-    if _TRANSACTION.get() is not None:
+    if transaction_active():
         return {'status':'pending','error':'Chỉ xuất sau khi transaction dữ liệu đã commit.'}
     target=Path(path) if path is not None else SYNCED_WORKBOOK
     if target.resolve()==SOURCE_WORKBOOK.resolve():raise ValueError('Không ghi đè workbook nguồn.')
@@ -94,6 +95,7 @@ def main():
     parser.add_argument('--interval',type=float,default=2)
     args=parser.parse_args()
     if args.interval<.1:parser.error('interval phải >=0.1 giây')
+    if args.force and not args.once:parser.error('--force chỉ dùng cùng --once; worker thường chỉ xử lý event chờ.')
     log=Path(__file__).resolve().parent/'data/exports/excel_sync_worker.log'
     log.parent.mkdir(parents=True,exist_ok=True)
     from logging.handlers import RotatingFileHandler

@@ -14,6 +14,9 @@ from operations_routes import OperationRejected,number  # Kiểm tra tham số s
 DENIED='Tôi không thể hỗ trợ yêu cầu này.'
 # name: (mô tả, permission, chỉ nhân viên, ghi dữ liệu, các trường nhận)
 TOOLS={
+ 'customer_update':('Sửa hồ sơ khách hàng','customer:admin:manage',True,True,'id version full_name email phone customer_code gender birth_date province district address occupation lead_source branch_code interested_model payment_preference registered_at status'),
+ 'customer_delete':('Xóa mềm khách hàng, giữ nguyên đơn và lịch sử','customer:admin:manage',True,True,'id version'),
+ 'customer_restore':('Khôi phục khách hàng đã xóa','customer:admin:manage',True,True,'id version'),
  'stock_receive':('Nhập hàng','inventory:receive',True,True,'branch_id branch_code supplier reference_code notes items variant_id quantity'),
  'stock_list':('Lịch sử nhập hàng','inventory:receive',True,False,''),
  'catalog_save':('Thêm/sửa mẫu xe, phiên bản, giá và đời xe','product:manage',True,True,'id product_id model_name variant_name segment engine_cc list_price model_year lifecycle version'),
@@ -51,6 +54,7 @@ TOOLS={
  'document_upload':('Tải tài liệu lên để trích xuất và kiểm tra','document:manage',True,False,''),
 }
 REQUIRED={
+ 'customer_update':('id',),'customer_delete':('id',),'customer_restore':('id',),
  'stock_receive':('branch_id','supplier','items'),
  'catalog_save':('model_name','variant_name','segment','engine_cc','list_price'),
  'booking_create':('branch_id','customer_id','scheduled_at','service_type','vehicle_description'),
@@ -76,9 +80,11 @@ def staff():return bool(g.user and g.user.get('user_type')=='staff')
 
 def available_tools():
     grants=permissions()
+    from customer_service import is_customer_admin
     return {k:v for k,v in TOOLS.items() if v[1] in grants and (not v[2] or staff())
             and (v[1]!='rbac:manage' or grants[v[1]]['scope']=='all')
-            and (k!='invoice_export' or 'order:read' in grants)}
+            and (k!='invoice_export' or 'order:read' in grants)
+            and (not k.startswith(('customer_update','customer_delete','customer_restore')) or is_customer_admin())}
 
 
 def allowed(name,session_id):
@@ -101,6 +107,10 @@ def endpoint(name,**kwargs):
 
 
 def run(name,data,session_id):
+    if name in {'customer_update','customer_delete','customer_restore'}:
+        from customer_service import mutate_customer
+        return mutate_customer(data['id'],name.removeprefix('customer_'),data['version'],
+            {k:v for k,v in data.items() if k not in {'id','version'}},confirmed=True)
     if name in {'product_search','inventory_search','customer_search'}:
         from sql_service import answer_sql_question
         from answer_renderer import QueryEvidence
@@ -158,7 +168,9 @@ def run(name,data,session_id):
 def infer(question):
     q=normalize(question)
     q=re.sub(r'^(?:toi muon|hay|giup toi|vui long|cho toi)\s+','',q)
-    rules=[('stock_list',r'^(?:xem )?lich su nhap (?:hang|kho)'),('stock_receive',r'^(?:toi muon |hay )?nhap (?:hang|kho)\b'),
+    rules=[('customer_update',r'^(?:sua|cap nhat|dieu chinh|thay doi)\b.*\bkhach(?: hang)?\b'),
+       ('customer_delete',r'^(?:xoa|ngung quan ly) khach(?: hang)?\b'),('customer_restore',r'^(?:khoi phuc|phuc hoi) khach(?: hang)?\b'),
+       ('stock_list',r'^(?:xem )?lich su nhap (?:hang|kho)'),('stock_receive',r'^(?:toi muon |hay )?nhap (?:hang|kho)\b'),
        ('catalog_list',r'^(?:xem )?danh muc xe'),('catalog_save',r'^(?:them|tao|sua|doi|cap nhat) (?:mau xe|phien ban|gia xe|gia |doi xe)'),
        ('appointment_create',r'^(?:toi muon |hay )?dat lich (?:bao duong|tu van)'),('booking_create',r'^(?:toi muon )?dat lich sua'),
        ('appointment_list',r'^(?:xem )?(?:danh sach |cac )?lich (?:tu van|bao duong)'),
@@ -240,6 +252,19 @@ def prepare(name,raw):
     if any(k.lower() in {'password','password_hash','user_id','created_by','actor','sql','url','endpoint','_rbac_version'} for k in raw):
         raise OperationRejected('Không nhận mật khẩu, danh tính hoặc câu SQL trong công cụ chat.')
     data={k:v for k,v in raw.items() if k in TOOLS[name][4].split()}
+    if name in {'customer_update','customer_delete','customer_restore'}:
+        from customer_service import require_customer_admin,get_customer,validate_changes
+        require_customer_admin()
+        if data.get('id'):
+            data['id']=number(data,'id',1,2**31-1)
+            record=get_customer(data['id']);data['version']=record['version']
+            if name=='customer_update':
+                changes={k:v for k,v in data.items() if k not in {'id','version'}}
+                if not changes:raise OperationRejected('Cần bổ sung trường cần sửa, ví dụ “Số điện thoại: 0901234567”.')
+                with cursor() as cur:validate_changes(cur,record,changes)
+        missing=[key for key in REQUIRED[name] if not data.get(key)]
+        if missing:raise OperationRejected('Cần bổ sung: id. Hãy nêu mã hoặc tên khách hàng.')
+        return data
     for key in ('id','branch_id','variant_id','customer_id','product_id','engine_cc','model_year','quantity','role_id','home_branch_id'):
         if key in data and data[key] not in (None,''):
             value=str(data[key]).strip();value=re.sub(r'^(?:SP|KH)','',value,flags=re.I)
@@ -465,9 +490,10 @@ def _handle_tool_chat(question,session_id,confirmation=None,secret=None,state=No
         return {'type':'tool','answer':'Bản xem trước '+TOOLS[name][0]+'. Chưa ghi thay đổi. Kiểm tra thông tin rồi xác nhận.',
                 'action_draft':{'id':action_id,'version':1,'title':TOOLS[name][0],'arguments':public,'requires_password':name=='user_password' or name=='user_save' and not data.get('id')},'rows':[]}
     except Exception as error:
+        from customer_service import CustomerError
         from admin_service import AdminRejected  # Nhận diện lỗi thay đổi RBAC bị từ chối.
         from document_service import DocumentError  # Nhận diện lỗi quyền/trạng thái tài liệu.
-        if isinstance(error,(OperationRejected,AdminRejected,DocumentError)):
+        if isinstance(error,(OperationRejected,AdminRejected,DocumentError,CustomerError)):
             denied=getattr(error,'status',400) in {403,404}
             if denied:
                 if audit_id:mark_audit_denied(audit_id,'Quyền, loại tài khoản hoặc phạm vi công cụ không hợp lệ')

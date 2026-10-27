@@ -7,7 +7,7 @@ CREATE TABLE IF NOT EXISTS customer_admin_state (
  restored_at DATETIME NULL,
  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
  FOREIGN KEY(customer_id) REFERENCES users(id) ON DELETE CASCADE
-) COMMENT='Version và xóa mềm khách hàng; giữ nguyên đơn hàng và lịch sử';
+) ENGINE=InnoDB COMMENT='Version và xóa mềm khách hàng; giữ nguyên đơn hàng và lịch sử';
 INSERT IGNORE INTO customer_admin_state(customer_id) SELECT user_id FROM customer_profiles;
 INSERT IGNORE INTO permissions(code,description) VALUES('customer:admin:manage','Chỉ super_admin toàn hệ thống được sửa, xóa mềm và khôi phục khách');
 DELETE rp FROM role_permissions rp JOIN permissions p ON p.id=rp.permission_id JOIN roles r ON r.id=rp.role_id

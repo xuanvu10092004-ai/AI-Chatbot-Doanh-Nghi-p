@@ -126,7 +126,7 @@ def test_ai_extensions_can_be_replayed_twice_on_real_mysql():
         assert init_db.verify_counts(admin) == before
     finally:
         # Các extension sau bổ sung cột/scope; trả lại định nghĩa mới nhất cho test tiếp theo.
-        for filename in ('05_ai_product_details.sql', '07_own_scope_views.sql', '13_ai_vehicle_releases.sql'):
+        for filename in ('05_ai_product_details.sql', '07_own_scope_views.sql', '13_ai_vehicle_releases.sql', '17_customer_admin.sql'):
             init_db.execute_script(admin, directory / filename)
         provision_accounts(admin, os.environ['DB_USER'],
                            os.environ['DB_PASSWORD'], config['chatbot_ro_password'])

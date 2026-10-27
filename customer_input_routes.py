@@ -10,7 +10,6 @@ from customer_input import (
     stage, get_batch, revise, commit,  # Tạo, đọc, hiệu đính và xác nhận batch.
 )
 from customer_file_import import stage_document  # Tạo batch từ tài liệu khách đã được phân tích.
-from excel_sync import sync_after_commit  # Cập nhật workbook sau commit.
 
 
 # Đăng ký các endpoint của nhóm customer_input để Flask chuyển request vào đúng hàm.

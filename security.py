@@ -81,6 +81,9 @@ def initialize_request():
         with cursor() as cur:
             cur.execute('SELECT id,email,full_name,user_type,phone,home_branch_id,is_active,must_change_password FROM users WHERE id=%s',(user_id,))
             g.user=cur.fetchone()
+            if g.user and g.user['user_type']=='customer':
+                cur.execute('SELECT 1 FROM customer_admin_state WHERE customer_id=%s AND deleted_at IS NOT NULL',(user_id,))
+                if cur.fetchone():g.user=None
             if not g.user or not g.user['is_active']:
                 session.clear();g.user=None
             else:
@@ -108,6 +111,9 @@ def authenticate(email,password):
     with cursor() as cur:
         cur.execute('SELECT *, locked_until IS NOT NULL AND locked_until>NOW() AS locked FROM users WHERE email=%s FOR UPDATE',(email.casefold().strip(),))
         user=cur.fetchone()
+        if user and user['user_type']=='customer':
+            cur.execute('SELECT 1 FROM customer_admin_state WHERE customer_id=%s AND deleted_at IS NOT NULL',(user['id'],))
+            if cur.fetchone():user=None
         candidate=user['password_hash'] if user else DUMMY_HASH
         try:valid=check_password_hash(candidate,password)
         except (ValueError,TypeError):valid=False

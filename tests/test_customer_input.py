@@ -63,6 +63,7 @@ def test_create_update_and_repeated_confirmation_are_atomic_and_idempotent(auth_
         row=cur.fetchone();assert row['full_name']=='Khách kiểm thử' and row['is_active']==0 and row['gender']=='Nữ' and row['province']=='Khánh Hòa'
         cur.execute('SELECT status,approved_by FROM orders WHERE id=%s',(result['order_ids'][0],));assert cur.fetchone()=={'status':'pending','approved_by':None}
         cur.execute('SELECT quantity,unit_price FROM order_items WHERE order_id=%s',(result['order_ids'][0],));assert cur.fetchone()=={'quantity':1,'unit_price':56500000}
+    auth_client.login(1)  # Staff tạo được khách; chỉ super_admin sửa hồ sơ đã tồn tại.
     second=stage_client(auth_client,[customer(full_name='Tên đã sửa',status='Đã mua',purchased_sku='SP014',purchase_amount=56500000)]).get_json()
     assert second['valid'] and second['rows'][0]['action']=='update'
     assert second['rows'][0]['changes']['full_name']=={'before':'Khách kiểm thử','after':'Tên đã sửa'}

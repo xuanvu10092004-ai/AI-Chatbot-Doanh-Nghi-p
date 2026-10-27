@@ -125,8 +125,6 @@ def register_operations(app):
             if before:before.pop('cost_price',None)
             audit(cur,'catalog_update' if before else 'catalog_create','variant',variant_id,before=before,
                   after={k:data.get(k) for k in ('model_name','variant_name','list_price','model_year','lifecycle')},actor=g.user['id'])
-        from excel_sync import sync_after_commit  # Đọc hoặc ghi workbook đồng bộ từ MySQL.
-        sync_after_commit()
         return jsonify(id=variant_id),200 if before else 201
 
     @app.get('/bookings')
@@ -142,7 +140,7 @@ def register_operations(app):
             cur.execute('SELECT id,code FROM branches ORDER BY id')
             branches=[r for r in cur.fetchall() if grant['scope']!='branch' or r['id']==grant['branch']]
             where,params=scope_filter('booking:create','u.home_branch_id','u.id')
-            cur.execute("SELECT u.id,u.full_name,u.phone FROM users u WHERE u.user_type='customer' AND "+where+' ORDER BY u.full_name',params)
+            cur.execute("SELECT u.id,u.full_name,u.phone FROM users u WHERE u.user_type='customer' AND NOT EXISTS(SELECT 1 FROM customer_admin_state ds WHERE ds.customer_id=u.id AND ds.deleted_at IS NOT NULL) AND "+where+' ORDER BY u.full_name',params)
             customers=cur.fetchall()
         return jsonify(branches=branches,customers=customers)
 
@@ -184,7 +182,7 @@ def register_operations(app):
         with cursor() as cur:
             cur.execute('SELECT id FROM branches WHERE id=%s FOR UPDATE',(branch,))
             if not cur.fetchone():raise OperationRejected('Chi nhánh không hợp lệ.')
-            cur.execute("SELECT id,home_branch_id FROM users WHERE id=%s AND user_type='customer' FOR UPDATE",(customer,));owner=cur.fetchone()
+            cur.execute("SELECT id,home_branch_id FROM users WHERE id=%s AND user_type='customer' AND NOT EXISTS(SELECT 1 FROM customer_admin_state ds WHERE ds.customer_id=users.id AND ds.deleted_at IS NOT NULL) FOR UPDATE",(customer,));owner=cur.fetchone()
             if not owner or grant['scope']=='branch' and owner['home_branch_id']!=grant['branch']:
                 raise OperationRejected('Khách hàng không hợp lệ trong phạm vi được cấp.',403)
             cur.execute("SELECT id FROM service_bookings WHERE customer_id=%s AND scheduled_at=%s AND status IN ('scheduled','confirmed')",(customer,scheduled))

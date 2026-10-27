@@ -51,6 +51,25 @@ def local_arguments(question, name):
     first = normalize(question.split(':', 1)[0])
     values = parse_args('Bổ sung: ' + question if first in ALIASES or first in TOOLS[name][4].split() else question, name)
     q = normalize(question)
+    if name in {'customer_update','customer_delete','customer_restore'}:
+        from customer_input import FIELDS
+        labels={normalize(label):key for key,label in FIELDS.items()}
+        labels.update({'ho ten':'full_name','sdt':'phone','dien thoai':'phone','chi nhanh':'branch_code'})
+        body=question.split(':',1)[1] if ':' in question else ''
+        for part in re.split(r'[;\n]',body):
+            if ':' in part:
+                label,value=part.split(':',1)
+                if normalize(label) in labels:values[labels[normalize(label)]]=value.strip()
+        match=re.search(r'(?:#|\bid\s*[:=]?\s*|khach hang\s+)(\d+)\b',q)
+        if match:values['id']=int(match[1])
+        elif not values.get('id') and not values.get('customer_ref'):
+            reference=re.search(r'(?:khách|khach)(?: hàng| hang)?\s+([^:;]+)',question,re.I)
+            if reference:values['customer_ref']=reference[1].strip()
+        code=re.search(r'\bkh\d{4,10}\b',q)
+        if code and not values.get('id'):values['customer_ref']=code[0].upper()
+        if name=='customer_update':
+            phone=re.search(r'\b0\d{9,10}\b',q)
+            if phone:values.setdefault('phone',phone[0])
     if name == 'catalog_save' and 'list_price' not in values:
         price = re.search(r'\b(?:gia|con|thanh)\s+(\d[\d.,]*)\s*(trieu|tr|vnd|dong)?\b', q)
         if price:

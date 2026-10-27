@@ -269,6 +269,7 @@ def test_existing_customer_contact_update_does_not_erase_purchase_or_optional_da
     for cell,value in zip(table.rows[0].cells,['Họ và tên','Số điện thoại','Email']):cell.text=value
     for cell,value in zip(table.rows[1].cells,['Tên đã cập nhật','0909876543','preserve@customer-input.test']):cell.text=value
     file=BytesIO();doc.save(file);file.seek(0)
+    auth_client.login(1)  # Cập nhật từ file cũng dùng chính sách admin-only.
     uploaded=auth_client.post('/api/chat/customer-file',data={'title':'Kiểm thử parser giữ thông tin cũ','file':(file,'update.docx')}).json
     batch=uploaded['customer_draft'];BATCHES.add(batch['id']);assert batch['valid'],batch
     assert batch['rows'][0]['data']['address']=='Địa chỉ cần giữ'

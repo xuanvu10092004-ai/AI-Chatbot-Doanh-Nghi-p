@@ -85,7 +85,7 @@ def mutate(kind,target_id,data,operation='save'):
                 if landing not in {'/dashboard','/chat','/customers','/inventory'}:raise AdminRejected('Trang đích không hợp lệ.')
                 cur.execute('INSERT INTO roles(name,description,landing_path,priority) VALUES(%s,%s,%s,%s)',(name,data.get('description',''),landing,int(data.get('priority',100))));target_id=cur.lastrowid
                 if data.get('clone_id'):
-                    cur.execute('INSERT INTO role_permissions(role_id,permission_id,data_scope) SELECT %s,permission_id,data_scope FROM role_permissions WHERE role_id=%s',(target_id,int(data['clone_id'])))
+                    cur.execute("INSERT INTO role_permissions(role_id,permission_id,data_scope) SELECT %s,rp.permission_id,rp.data_scope FROM role_permissions rp JOIN permissions p ON p.id=rp.permission_id WHERE rp.role_id=%s AND p.code<>'customer:admin:manage'",(target_id,int(data['clone_id'])))
             if operation!='delete' and 'permissions' in data:
                 if not isinstance(data['permissions'],list):raise AdminRejected('Danh sách quyền không hợp lệ.')
                 cur.execute('SELECT permission_id,data_scope FROM role_permissions WHERE role_id=%s',(target_id,));old_permissions=cur.fetchall()

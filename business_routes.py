@@ -4,16 +4,23 @@ from db import cursor  # Chạy truy vấn danh sách, tổng số và phân ph�
 from security import require_permission  # Bảo vệ route bằng quyền phía backend.
 from dashboard_service import scope_filter  # Tạo điều kiện dữ liệu theo phạm vi user.
 from inventory_policy import LOW_STOCK_THRESHOLD  # Dùng ngưỡng tồn thấp thống nhất với chính sách kho.
-from excel_sync import sync_after_commit  # Đồng bộ workbook sau khi đã có thay đổi dữ liệu.
 
 
 def records(kind,low_stock=False):
     # Xác định bảng và cột cho một trong hai tập dữ liệu được API hỗ trợ.
     page=max(1,int(request.args.get('page',1)));size=max(1,min(100,int(request.args.get('size',20))))
     if kind=='customers':
+        from customer_service import is_customer_admin,require_customer_admin
         where,params=scope_filter('customer:read','u.home_branch_id','u.id')
         source='users u JOIN v_active_customer_profiles cp ON cp.user_id=u.id LEFT JOIN branches b ON b.id=u.home_branch_id'
+        if request.args.get('deleted')=='1':
+            require_customer_admin()
+            source='users u JOIN customer_profiles cp ON cp.user_id=u.id LEFT JOIN branches b ON b.id=u.home_branch_id'
+            where+=' AND EXISTS(SELECT 1 FROM customer_admin_state s WHERE s.customer_id=u.id AND s.deleted_at IS NOT NULL)'
         columns='u.id AS customer_id,cp.customer_code,u.full_name,u.email,u.phone,b.code AS branch_code,cp.province,cp.lead_source,cp.registered_at'
+        if is_customer_admin():
+            source+=' JOIN customer_admin_state cs ON cs.customer_id=u.id'
+            columns+=',cs.version,cs.deleted_at'
         searchable=['u.full_name','u.email','u.phone','cp.customer_code']
         sort_map={'name':'u.full_name','date':'cp.registered_at'}
         if request.args.get('status'):

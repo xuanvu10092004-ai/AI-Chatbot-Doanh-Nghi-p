@@ -43,7 +43,7 @@ def register_chat_actions(app):
                         COUNT(*) AS customer_count,SUM(cir.action='create') AS created,SUM(cir.action='update') AS updated
                         FROM customer_input_batches cb JOIN document_uploads du ON du.id=cb.document_id
                         JOIN customer_import_rows cir ON cir.batch_id=cb.id JOIN users u ON u.id=cir.customer_id
-                        WHERE cb.status='committed' AND '''+where+''' GROUP BY cb.id,du.title,du.original_name,du.file_format,cb.updated_at
+                        WHERE cb.status='committed' AND NOT EXISTS(SELECT 1 FROM customer_admin_state ds WHERE ds.customer_id=u.id AND ds.deleted_at IS NOT NULL) AND '''+where+''' GROUP BY cb.id,du.title,du.original_name,du.file_format,cb.updated_at
                         ORDER BY cb.updated_at DESC,cb.id DESC LIMIT 100''',params)
             return jsonify(rows=cur.fetchall())
 

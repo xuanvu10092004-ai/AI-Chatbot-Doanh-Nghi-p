@@ -6,6 +6,8 @@ from pathlib import Path  # Xác định workbook nguồn, workbook xuất và f
 from contextlib import nullcontext
 from tempfile import NamedTemporaryFile  # Lưu workbook tạm rồi thay thế nguyên tử.
 from typing import Any  # Mô tả tuple dữ liệu linh hoạt từ MySQL.
+from zipfile import ZipFile
+from zoneinfo import ZoneInfo
 
 from db import cursor  # Mở cursor hoặc connection MySQL.
 
@@ -23,7 +25,7 @@ def _age(value: Any) -> int | None:
     if not value:
         return None
     born = value.date() if isinstance(value, datetime) else value
-    today = date.today()
+    today = datetime.now(ZoneInfo('Asia/Ho_Chi_Minh')).date()
     return today.year - born.year - ((today.month, today.day) < (born.month, born.day))
 
 
@@ -153,7 +155,7 @@ def _write_workbook(data,path):
         book.create_sheet("Ghi_chu")
     notes = book["Ghi_chu"]
     notes["A5"] = "Bản đồng bộ tự động từ CSDL chính"
-    notes["B5"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    notes["B5"] = datetime.now(ZoneInfo('Asia/Ho_Chi_Minh')).strftime("%d/%m/%Y %H:%M:%S")
 
     path.parent.mkdir(parents=True, exist_ok=True)
     with NamedTemporaryFile(prefix=path.stem + ".", suffix=".xlsx", dir=path.parent, delete=False) as temp:
@@ -161,7 +163,7 @@ def _write_workbook(data,path):
     try:
         book.save(temp_path)
         book.close()
-        with __import__('zipfile').ZipFile(temp_path) as archive:
+        with ZipFile(temp_path) as archive:
             if archive.testzip() is not None:raise ValueError('Workbook xuất bị lỗi ZIP.')
         check=load_workbook(temp_path,read_only=True,data_only=True)
         try:

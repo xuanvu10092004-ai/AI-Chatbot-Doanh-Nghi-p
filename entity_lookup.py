@@ -23,6 +23,16 @@ def candidates(tool, key, reference, session_id):
             return [{'id': row['id'], 'label': row['model_name'] + ' · ' + row['variant_name']}
                     for row in cur.fetchall()]
     if key == 'customer_ref':
+        if tool in {'customer_update','customer_delete','customer_restore'}:
+            from customer_service import require_customer_admin
+            require_customer_admin()
+            source='customer_profiles' if tool=='customer_restore' else 'v_active_customer_profiles'
+            condition='s.deleted_at IS NOT NULL' if tool=='customer_restore' else 's.deleted_at IS NULL'
+            with cursor() as cur:
+                cur.execute('SELECT u.id,u.full_name,cp.customer_code FROM users u JOIN '+source+''' cp ON cp.user_id=u.id
+                    JOIN customer_admin_state s ON s.customer_id=u.id WHERE u.user_type='customer' AND '''+condition+'''
+                    AND (u.full_name LIKE %s OR u.email=%s OR cp.customer_code=%s) ORDER BY u.id LIMIT 20''',('%'+reference+'%',reference,reference))
+                return [{'id':r['id'],'label':r['customer_code']+' · '+r['full_name']} for r in cur.fetchall()]
         code = 'booking:create' if tool == 'booking_create' else 'customer:read'
         where, params = scope_filter(code, 'u.home_branch_id', 'u.id')
         with cursor() as cur:
@@ -66,6 +76,7 @@ def resolve_references(tool, raw, state, session_id, question):
             continue
         if ref == 'product_ref' and tool == 'catalog_save':
             key = 'id'
+        if ref=='customer_ref' and tool in {'customer_update','customer_delete','customer_restore'}:key='id'
         matches = candidates(tool, ref, str(values[ref]), session_id)
         selected = state.get('selected', {}).get(ref)
         if selected:
