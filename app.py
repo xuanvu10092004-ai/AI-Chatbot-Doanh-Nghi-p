@@ -210,6 +210,9 @@ def chat():
                 record_message(session_id, 'bot', answer)
                 return jsonify(answer=answer, error='ai-unavailable', session_id=session_id), 503
         answer = normalize_dashes(str(answer))
+        if isinstance(context,QueryEvidence):
+            from dialogue_state import remember_evidence
+            remember_evidence(session_id,user_id,context.rows)
         record_message(session_id, "bot", answer)
         return jsonify({
             "answer": answer,

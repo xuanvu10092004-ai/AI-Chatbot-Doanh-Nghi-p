@@ -70,6 +70,7 @@ def start_workflow(question, state, session_id):
         ok, _ = allowed(resolution.tool, session_id)
         if not ok:
             raise OperationRejected('Tôi không thể hỗ trợ yêu cầu này.', 403)
+        step['tool']=resolution.tool
         if step.get('condition'):
             from access_control import authorize_intent
             access = authorize_intent(session_id, g.user['id'] if g.user else None, 'ask_stock')
@@ -96,14 +97,7 @@ def advance_workflow(state, session_id, execute):
         if reply.get('action_draft'):
             draft = reply['action_draft']
             if step.get('condition'):
-                import json
-                with cursor() as cur:
-                    cur.execute('SELECT arguments_json FROM chat_action_drafts WHERE id=%s FOR UPDATE', (draft['id'],))
-                    args = json.loads(cur.fetchone()['arguments_json'])
-                    args['_condition'] = step['condition']
-                    cur.execute('UPDATE chat_action_drafts SET arguments_json=%s WHERE id=%s',
-                                (json.dumps(args, ensure_ascii=False), draft['id']))
-                draft['condition'] = step['condition']
+                attach_condition(draft,step['condition'])
             workflow['waiting_action'] = draft['id']
             break
         if reply.get('type') == 'clarification' or reply.get('access_denied'):
@@ -118,3 +112,13 @@ def advance_workflow(state, session_id, execute):
         reply['steps'] = workflow['completed']
         reply['workflow'] = {'remaining': len(workflow['remaining']), 'requires_confirmation': bool(workflow.get('waiting_action'))}
     return reply
+
+
+def attach_condition(draft,condition):
+    import json
+    with cursor() as cur:
+        cur.execute('SELECT arguments_json FROM chat_action_drafts WHERE id=%s FOR UPDATE',(draft['id'],))
+        args=json.loads(cur.fetchone()['arguments_json']);args['_condition']=condition
+        cur.execute('UPDATE chat_action_drafts SET arguments_json=%s WHERE id=%s',
+                    (json.dumps(args,ensure_ascii=False),draft['id']))
+    draft['condition']=condition

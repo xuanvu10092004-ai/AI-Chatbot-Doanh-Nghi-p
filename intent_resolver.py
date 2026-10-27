@@ -47,9 +47,9 @@ CONTROL = {'xac nhan', 'dong y', 'dong y thuc hien', 'huy', 'bo qua'}
 
 
 def local_arguments(question, name):
-    from chat_tools import parse_args, ALIASES
+    from chat_tools import parse_args, ALIASES, TOOLS
     first = normalize(question.split(':', 1)[0])
-    values = parse_args('Bổ sung: ' + question if first in ALIASES else question, name)
+    values = parse_args('Bổ sung: ' + question if first in ALIASES or first in TOOLS[name][4].split() else question, name)
     q = normalize(question)
     if name == 'catalog_save' and 'list_price' not in values:
         price = re.search(r'\b(?:gia|con|thanh)\s+(\d[\d.,]*)\s*(trieu|tr|vnd|dong)?\b', q)
@@ -113,10 +113,24 @@ def resolve(question, state, catalog):
     if re.search(r'\b(?:tao|lap|duyet|thanh toan|cap nhat)\b.*\b(?:bao gia|co hoi|don hang)\b', q):
         return Resolution(clarification='Chức năng báo giá, cơ hội và duyệt/thanh toán đơn chưa có backend thực thi. Bạn có thể tra cứu đơn hoặc xuất chứng từ mô phỏng.', unavailable=True)
     name = infer(question)
+    if not name and re.search(r'^(?:huy|xac nhan|hoan tat) lich (?:do|nay)\b',q):
+        known=state.get('entities',{})
+        options=[tool for key,tool in (('booking_id','booking_update'),('appointment_id','appointment_update')) if key in known]
+        if len(options)!=1:return Resolution(clarification='Hãy nêu loại lịch sửa xe hoặc bảo dưỡng/tư vấn và mã lịch cần xử lý.')
+        name=options[0]
     if not name:
         name = next((name for name, pattern in PARAPHRASES if re.search(pattern, q)), None)
     if name:
         args=local_arguments(question,name)
+        if re.search(r'\b(?:xe do|mau do|phien ban do)\b',q) and state.get('product_context') and name in {'catalog_save','stock_receive'}:
+            args['product_ref']=state['product_context']
+        if 'khach do' in q and state.get('entities',{}).get('customer_id') and name=='booking_create':
+            args.setdefault('customer_id',state['entities']['customer_id'])
+        if name=='invoice_export' and re.search(r'\b(?:don|hoa don|chung tu) (?:do|nay)\b',q) and state.get('entities',{}).get('order_id'):
+            args.setdefault('id',state['entities']['order_id'])
+        if name in {'booking_update','appointment_update'} and re.search(r'\blich (?:do|nay)\b',q):
+            entity='booking_id' if name=='booking_update' else 'appointment_id'
+            if state.get('entities',{}).get(entity):args.setdefault('id',state['entities'][entity])
         if name in {'document_process','document_detail'} and 'id' not in args:
             match=re.search(r'(?:#|tai lieu\s+)(\d+)\b',q)
             if match:args['id']=int(match[1])
@@ -128,6 +142,10 @@ def resolve(question, state, catalog):
                   for p in re.split(r'[;\n]', question) if ':' in p)
     if active and (labeled or q in {'tiep tuc', 'tiep tuc lenh'}):
         return Resolution(active, {**state.get('arguments', {}), **local_arguments(question, active)})
+    pending=state.get('pending_fields',[])
+    if active and len(pending)==1 and pending[0] in {'supplier','full_name','phone','email','scheduled_at','description','notes','vehicle_description','service_type'} and '?' not in question and not re.search(r'\b(?:chinh sach|tai lieu|quy trinh|bao hanh|bao nhieu|giup|muon|them|sua|huy|xac nhan|xem|gia|ton kho|tong so|doanh thu)\b',q):
+        parsed=local_arguments(question,active)
+        return Resolution(active,{**state.get('arguments',{}),pending[0]:parsed.get(pending[0],question.strip())})
     if not os.getenv('GROQ_API_KEY') or wants_sql(question) or not re.search(
             r'\b(?:giup|muon|thuc hien|dieu chinh|sap xep|dang ky|lay|doi|hen|nhan|them|sua|xoa|cap|gan|khoa|xuat|in)\b', q):
         return Resolution()

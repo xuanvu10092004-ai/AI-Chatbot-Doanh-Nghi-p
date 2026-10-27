@@ -1,3 +1,37 @@
+# Kiểm chứng trợ lý hội thoại - 27/10/2026
+
+Windows, Python 3.13, MariaDB 10.4.32; branch hiện tại. Không pull/rebase/push: upstream có 3 commit chưa đồng bộ và có hai file đã stage của người dùng. Giữ nguyên các assertion hiện có.
+
+| Lệnh/kiểm chứng | Exit code | Kết quả thực tế |
+|---|---:|---|
+| `python init_db.py --extension 16_chat_dialogue.sql` (2 lần trên DB hiện tại) | 0 / 0 | Chỉ thêm trạng thái hội thoại, intent và migration marker; hash mọi bảng nghiệp vụ cũ không đổi, giữ 81 hồ sơ khách và 31 đơn hiện tại |
+| `python init_db.py --reset` (runner, **server riêng**) | 0 | 11 mẫu, 31 phiên bản, 93 dòng tồn, 80 hồ sơ khách, 30 đơn; không reset DB dùng chung |
+| `python -X utf8 scripts/test_isolated_mysql.py --seed --tb=short --junitxml=data/exports/final-regression.xml` → `python -m pytest -q` trong workspace riêng | 0 | **339 passed, 5 skipped in 65.88s (0:01:05)** |
+| Đối chiếu nguồn sau test | 0 | `Source table contents unchanged: True`; workbook và staged index nguồn không bị test thay đổi |
+| Semantic/dialogue + UI tập trung | 0 | 22 passed; chọn entity/hủy draft thật trên Edge desktop 1440×900 và mobile 390×844; DOM không thực thi HTML/URL độc hại |
+| Điều phối + rollback/Excel | 0 | 8 passed; đọc trước ghi, hai ghi cần hai xác nhận, điều kiện kiểm tra lại khi confirm và sau sửa draft, rollback không xuất workbook |
+| Extension mục tiêu + hội thoại/quy trình/UI | 0 | 29 passed trước khi thêm test rollback/điều kiện bổ sung; full regression cuối bao gồm tất cả |
+
+JUnit cuối: `data/exports/isolated-mysql-5767a1fc05414a7ea894d81f9fe45975/workspace/data/exports/final-regression.xml`. Server test đã dừng. Workspace/snapshot giữ trong `data/exports/`, bị Git bỏ qua. Runner mặc định không gọi LLM ngoài; 5 test API thật tự skip khi key trống. Chưa đánh giá chất lượng semantic qua API thật trong lượt này; test resolver dùng response giả để kiểm tra catalog quyền, tham số không có bằng chứng và provider lỗi.
+
+| Nhóm hành vi | Kết quả |
+|---|---|
+| Paraphrase tiếng Việt; thiếu tham số qua nhiều lượt; tham chiếu “xe đó”; chọn phiên bản thay vì đoán ID | Đạt |
+| Scope lookup khách/đơn/lịch; guest/sales/kỹ thuật; RBAC thu hồi sau preview; không giả danh qua payload/header | Đạt |
+| Toàn bộ 10 widget và các backend cũ trong ma trận capability | Đạt các test module và hồi quy hiện có; thao tác upload tri thức dùng liên kết tới trang Tài liệu, nhập khách đính kèm ngay trong chat |
+| Một SELECT, AST whitelist, LIMIT/timeout, chatbot_ro; số liệu không gửi LLM diễn đạt lại | Đạt |
+| RAG lọc quyền trước retrieval, xếp hạng từ khóa/FULLTEXT, nguồn và thiếu bằng chứng | Đạt; nhánh MySQL FULLTEXT/ngram không chạy trên MariaDB này |
+| Preview/version, xác nhận riêng, cancel, replay, giao dịch lỗi và Excel sau commit | Đạt |
+| UI/sidebar/trang/form/nút cũ, định dạng và layout desktop/mobile | Đạt toàn bộ hồi quy trình duyệt |
+
+10 câu chuẩn trong `tests/test_chat_flow.py::STANDARD_CASES` đều đạt: giá SH 160i; số khách Đã mua; số đơn; tổng tồn; số phiên bản theo phân khúc; phiên bản đắt nhất; doanh thu thuần; khách trả góp; số dòng hết hàng; số phiên bản Vision 110. Mỗi đáp án kỳ vọng tính trực tiếp bằng SQL trên bảng gốc trong lần chạy, đối chiếu view và API, không sửa/nới assertion. Các câu SQL oracle được giữ trong bảng lịch sử bên dưới.
+
+Lần chạy đầu trên bản sao dữ liệu hiện tại: 309 passed, 14 failed, 5 skipped (exit 1): fixture đòi 80 khách trong khi dữ liệu thực có 81, và các thư mục ảnh `.pytest_cache` cũ bị lỗi ACL Windows. Đã chuyển toàn bộ test sang workspace/server riêng với seed chuẩn, không dọn/reset nguồn. Lần tập trung sau đó có 5 failed, 80 passed do thay đổi định dạng response dev; đã sửa code giữ contract response cũ, giữ nguyên assertion, rồi chạy lại full regression đạt kết quả trên.
+
+Giới hạn chủ đích: điều kiện tự động chỉ hỗ trợ so sánh tồn một SP/chi nhánh; điều kiện khác hỏi lại. Quy trình tối đa 5 bước được nhận diện rõ, từng bước ghi xác nhận riêng, không có rollback các bước đã được người dùng xác nhận thành công trước đó. Báo giá, cơ hội, duyệt/thanh toán/giao xe chưa có backend; không giả lập persistence. Không đồng bộ upstream hoặc gọi API LLM thật; không `git push`.
+
+---
+
 # Kiểm chứng CSDL dùng chung LAN - 21/10/2026
 
 Môi trường thật: Windows, Python 3.13, MariaDB 10.4.32. Các mục từ ngày 14/10/2026 trở xuống là lịch sử. Lần này sửa lỗi kết nối/dữ liệu giữa các máy, không thay schema chuẩn và không đưa mật khẩu vào source.

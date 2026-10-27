@@ -114,3 +114,19 @@ def test_customer_name_lookup_cannot_cross_branch(auth_client, tool_cleanup):
 def test_unimplemented_workflows_are_reported(question):
     result = resolve(question, {}, TOOLS)
     assert result.tool is None and 'chưa có backend' in result.clarification
+
+
+def test_product_pronoun_reuses_authorized_context_and_asks_variant(auth_client, tool_cleanup):
+    auth_client.login(1)
+    chat(auth_client, 'Giá SH 160i')
+    reply=chat(auth_client, 'Cập nhật giá xe đó thành 97 triệu')
+    assert len(reply['clarification']['options'])==3
+    chosen=chat(auth_client,'Chọn '+str(reply['clarification']['options'][0]['id']))
+    assert chosen['action_draft']['arguments']['list_price']==97000000
+
+
+def test_single_missing_field_accepts_plain_reply(auth_client, tool_cleanup):
+    auth_client.login(2)
+    chat(auth_client,'Nhập hàng: Mã SP: SP014; Số lượng: 2')
+    reply=chat(auth_client,'Kho miền Nam')
+    assert reply['action_draft']['arguments']['supplier']=='Kho miền Nam'

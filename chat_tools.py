@@ -302,7 +302,7 @@ def prepare(name,raw):
 
 
 def reply_result(name,result):
-    return {'type':'tool','answer':TOOLS[name][0]+(': đã thực hiện.' if TOOLS[name][3] else '.')+(' '+result.get('message','') if isinstance(result,dict) else ''),
+    return {'type':'tool','tool':name,'answer':TOOLS[name][0]+(': đã thực hiện.' if TOOLS[name][3] else '.')+(' '+result.get('message','') if isinstance(result,dict) else ''),
             'rows':result.get('rows',[]) if isinstance(result,dict) else [],'result':result,
             'links':result.get('links',[]) if isinstance(result,dict) else [],
             'download_url':result.get('download_url') if isinstance(result,dict) else None}
@@ -369,7 +369,13 @@ def handle_tool_chat(question,session_id,confirmation=None,secret=None):
                 elif workflow and normalize(question).startswith('huy lenh'):
                     state.pop('workflow',None)
                 elif workflow and result and result.get('action_draft'):
-                    workflow['waiting_action']=result['action_draft']['id']
+                    step=workflow['remaining'][0]
+                    if state.get('active_tool')==step['tool']:
+                        if step.get('condition'):
+                            from chat_workflows import attach_condition
+                            attach_condition(result['action_draft'],step['condition'])
+                        workflow['waiting_action']=result['action_draft']['id']
+                    else:state.pop('workflow',None)
         except OperationRejected as error:
             denied=error.status in {403,404}
             if denied:
@@ -377,8 +383,15 @@ def handle_tool_chat(question,session_id,confirmation=None,secret=None):
             result={'type':'clarification','answer':DENIED if denied else str(error),'access_denied':denied,'rows':[]}
         if result and result.get('action_draft'):
             draft=result['action_draft'];state.update(action_id=draft['id'],action_version=draft['version'])
+        if result and result.get('tool') in {'booking_list','appointment_list','orders_list'}:
+            rows=result.get('rows',[])
+            entity={'booking_list':'booking_id','appointment_list':'appointment_id','orders_list':'order_id'}[result['tool']]
+            state.setdefault('entities',{}).pop(entity,None)
+            if len(rows)==1:state['entities'][entity]=rows[0]['id']
         if result and result.get('result') and not result.get('action_draft') and result.get('type')!='clarification':
             state.pop('active_tool',None);state.pop('arguments',None)
+        if normalize(question).startswith('huy lenh'):
+            for key in ('active_tool','arguments','pending_fields','selection','action_id','action_version'):state.pop(key,None)
         return result
 
 
@@ -432,8 +445,10 @@ def _handle_tool_chat(question,session_id,confirmation=None,secret=None,state=No
         try:data=prepare(name,raw)
         except OperationRejected as error:
             if error.status!=400:raise
+            state['pending_fields']=str(error).removeprefix('Cần bổ sung: ').split('.')[0].split(', ') if str(error).startswith('Cần bổ sung: ') else []
             return {'type':'clarification','answer':str(error),'rows':[],
                     'clarification':{'tool':name,'pending':True}}
+        state.pop('pending_fields',None)
         if name=='stock_receive':
             mentioned={int(m) for m in re.findall(r'\bsp\s*(\d+)\b',q)}
             actual={number(item,'variant_id',1,2**31-1) for item in data['items'] if isinstance(item,dict)}

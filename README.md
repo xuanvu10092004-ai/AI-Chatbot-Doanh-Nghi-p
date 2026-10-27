@@ -283,16 +283,12 @@ Kiểm thử toàn bộ trên bộ seed chuẩn (MySQL thật), có sao lưu và
 
 ```powershell
 python -m pip install -r requirements-dev.txt
-python -X utf8 scripts/verify_with_snapshot.py --basetemp=C:/Users/nguye/AppData/Local/Temp/ai-portal-tests
+python -X utf8 scripts/test_isolated_mysql.py --seed
 ```
 
-Đổi `--basetemp` thành thư mục tạm riêng trên máy của bạn, không dùng thư mục chứa dữ liệu cần giữ vì pytest sẽ dọn thư mục đó.
-`MYSQL_BIN_DIR` tùy chọn trỏ đến thư mục chứa `mysqldump.exe` và `mysql.exe` nếu XAMPP ở vị trí khác.
-Script chỉ chấp nhận database phát triển `honda_chatbot` trên localhost, tạo snapshot đầy đủ gồm routine/trigger/event,
-kiểm tra dump hoàn tất, chạy thật `python init_db.py --reset` và `python -m pytest -q`, khôi phục trong `finally`,
-rồi so hash nội dung từng bảng với trước kiểm thử. Tạm dừng thao tác ghi trên website trong lúc chạy.
-Snapshot chứa dữ liệu riêng tư, nằm trong `.pytest_cache/` được Git bỏ qua; không đưa vào commit/chia sẻ công khai.
-Test LLM tự skip khi thiếu `GROQ_API_KEY`; test Edge cần Edge trên Windows (test chat cũ có thể dùng Chromium thay thế).
+Runner tạo **server MariaDB riêng trên cổng ngẫu nhiên và workspace riêng**; `--seed` chỉ chạy reset/seed trong server riêng rồi chạy `python -m pytest -q`. Không reset/restore database dùng chung, không thay workbook nguồn. Bỏ `--seed` để kiểm tra trên bản sao dữ liệu hiện tại (các assertion về bộ seed 80 khách có thể không khớp dữ liệu đã nhập thêm).
+`MYSQL_BIN_DIR` tùy chọn trỏ đến thư mục MariaDB chứa `mysql_install_db.exe`, `mysqld.exe`, `mysqldump.exe`, `mysql.exe`. Runner hiện dành cho MariaDB Windows. Không dùng `scripts/verify_with_snapshot.py` với database dùng chung.
+Snapshot/workspace kiểm thử có dữ liệu riêng tư, được giữ trong `data/exports/isolated-mysql-*/`, bị Git bỏ qua. Test LLM được tắt trong runner mặc định; thêm `--live-llm` để dùng `GROQ_API_KEY` đã cấu hình. Thiếu key thì 5 test API thật tự skip. Test trình duyệt dùng Edge/Playwright hiện có.
 
 ### Nhập hàng, công cụ chat và nhập khách từ tài liệu
 
@@ -306,3 +302,28 @@ Chạy `python init_db.py --extensions-only` để áp dụng extension `14_chat
 
 Kiểm thử riêng: `python -m pytest -q tests/test_chat_tools_imports.py tests/test_tools_browser.py`.
 Bao gồm nhập 580 khách qua API/file, chống ghi trùng, giao dịch nhiều mã SP, giới hạn 1.000 dòng, phân quyền/phạm vi, lịch khách, thao tác chat và trình duyệt desktop/mobile.
+
+### Trợ lý hội thoại có ngữ cảnh
+
+Áp dụng riêng extension mới, không seed hoặc đổi tài khoản MySQL, rồi khởi động lại app:
+
+```powershell
+python init_db.py --extension 16_chat_dialogue.sql
+python app.py
+```
+
+Giữ cấu hình `.env` hiện có (`DB_*`, `ADMIN_DB_*`, `APP_DB_PASSWORD`, `CHATBOT_RO_PASSWORD`, `FLASK_SECRET_KEY`, `APP_ENV`, tùy chọn `GROQ_API_KEY`/`GROQ_MODEL`). Không thêm credential bắt buộc. Danh tính chỉ từ phiên đăng nhập backend; không nhận user ID từ chat/header.
+
+Resolver ưu tiên lệnh rõ ràng, dùng LLM cho diễn đạt cần hiểu ngữ nghĩa và chỉ gửi catalog công cụ đã được cấp quyền. Giá trị model phải có bằng chứng trong câu hỏi; tên đối tượng đi qua lookup có scope. Ví dụ: `Nhập hàng: Mã SP: SP014; Số lượng: 2` rồi trả lời `Nhà cung cấp: Kho mô phỏng`; `Giá SH 160i` rồi `Cập nhật giá xe đó thành 97 triệu` sẽ hỏi chọn phiên bản. Hẹn hỗ trợ `ngày mai 9h30`/`ngày kia 10h00`; thiếu ngày/giờ thì yêu cầu bổ sung.
+
+Trạng thái lưu ở server, khóa theo phiên/chủ sở hữu, hết hạn sau 30 phút. Mỗi lệnh ghi giữ preview, xác nhận, kiểm tra lại quyền/version, savepoint rollback, audit và replay không ghi trùng. Đồng bộ Excel chỉ chạy sau commit thành công.
+
+Quy trình tối đa 5 bước, ngăn bằng `rồi`/`sau đó`: `Xem tổng quan tồn kho rồi nhập hàng: Nhà cung cấp: Kho mô phỏng; Mã SP: SP014; Số lượng: 2`. Mỗi bước ghi cần xác nhận riêng. Điều kiện được hỗ trợ có kiểm soát: `Tồn kho SP014 tại NT01, nếu dưới 5 thì nhập hàng: Nhà cung cấp: Kho mô phỏng; Mã SP: SP014; Số lượng: 2`; kiểm tra lại điều kiện dưới khóa khi xác nhận. Điều kiện khác hoặc bước chưa rõ sẽ hỏi lại, không tự thực thi.
+
+Số liệu SQL luôn từ database, không gọi LLM diễn đạt lại. RAG hợp nhất FULLTEXT và tìm từ khóa có scope, xếp hạng tiêu đề/nội dung và dẫn nguồn; MariaDB dùng tìm từ khóa vì không có parser ngram. File tri thức tải lên qua trang Tài liệu hiện có; chat cung cấp liên kết, trích xuất/hiệu đính/xuất bản qua công cụ được cấp quyền. Nhập khách từ file vẫn đính kèm trực tiếp trong chat.
+
+Xem [ma trận route → service → công cụ](docs/chat_capabilities.md). Báo giá, cơ hội và duyệt/thanh toán đơn chưa có backend; chatbot báo rõ thay vì giả lập ghi thành công. Kiểm thử tập trung:
+
+```powershell
+python -X utf8 scripts/test_isolated_mysql.py --seed tests/test_semantic_dialogue.py tests/test_chat_workflows.py tests/test_retrieval_reliability.py tests/test_dialogue_browser.py tests/test_dialogue_extension.py
+```

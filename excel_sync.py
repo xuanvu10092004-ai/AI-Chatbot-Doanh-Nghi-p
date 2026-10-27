@@ -168,6 +168,9 @@ def export_synced_workbook(path: Path = SYNCED_WORKBOOK) -> Path:
 
 
 def sync_after_commit() -> dict[str, Any]:
+    from db import defer_until_commit
+    if defer_until_commit(sync_after_commit):
+        return {'status':'scheduled'}
     try:
         return {"status": "completed", "path": str(export_synced_workbook())}
     except ExcelSourceLocked:

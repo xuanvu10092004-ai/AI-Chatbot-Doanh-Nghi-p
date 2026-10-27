@@ -80,3 +80,33 @@ def test_caught_failure_rolls_back_actual_write_and_leaves_draft(auth_client, to
     with cursor() as cur:
         cur.execute('SELECT status FROM chat_action_drafts WHERE id=%s', (reply['action_draft']['id'],))
         assert cur.fetchone()['status'] == 'draft'
+
+
+def test_rolled_back_tool_does_not_export_uncommitted_workbook(auth_client, tool_cleanup, monkeypatch):
+    import chat_tools
+    auth_client.login(2)
+    before=stock()
+    reply=chat(auth_client,'Nhập hàng: Nhà cung cấp: Kho lỗi sau ghi; Mã SP: SP014; Số lượng: 2')
+    original=chat_tools.run
+    exports=[]
+    monkeypatch.setattr('excel_sync.export_synced_workbook',lambda:exports.append(True))
+    def fails_after_service(*args):
+        original(*args)
+        raise OperationRejected('Không hoàn tất giao dịch.')
+    monkeypatch.setattr(chat_tools,'run',fails_after_service)
+    assert 'Không hoàn tất' in confirm(auth_client,reply)['answer']
+    assert stock()==before and exports==[]
+
+
+def test_condition_survives_clarification_and_draft_revision(auth_client, tool_cleanup):
+    auth_client.login(2)
+    limit=stock()+1
+    pending=chat(auth_client,f'Tồn kho SP014 tại NT01, nếu dưới {limit} thì nhập hàng: Mã SP: SP014; Số lượng: 2')
+    assert pending['type']=='clarification'
+    preview=chat(auth_client,'Nhà cung cấp: Kho kiểm tra điều kiện')
+    assert preview['action_draft']['condition']['threshold']==limit
+    revised=chat(auth_client,'Số lượng: 3')
+    assert revised['action_draft']['condition']['threshold']==limit
+    with cursor() as cur:cur.execute('UPDATE inventory SET quantity=%s WHERE branch_id=1 AND variant_id=14',(limit,))
+    assert 'Điều kiện đã thay đổi' in confirm(auth_client,revised)['answer']
+    assert stock()==limit

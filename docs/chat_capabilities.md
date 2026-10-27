@@ -22,4 +22,6 @@
 
 Mọi lệnh ghi tạo bản nháp hoặc dùng batch khách hiện có, phải xác nhận trước khi service thực thi. File tải lên vẫn đi qua biểu mẫu và nút xác nhận hiện có; không tạo đường dẫn file từ nội dung LLM.
 
+Trạng thái theo phiên/chủ sở hữu, có thời hạn 30 phút; tên trùng yêu cầu chọn entity. Quy trình nhiều bước được kiểm quyền trước bước đầu, từng thao tác ghi xác nhận riêng. Điều kiện tồn một SP/chi nhánh được giữ cùng draft và kiểm tra lại dưới khóa lúc confirm, kể cả sau bổ sung/sửa tham số. Điều kiện khác hỏi lại. Excel được xuất sau commit, bỏ callback khi rollback savepoint.
+
 Chưa có backend: tạo báo giá, cơ hội; duyệt đơn/thanh toán/giao xe. Chỉ có tra cứu đơn và PDF mô phỏng. Chat không báo thành công cho các thao tác này. Login/logout/đổi mật khẩu cá nhân tiếp tục dùng biểu mẫu bảo mật, không đưa mật khẩu vào hội thoại.
