@@ -33,8 +33,14 @@ def main():
     shutil.copytree(ROOT, workspace, ignore=shutil.ignore_patterns(
         '.git', '.env', '.venv', 'venv', '__pycache__', '.pytest_cache*',
         'exports', '.codex', '.agents', 'instance'))
+    (workspace/'data/exports').mkdir(parents=True,exist_ok=True)
     datadir = folder / 'mysql-data'
-    before = fingerprints(config)
+    # The independent worker legitimately updates bookkeeping while tests run.
+    # Keep checking every business/audit table, including soft-delete metadata.
+    def source_fingerprints():
+        return {name:value for name,value in fingerprints(config).items()
+                if name not in {'excel_sync_state','excel_sync_changes'}}
+    before = source_fingerprints()
     snapshot = folder / 'source.sql'
     env = dict(os.environ, MYSQL_PWD=str(config['password']))
     args = ['--host=' + str(config['host']), '--port=' + str(config['port']),
@@ -103,8 +109,8 @@ def main():
             process.kill()
             process.wait()
         log.close()
-        unchanged = fingerprints(config) == before
-        print('Source table contents unchanged:', unchanged, flush=True)
+        unchanged = source_fingerprints() == before
+        print('Source table contents unchanged:', unchanged, '(worker bookkeeping excluded)', flush=True)
         if not unchanged:
             raise RuntimeError('Database nguồn thay đổi trong lúc test; không tự ghi đè dữ liệu nguồn.')
 

@@ -1,3 +1,49 @@
+# Khách hàng admin-only và MySQL → Excel - 27/10/2026
+
+Baseline `main` tại `c8ac638`; workspace ban đầu sạch. Thực hiện trên branch hiện tại, không push. Môi trường thật: Windows, Python 3.13, MariaDB 10.4.32. Không reset database dùng chung, không sửa `.env` hoặc workbook nguồn Git.
+
+| Lệnh/kiểm chứng | Exit code | Kết quả thật |
+|---|---:|---|
+| `python -X utf8 scripts/test_isolated_mysql.py --seed --tb=short --junitxml=data/exports/customer-final.xml` | 0 | **415 passed, 5 skipped in 95.60s (0:01:35)** |
+| `python init_db.py --reset` do runner gọi trên server riêng | 0 | 11 mẫu, 31 phiên bản, 93 dòng tồn, 80 hồ sơ khách và 30 đơn; source dùng chung không reset |
+| API/service/chat + worker + browser tập trung | 0 | 41 passed sau sửa atomic replace Windows; giữ nguyên assertion về dữ liệu/lỗi |
+| Test khách hàng trên bản sao dữ liệu thực, không seed | 0 | 30 passed in 7.99s; bảng nguồn không đổi khi worker thật đang cập nhật heartbeat |
+| Test staff có `user:manage` nhưng không phải admin khách | 0 | Bộ khách hàng 31 passed in 8.24s; đường generic admin trả đúng 403, không bị handler biến thành 400 |
+| Tương thích form quản trị tài khoản cũ | 0 | Bộ khách hàng 32 passed in 8.40s; admin đổi trạng thái khi form gửi lại email/họ tên không đổi, không làm mất dữ liệu hồ sơ |
+| Áp dụng riêng `17_customer_admin.sql` và `18_excel_sync_outbox.sql` trên DB hiện tại | 0 / 0 | Hash users/customer_profiles/products/product_variants/product_specs/inventory/orders/order_items/branches không đổi; giữ 81 khách, 31 đơn; `.env` và workbook nguồn giữ nguyên hash |
+| `python excel_sync_worker.py --once --force` trên DB hiện tại | 0 | `status=completed`, `events=1`, export chính thức có 81 dòng khách |
+| Worker độc lập, ẩn cửa sổ | 0 | PID **24652**, lưu tại `data/exports/excel_sync_worker.pid`; heartbeat tăng sau 3 giây; pending=0, completed, error=NULL |
+| Script Task Scheduler | 0 | PowerShell AST parser: syntax OK; chưa đăng ký task vào Windows |
+| `git diff --check`; diff workbook nguồn | 0 | Không lỗi whitespace; không có diff trên source Excel |
+
+JUnit cuối: `data/exports/isolated-mysql-c10b7619fbc6403f844a8a36c790b374/workspace/data/exports/customer-final.xml`. Các server test đã dừng; worker thật vẫn chạy. Runner tạo server/workspace riêng và kiểm hash mọi bảng nghiệp vụ/audit nguồn, bao gồm metadata xóa mềm. Hai bảng journal/state của worker được loại khỏi đối chiếu vì worker độc lập phải được phép cập nhật ACK/heartbeat. Không có test ghi vào nguồn dùng chung.
+
+| Hành vi | Kiểm chứng |
+|---|---|
+| Super admin sửa một phần, version check và hai người sửa đồng thời | Đạt; giữ trường không gửi, kết quả hai người sửa là 200/409 |
+| Branch manager, sales, staff khác, khách/customer bị từ chối | Đạt; GET/PATCH/DELETE 403; cấp nhầm permission hoặc user:manage không vượt kiểm tra danh tính super_admin |
+| Batch/import/chat/admin account không vượt quyền sửa | Đạt; staff tạo mới còn hoạt động; cập nhật khách hiện có bị từ chối; clone role không sao chép quyền admin khách |
+| Validation và rollback | Đạt; email/điện thoại/chi nhánh/trạng thái/sản phẩm/kiểu dữ liệu không hợp lệ không ghi; không sửa purchases lịch sử qua PATCH |
+| Xóa mềm, restore, confirm/replay | Đạt; phải xác nhận, replay không ghi trùng; khách xóa khỏi active lists/AI/export, draft cũ không sửa được |
+| Đơn hàng và hóa đơn lịch sử | Đạt; orders/order_items giữ nguyên, PDF mô phỏng vẫn xuất được sau xóa mềm |
+| Direct SQL và SQL rollback | Đạt; trigger tạo event cùng transaction; rollback không có event hoặc Excel update |
+| Consistent snapshot, commit muộn có event ID nhỏ | Đạt; ACK đúng ID đã thấy, không dùng watermark để bỏ qua event; các sheet khớp SQL |
+| Nhiều transaction thật, nhiều process | Đạt; 24 UPDATE tăng tồn chạy đồng thời, một lần export cuối khớp tổng SQL; process khác không vượt GET_LOCK |
+| Windows file lock, interruption/restart | Đạt; CreateFileW khóa thật, giữ file cũ + event khi lỗi; phục hồi được; crash sau replace trước ACK không mất event |
+| Export lỗi sau DB commit | Đạt; API vẫn trả 200 cho lần lưu DB; trạng thái failed/pending/retry quan sát được, không báo Excel thành công giả |
+| UI desktop 1440×1000 và mobile 390×844 | Đạt Sửa → Xóa → Khôi phục và worker tự cập nhật Excel; giữ nút nhập khách, bộ lọc, phân trang, không tràn ngang |
+| GET không xuất Excel, source workbook bất biến | Đạt; exporter chỉ ghi official export, source giữ byte; cả các form/chat/import cũ nằm trong full regression |
+
+Các lỗi đã gặp và sửa: lượt đầu full có 7 failed/384 passed do replay mất hoặc đổi định dạng sync metadata, hai test cũ dùng sales để cập nhật, và assertion kế toán chưa phản ánh extension 15 có sẵn trong baseline. Đã sửa serialization/persist kết quả replay; chuyển đúng các bước cập nhật sang admin và thêm test staff bị chặn; assertion kế toán vẫn đối chiếu tập view chính xác theo migration 15. Lượt sau 413 passed/5 skipped có 2 lỗi teardown do reader Windows giữ ZIP trong lúc replace; đã thêm retry ngắn trong code exporter, giữ nguyên assertion. Runner không seed thiếu thư mục exports đã được sửa và kiểm tra lại. Không xóa test hoặc nới assertion để che lỗi.
+
+File thêm: `customer_service.py`, `excel_sync_worker.py`, `data/schema/extensions/17_customer_admin.sql`, `data/schema/extensions/18_excel_sync_outbox.sql`, `scripts/install_excel_sync_task.ps1`, `templates/customer_editor.html`, `tests/test_customer_admin.py`, `tests/test_customer_admin_browser.py`, `tests/test_excel_sync_worker.py`, `docs/excel_sync_worker.md`.
+
+File sửa: `admin_routes.py`, `admin_service.py`, `app.py`, `business_routes.py`, `chat_action_routes.py`, `chat_tools.py`, `customer_chat.py`, `customer_file_import.py`, `customer_input.py`, `customer_input_routes.py`, `dashboard_service.py`, `db.py`, `entity_lookup.py`, `excel_sync.py`, `intent_resolver.py`, `operations_routes.py`, `security.py`, `scripts/test_isolated_mysql.py`, `static/portal.css`, `static/records.js`, `templates/records.html`, `tests/test_chat_flow.py`, `tests/test_chat_tools_imports.py`, `tests/test_customer_input.py`, `tests/test_mysql_deployment.py`, `README.md`, `tasks/plan.md`, `tasks/todo.md`, `docs/test_results.md`.
+
+Chưa kiểm chứng: đăng ký/chạy Task Scheduler trong tài khoản Windows đích, MySQL 8 riêng và LLM API thật (5 test offline tự skip). Worker hiện đã chạy độc lập bằng pythonw; để tự chạy sau reboot/logon, dùng script và hướng dẫn trong `docs/excel_sync_worker.md`. Web process đã nạp code cũ cần khởi động lại để áp dụng quyền/giao diện mới. Không ép tắt tiến trình website khác hoặc thay cấu hình hệ thống.
+
+---
+
 # Kiểm chứng trợ lý hội thoại - 27/10/2026
 
 Windows, Python 3.13, MariaDB 10.4.32; branch hiện tại. Không pull/rebase/push: upstream có 3 commit chưa đồng bộ và có hai file đã stage của người dùng. Giữ nguyên các assertion hiện có.

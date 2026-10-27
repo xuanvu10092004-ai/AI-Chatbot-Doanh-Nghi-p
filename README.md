@@ -1,5 +1,17 @@
 # Honda AI Portal · Flask + MariaDB/MySQL
 
+**Khách hàng và Excel:** chỉ super_admin có quyền `customer:admin:manage` được sửa/xóa mềm/khôi phục khách. Staff tiếp tục tạo khách mới; import không được dùng để vượt quyền sửa. Trang Khách hàng có nút Sửa/Xóa, lọc khách đã xóa và trạng thái worker. Chat dùng cùng service, luôn xem trước/xác nhận và kiểm tra version.
+
+Export chính thức là `data/exports/honda_chatbot_synced.xlsx`; workbook nguồn Git chỉ đọc. MySQL journal theo dõi cả SQL trực tiếp; worker gom thay đổi đã commit, khóa giữa nhiều process, xuất nguyên tử và retry. Không cần mở website/trình duyệt khi worker chạy. Triển khai riêng extension 17/18 rồi chạy worker:
+
+```powershell
+python init_db.py --extension 17_customer_admin.sql
+python init_db.py --extension 18_excel_sync_outbox.sql
+python excel_sync_worker.py --interval 2
+```
+
+Xem [hướng dẫn worker, Task Scheduler Windows và phục hồi](docs/excel_sync_worker.md). Không reset database dùng chung; các phần mô tả đồng bộ cũ bên dưới được thay thế bởi cơ chế journal/worker này.
+
 Hệ thống Trợ lý AI - Đại lý xe máy Honda. Dữ liệu mô phỏng phục vụ thử nghiệm.
 
 Logo cục bộ lấy từ `docs/images/logo.jpg`, phục vụ qua `static/images/logo.jpg` trên trang đăng nhập và thanh đầu trang. Câu trả lời chat hiển thị chữ **đậm**, *nghiêng* và danh sách bằng DOM an toàn, không hiện dấu Markdown tương ứng. Quy ước source và nội dung sinh mới: dùng dấu `-` thay cho dấu gạch dài. Backend chuẩn hóa trước khi lưu câu trả lời; frontend chuẩn hóa văn bản nguồn và ô dữ liệu cũ.
