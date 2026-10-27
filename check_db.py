@@ -41,6 +41,9 @@ def main() -> int:
 
 
 if __name__ == "__main__":
+    # Terminal Windows có thể dùng cp1252; xuất UTF-8 để in được tiếng Việt.
+    sys.stdout.reconfigure(encoding="utf-8")
+    sys.stderr.reconfigure(encoding="utf-8")
     try:
         raise SystemExit(main())
     except KeyError as exc:
