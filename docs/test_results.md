@@ -491,3 +491,70 @@ File sửa: `db.py`, `security.py`, `access_control.py`, `app.py`, `operations_r
 
 Giới hạn: PDF ảnh quét chưa OCR; nghiệp vụ chưa triển khai (báo giá/cơ hội) không trở thành công cụ chat; phiếu nhập chưa hạch toán giá vốn/công nợ. Chat không chạy mã/SQL ghi tùy ý. Xác nhận file thực tế còn chờ người dùng xem trước vì có 81 hồ sơ được cập nhật. Giữ nguyên file tạm Excel của người dùng ngoài commit, không `git push`.
 
+
+## Bổ sung hiệu ứng tương tác trang đăng nhập - 22/10/2026
+
+Phạm vi chỉ gồm frontend: thêm static/login-effects.js, bổ sung CSS hiệu ứng trong static/portal.css và liên kết script trong `templates/login.html`. Không thay đổi backend, route, session, CSRF, xác thực, database, form hoặc hành vi nút đăng nhập/khách.
+
+| Kiểm tra | Kết quả |
+|---|---|
+| Nền gradient, vật thể trang trí và parallax theo chuột | Đã bổ sung |
+| Kéo-thả vật thể trang trí | Đã bổ sung; chỉ xử lý trên vùng trang trí, không chặn form |
+| Hover/focus và hiệu ứng xuất hiện | Đã bổ sung |
+| prefers-reduced-motion | Đã bổ sung |
+| Không CDN/dependency mới | Đạt; dùng CSS và JavaScript nội bộ |
+| `node --check static/login-effects.js` | Đạt |
+| git diff --check | Đạt |
+| Toàn bộ pytest | Chưa chạy lại trong lần thay đổi frontend này |
+
+Các kết quả 200/263/290 test pass ở những mục phía trên là kết quả lịch sử của các lần kiểm chứng trước, không phải kết quả mới của mục này.
+
+## AI Evaluation & Training Readiness (22/10/2026)
+
+| Hạng mục | Kết quả |
+|---|---|
+| Dataset seed có ground truth | Đạt, 200 câu JSONL |
+| Validate schema dataset | Đạt |
+| Intent baseline | 200/200 |
+| Route baseline | 200/200 |
+| SQL plan safety shape | 200/200 |
+| Pytest pipeline + chat understanding | 41 passed |
+
+Đây là benchmark route/planner trên câu hỏi đã duyệt, không phải fine-tuning và không chứng minh số liệu nghiệp vụ cố định. Tập `evaluation` được tách khỏi `development`; muốn mở rộng lên 1.000+ câu cần bổ sung các lỗi thật sau mỗi vòng benchmark.
+## AI Training Pilot (22/10/2026)
+
+| Hạng mục | Kết quả |
+|---|---|
+| System audit | Đã ghi nhận trong `reports/ai_training/system_audit.md` |
+| Dataset pilot | 150 câu, đủ trường ground truth |
+| Split | Development 100 / Validation 25 / Test 25 |
+| Offline preflight | 150/150 route và intent/plan shape đạt |
+| Pytest pilot + benchmark | 43 passed |
+| Groq/live SQL/RAG groundedness | NOT_RUN; cần API key và fixture/snapshot read-only |
+
+## Phase 2 Real AI Evaluation (22/10/2026)
+
+| Hạng mục | Kết quả thực tế |
+|---|---|
+| Smoke | 10 case, 7 SELECT thực tế, 3 preflight |
+| Toàn bộ pilot | 150 case |
+| SELECT qua `chatbot_ro` | 105 thực thi, 0 lỗi |
+| SQL cần Groq/template | 0 BLOCKED ở planner deterministic; Groq vẫn chưa gọi |
+| Groq request | 0; `GROQ_API_KEY` không có |
+| Latency SELECT | Trung bình 2.51 ms, P95 6.39 ms |
+| Flask E2E/RAG | BLOCKED vì chưa có database fixture cô lập |
+
+Các báo cáo chi tiết nằm trong `reports/ai_training/real_*.md` và `failure_analysis.md`. Không ghi row values hoặc PII vào báo cáo.
+## Phase 3 Real AI Evaluation & Integration (22/10/2026)
+
+| Hạng mục | Kết quả |
+|---|---|
+| SQL SELECT thật qua `chatbot_ro` | 105/105, lỗi 0 |
+| Per-case redacted records | 150 records |
+| Groq LLM | BLOCKED, thiếu `GROQ_API_KEY` |
+| RAG groundedness | BLOCKED, thiếu fixture tài liệu/session cô lập |
+| Flask full E2E | BLOCKED, chưa có database fixture cô lập |
+| Generalization route | 30/30 sau sửa root-cause; 26/30 baseline |
+| Regression tests | 67 passed (routing + pilot + question upgrade) |
+
+Phase 3 được đánh dấu **PARTIAL / BLOCKED**, không tuyên bố Real LLM accuracy hay fine-tuning.

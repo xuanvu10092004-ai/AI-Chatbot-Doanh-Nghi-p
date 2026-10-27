@@ -1,4 +1,4 @@
-﻿# Honda AI Portal · Flask + MariaDB/MySQL
+# Honda AI Portal · Flask + MariaDB/MySQL
 
 Hệ thống Trợ lý AI - Đại lý xe máy Honda. Dữ liệu mô phỏng phục vụ thử nghiệm.
 
@@ -169,11 +169,16 @@ Khách hàng và tồn kho có tìm kiếm, lọc, phân trang và sắp xếp. 
 
 ```powershell
 python init_db.py --reset
-python init_db.py --reset
 python -m pytest -q
 ```
 
 Test MySQL dùng database thật; thiếu database/schema là lỗi, không tự skip. Test Groq tự skip khi không có khóa. Các test API đăng nhập qua test client và gửi CSRF thật, không gán user_id trực tiếp vào phiên.
+Hiệu ứng trang đăng nhập nằm trong `static/login-effects.js` và phần CSS riêng trong `static/portal.css`; tài nguyên được phục vụ nội bộ, không dùng CDN và không cần dependency mới. Sau khi cập nhật frontend, hãy hard refresh trình duyệt khi cần để bỏ cache. Kiểm tra nhanh:
+
+```powershell
+node --check static/login-effects.js
+git diff --check
+```
 
 ## Tải lên và trích xuất tài liệu
 
@@ -258,6 +263,61 @@ python -m pip install playwright
 python -m pytest -q tests/test_chat_layout.py
 ```
 
+### AI Evaluation & Training Readiness
+
+Không xem bộ câu hỏi benchmark là fine-tuning. Tập seed gồm 200 câu được rà soát, có intent, route, hành động, quyền, phạm vi, entity, hành vi kỳ vọng và split `development`/`evaluation`. Tập `evaluation` phải được giữ riêng khi tối ưu prompt hoặc rule. Kết quả nghiệp vụ cần chạy trên snapshot/fixture tái lập; không hardcode số lượng tồn kho đang thay đổi.
+
+```powershell
+python scripts/generate_ai_evaluation_dataset.py
+python scripts/ai_evaluation.py validate
+python scripts/ai_evaluation.py benchmark
+```
+
+Dataset nằm tại `data/ai_questions/seed.jsonl`, báo cáo baseline tại `docs/ai_evaluation_baseline.md`. Pipeline chỉ đọc route/planner, không thực thi SQL do người dùng hay SQL do model sinh và không ghi dữ liệu. Khi có lỗi thật từ log, bổ sung case đã duyệt vào tập phát triển, chạy lại benchmark hồi quy, sau đó mới xem xét mở rộng lên 1.000+ câu. Fine-tuning LoRA/QLoRA là bước riêng; Groq hiện không phải nơi huấn luyện adapter trực tiếp trong cấu hình của dự án.
+### AI Training Pilot (150 câu)
+
+Pilot tách riêng khỏi seed benchmark 200 câu. Chạy theo thứ tự Audit → Dataset → Baseline:
+
+```powershell
+python scripts/build_ai_training_pilot.py
+python scripts/run_ai_training_pilot.py
+python -m pytest -q tests/test_ai_training_pilot.py tests/test_ai_evaluation.py tests/test_chat_understanding.py
+```
+
+Dataset nằm trong `data/ai_training/` với `development.jsonl` (100), `validation.jsonl` (25) và `test.jsonl` (25). Báo cáo audit và baseline nằm trong `reports/ai_training/`. Chế độ mặc định chỉ preflight intent/route/SQL-shape, không gọi Groq, không chạy SQL và không ghi MySQL. SQL result correctness, RAG groundedness, answer correctness và latency/token được ghi `NOT_RUN` cho tới khi có fixture/snapshot read-only và API key hợp lệ.
+### Phase 2: Real AI Evaluation
+
+Chạy smoke 10 câu bằng tài khoản MySQL chỉ đọc:
+
+```powershell
+python scripts/run_real_ai_evaluation.py
+```
+
+Chạy toàn bộ 150 câu ở phần query read-only:
+
+```powershell
+python scripts/run_real_ai_evaluation.py --all
+```
+
+Script không gọi Groq nếu thiếu `GROQ_API_KEY`, không ghi dữ liệu và không lưu row values/PII. Báo cáo nằm trong `reports/ai_training/`: `real_baseline.md`, `failure_analysis.md`, `optimization_changes.md`, `real_evaluation_results.md` và `next_phase_recommendations.md`. Full Flask E2E/RAG chỉ được bật trên database fixture cô lập; không chạy trực tiếp trên database đang chứa dữ liệu nghiệp vụ.
+### Phase 3: Real AI Evaluation & Integration
+
+```powershell
+python scripts/run_real_ai_evaluation.py
+python scripts/run_real_ai_evaluation.py --all
+python scripts/run_phase3_case_records.py
+```
+
+Các lệnh trên chỉ chạy SELECT qua `chatbot_ro`, ghi metadata đã loại bỏ giá trị dòng và không gọi Groq nếu thiếu `GROQ_API_KEY`.
+Nếu cần mở khóa gọi Groq thật trên Windows PowerShell, dùng key thật từ Groq Console, không ghi key vào source/report:
+
+```powershell
+$env:GROQ_API_KEY = '<key-that-you-obtained-from-Groq>'
+$env:GROQ_MODEL = 'openai/gpt-oss-20b'
+python -c "from dotenv import load_dotenv; import os; load_dotenv(); print('GROQ_API_KEY configured:', bool(os.getenv('GROQ_API_KEY'))); print('GROQ_MODEL:', os.getenv('GROQ_MODEL'))"
+```
+
+Muốn lưu cho các phiên PowerShell sau: `[Environment]::SetEnvironmentVariable('GROQ_API_KEY','<key-that-you-obtained-from-Groq>','User')`, sau đó mở terminal mới. Không dùng key giả; khi thiếu key, test LLM phải skip. Bộ generalization 30 câu nằm tại `data/ai_training/generalization.jsonl`. Báo cáo Phase 3 nằm trong `reports/ai_training/phase3_*.md`. Full Flask/RAG E2E chỉ chạy sau khi có database fixture và tài liệu fixture cô lập; trạng thái BLOCKED không được tính là PASS.
 ### Cập nhật công cụ điều hành (15/10/2026)
 
 Sau khi lấy mã mới, chạy `python init_db.py --extensions-only` rồi khởi động lại `python app.py`.

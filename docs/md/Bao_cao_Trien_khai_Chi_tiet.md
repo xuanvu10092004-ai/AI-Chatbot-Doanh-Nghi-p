@@ -86,3 +86,8 @@ Tieu tai lieu nay chuyen ke hoach trong `Ke_Hoach_Thuc_Tap.xlsx` thanh lo trinh 
 - [ ] RAG co nguon; thieu bang chung thi khong tu khang dinh.
 - [ ] Sau nang cap, 6 module co luong chinh.
 - [ ] Co bao cao test, huong dan chay, cau hinh khong chua API key va slide demo.
+- [ ] Static JS/CSS cua trang dang nhap duoc phuc vu noi bo, khong dung CDN.
+- [ ] Parallax va keo-tha khong chan nhap form hoac phim Enter.
+- [ ] `prefers-reduced-motion` duoc ton trong.
+- [ ] Kiem tra trang dang nhap o desktop va mobile.
+- [ ] Chay `node --check static/login-effects.js` va `git diff --check`.

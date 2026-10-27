@@ -184,6 +184,10 @@ def chat():
             return jsonify(customer_reply)
         # Phân nhánh truy vấn có cấu trúc hoặc tìm tài liệu theo quyền của user.
         route = route_question(retrieval_question)
+        if route["type"] == "CLARIFY":
+            answer = "Bạn muốn xem tất cả sản phẩm, tồn kho hay khách hàng? Hãy nói rõ nhóm dữ liệu cần tra cứu."
+            record_message(session_id, "bot", answer)
+            return jsonify(answer=answer, type=route["type"], module=route["module"], session_id=session_id, engine="clarification", access_denied=False, rows=[], summary=None, sources=[])
         if route["type"] == "SQL":
             context = answer_sql_question(retrieval_question, user_id, session_id, include_inventory_details=True)
         else:
