@@ -74,3 +74,43 @@ def test_resolver_outage_is_explicit_and_never_writes(monkeypatch):
     reply = resolve('Giúp tôi làm việc đó', {}, TOOLS)
     assert reply.unavailable and 'chưa sẵn sàng' in reply.clarification
     assert 'secret' not in reply.clarification
+
+
+def test_product_name_requires_variant_selection_and_rechecks_scope(auth_client, tool_cleanup):
+    auth_client.login(2)
+    reply = chat(auth_client, 'Nhập hàng: Nhà cung cấp: Kho mô phỏng; Số lượng: 2; xe SH 160i')
+    options = reply['clarification']['options']
+    with cursor() as cur:
+        cur.execute('SELECT pv.id FROM product_variants pv JOIN products p ON p.id=pv.product_id WHERE p.model_name=%s', ('SH 160i',))
+        assert {r['id'] for r in options} == {r['id'] for r in cur.fetchall()}
+    assert 'action_draft' not in reply
+    rejected = chat(auth_client, 'Chọn 999999')
+    assert 'action_draft' not in rejected
+    chosen = chat(auth_client, 'Chọn ' + str(options[0]['id']))
+    assert chosen['action_draft']['arguments']['items'] == [{'variant_id': options[0]['id'], 'quantity': 2}]
+
+
+def test_all_dashboard_widget_names_are_resolved():
+    from intent_resolver import local_arguments
+    from dashboard_service import WIDGETS
+    questions = ['đơn hàng', 'tồn kho', 'khách hàng', 'doanh thu theo tháng',
+                 'doanh thu theo chi nhánh', 'tồn kho theo chi nhánh',
+                 'khách theo trạng thái', 'khách theo nguồn', 'bán chạy', 'lợi nhuận gộp']
+    assert {local_arguments('Xem tổng quan ' + q, 'dashboard_read')['widget'] for q in questions} == set(WIDGETS)
+
+
+def test_customer_name_lookup_cannot_cross_branch(auth_client, tool_cleanup):
+    auth_client.login(2)
+    with cursor() as cur:
+        cur.execute("SELECT full_name FROM users WHERE user_type='customer' AND home_branch_id=2 LIMIT 1")
+        name = cur.fetchone()['full_name']
+    reply = chat(auth_client, 'Đặt lịch sửa xe: Khách hàng: ' + name)
+    assert reply['type'] == 'clarification'
+    assert reply['clarification']['options'] == []
+    assert 'action_draft' not in reply
+
+
+@pytest.mark.parametrize('question', ['Lập báo giá cho khách A', 'Tạo cơ hội bán hàng', 'Duyệt đơn hàng #1', 'Thanh toán đơn hàng #1'])
+def test_unimplemented_workflows_are_reported(question):
+    result = resolve(question, {}, TOOLS)
+    assert result.tool is None and 'chưa có backend' in result.clarification

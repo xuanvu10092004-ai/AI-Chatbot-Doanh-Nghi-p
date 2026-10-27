@@ -18,6 +18,11 @@ class Resolution:
 
 
 PARAPHRASES = (
+    ('customer_input', r'\b(?:ghi nhan|bo sung|luu ho so)\b.*\bkhach(?: hang)?\b'),
+    ('customer_imports', r'\blich su nhap\b.*\bkhach\b'),
+    ('document_upload', r'\b(?:tai len|upload|dinh kem)\b.*\b(?:tai lieu|tep|file)\b'),
+    ('document_process', r'\b(?:trich xuat|xu ly lai|doc lai)\b.*\b(?:tai lieu|tep|file)\b'),
+    ('document_detail', r'\b(?:ket qua trich xuat|noi dung hieu dinh)\b.*\b(?:tai lieu|tep|file)\b'),
     ('stock_receive', r'\b(?:bo sung|nhan them|nhap them|nhap ve|tang ton)\b.*\b(?:kho|hang|xe|sp\d+)'),
     ('stock_list', r'\b(?:phieu nhap|da nhap.*(?:hang|kho)|nhap.*(?:luc nao|khi nao))\b'),
     ('catalog_save', r'\b(?:dieu chinh|doi|cap nhat|sua)\b.*\b(?:gia|phien ban|doi xe)\b'),
@@ -46,6 +51,12 @@ def local_arguments(question, name):
     first = normalize(question.split(':', 1)[0])
     values = parse_args('Bổ sung: ' + question if first in ALIASES else question, name)
     q = normalize(question)
+    if name == 'catalog_save' and 'list_price' not in values:
+        price = re.search(r'\b(?:gia|con|thanh)\s+(\d[\d.,]*)\s*(trieu|tr|vnd|dong)?\b', q)
+        if price:
+            from decimal import Decimal
+            amount = Decimal(price[1].replace(',', '.') if price[2] in {'trieu','tr'} else price[1].replace('.', '').replace(',', ''))
+            values['list_price'] = int(amount * (1000000 if price[2] in {'trieu','tr'} else 1))
     if name == 'appointment_create' and not any(w in q for w in ('tu van', 'bao duong')):
         values.pop('kind', None)
     if name == 'dashboard_read':
@@ -90,6 +101,14 @@ def semantic_interpret(question, state, catalog):
 def resolve(question, state, catalog):
     from chat_tools import infer, TOOLS, ALIASES
     q = normalize(question)
+    selection = re.fullmatch(r'chon\s*#?(\d+)', q)
+    if selection and state.get('selection') and state.get('active_tool'):
+        picked = int(selection[1])
+        pending = state['selection']
+        if picked not in {r['id'] for r in pending['options']}:
+            return Resolution(clarification='Hãy chọn một mã trong danh sách vừa hiển thị.')
+        state['selected'] = {pending['reference']: picked}
+        return Resolution(state['active_tool'], state.get('arguments', {}))
     # Missing modules must not be mistaken for a successful order mutation.
     if re.search(r'\b(?:tao|lap|duyet|thanh toan|cap nhat)\b.*\b(?:bao gia|co hoi|don hang)\b', q):
         return Resolution(clarification='Chức năng báo giá, cơ hội và duyệt/thanh toán đơn chưa có backend thực thi. Bạn có thể tra cứu đơn hoặc xuất chứng từ mô phỏng.', unavailable=True)
@@ -97,7 +116,11 @@ def resolve(question, state, catalog):
     if not name:
         name = next((name for name, pattern in PARAPHRASES if re.search(pattern, q)), None)
     if name:
-        return Resolution(name, local_arguments(question, name))
+        args=local_arguments(question,name)
+        if name in {'document_process','document_detail'} and 'id' not in args:
+            match=re.search(r'(?:#|tai lieu\s+)(\d+)\b',q)
+            if match:args['id']=int(match[1])
+        return Resolution(name,args)
     # A follow-up must look like a supplied field, not a new SQL/RAG question.
     active = state.get('active_tool')
     labeled = any(normalize(p.split(':', 1)[0]) in ALIASES or normalize(p.split(':', 1)[0]) in
