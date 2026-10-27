@@ -238,7 +238,7 @@ def prepare(name,raw):
         row=next((r for r in endpoint('catalog_list')['rows'] if r['id']==data['id']),None)
         if not row:raise OperationRejected('Không tìm thấy xe trong phạm vi được cấp.',404)
         data={**row,**data,'version':row['version']};data.pop('product_id',None)
-    if name in {'booking_update','appointment_update'}:
+    if name in {'booking_update','appointment_update'} and data.get('id'):
         rows=run('booking_list' if name=='booking_update' else 'appointment_list',{},None)['rows']
         row=next((r for r in rows if r['id']==data.get('id')),None)
         if not row:raise OperationRejected('Không tìm thấy lịch trong phạm vi được cấp.',404)
@@ -310,6 +310,21 @@ def confirm_action(action_id,session_id,confirmation,secret=None):
 
 
 def handle_tool_chat(question,session_id,confirmation=None,secret=None):
+    from dialogue_state import dialogue_turn
+    with dialogue_turn(session_id,g.user['id'] if g.user else None) as state:
+        q=normalize(question)
+        if q in {'xac nhan','dong y','dong y thuc hien','huy','bo qua'} and state.get('action_id'):
+            question=('Hủy lệnh ' if q in {'huy','bo qua'} else 'Xác nhận lệnh ')+str(state['action_id'])
+            confirmation=confirmation or (state['action_id'],state['action_version'])
+        result=_handle_tool_chat(question,session_id,confirmation,secret,state)
+        if result and result.get('action_draft'):
+            draft=result['action_draft'];state.update(action_id=draft['id'],action_version=draft['version'])
+        if result and result.get('result'):
+            state.pop('active_tool',None);state.pop('arguments',None)
+        return result
+
+
+def _handle_tool_chat(question,session_id,confirmation=None,secret=None,state=None):
     q=normalize(question)
     if q in {'tro giup','cac chuc nang','ban lam duoc gi','huong dan lenh'}:
         items=[v[0] for v in available_tools().values()]
@@ -335,25 +350,34 @@ def handle_tool_chat(question,session_id,confirmation=None,secret=None):
         if cancel:
             with cursor() as cur:cur.execute("UPDATE chat_action_drafts SET status='cancelled' WHERE id=%s AND session_id=%s AND user_id <=> %s AND status='draft'",(int(cancel.group(1)),session_id,g.user['id'] if g.user else None))
             return {'type':'tool','answer':'Đã xử lý hủy lệnh trong phiên hiện tại.','rows':[]}
-        name=infer(question)
+        from intent_resolver import resolve
+        resolution=resolve(question,state,available_tools())
+        if resolution.clarification:
+            return {'type':'clarification','answer':resolution.clarification,'rows':[],
+                    'error':'ai-unavailable' if resolution.unavailable else None}
+        name=resolution.tool
         if not name:return None
         ok,audit_id=allowed(name,session_id)
         if not ok:return {'type':'tool','answer':DENIED,'access_denied':True,'rows':[]}
         if re.search(r"\b(?:password|mat khau)[\"']?\s*[:=]",q):
             return {'type':'tool','answer':'Không nhập mật khẩu vào câu lệnh. Hãy tạo lệnh tài khoản trước, sau đó nhập mật khẩu trong ô bảo mật ở bước xác nhận.','rows':[]}
-        raw=parse_args(question,name)
+        raw=resolution.arguments
+        state.update(active_tool=name,arguments=raw)
         try:data=prepare(name,raw)
         except OperationRejected as error:
-            if error.status!=400 or not os.getenv('GROQ_API_KEY'):raise
-            guessed=model_args(question,name)
-            if not guessed:raise error
-            data=prepare(name,guessed)
+            if error.status!=400:raise
+            return {'type':'clarification','answer':str(error),'rows':[],
+                    'clarification':{'tool':name,'pending':True}}
         if name=='stock_receive':
             mentioned={int(m) for m in re.findall(r'\bsp\s*(\d+)\b',q)}
             actual={number(item,'variant_id',1,2**31-1) for item in data['items'] if isinstance(item,dict)}
             if not mentioned<=actual:raise OperationRejected('Bản nhập còn thiếu mã SP bạn đã nêu. Hãy nhập từng cặp “SP014: 3; SP015: 2”.')
-        if not TOOLS[name][3]:return reply_result(name,run(name,data,session_id))
+        if not TOOLS[name][3]:
+            state.pop('active_tool',None);state.pop('arguments',None)
+            return reply_result(name,run(name,data,session_id))
+        # A revision invalidates the previous preview, so stale buttons cannot run it.
         with cursor() as cur:
+            cur.execute("UPDATE chat_action_drafts SET status='cancelled' WHERE session_id=%s AND user_id <=> %s AND status='draft'",(session_id,g.user['id'] if g.user else None))
             cur.execute('INSERT INTO chat_action_drafts(session_id,user_id,tool_name,arguments_json) VALUES(%s,%s,%s,%s)',(session_id,g.user['id'] if g.user else None,name,json.dumps(data,ensure_ascii=False,default=str)))
             action_id=cur.lastrowid
         public={k:v for k,v in data.items() if not k.startswith('_')}
