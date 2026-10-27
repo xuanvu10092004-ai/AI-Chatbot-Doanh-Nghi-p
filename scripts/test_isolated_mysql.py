@@ -88,7 +88,7 @@ def main():
             subprocess.run([sys.executable, '-X', 'utf8', 'init_db.py', '--reset'],
                            cwd=workspace, env=private_env, check=True)
             subprocess.run([sys.executable, '-X', 'utf8', '-c',
-                            'from excel_sync import export_synced_workbook; export_synced_workbook()'],
+                            'from excel_sync import export_synced_workbook,SOURCE_WORKBOOK; import shutil; shutil.copyfile(export_synced_workbook(), SOURCE_WORKBOOK)'],
                            cwd=workspace, env=private_env, check=True)
         # Only additive extensions for this feature, on the private copy.
         result = subprocess.run([sys.executable, '-X', 'utf8', '-m', 'pytest', '-q',

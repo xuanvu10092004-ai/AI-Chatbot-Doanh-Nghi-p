@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from datetime import date, datetime  # Tính tuổi khách và ghi thời điểm đồng bộ.
 from pathlib import Path  # Xác định workbook nguồn, workbook xuất và file tạm.
-import shutil  # Sao chép workbook xuất về nguồn sau khi hoàn tất.
+from contextlib import nullcontext
 from tempfile import NamedTemporaryFile  # Lưu workbook tạm rồi thay thế nguyên tử.
 from typing import Any  # Mô tả tuple dữ liệu linh hoạt từ MySQL.
 
@@ -27,16 +27,16 @@ def _age(value: Any) -> int | None:
     return today.year - born.year - ((today.month, today.day) < (born.month, born.day))
 
 
-def _rows() -> dict[str, list[tuple[Any, ...]]]:
+def _rows(db_cursor=None) -> dict[str, list[tuple[Any, ...]]]:
     # Tạo ba sheet khách hàng, sản phẩm và tồn kho từ dữ liệu hiện tại trong MySQL.
-    with cursor() as cur:
+    with (cursor() if db_cursor is None else nullcontext(db_cursor)) as cur:
         cur.execute("""
             SELECT u.id AS customer_id, COALESCE(cp.customer_code, CONCAT('DB', LPAD(u.id, 4, '0'))) AS customer_code, u.full_name, cp.gender,
                    cp.birth_date, u.phone, u.email, cp.province, cp.district,
                    cp.address, cp.occupation, cp.lead_source, b.code AS branch_code,
                    p.model_name, cp.payment_preference, cp.registered_at, cp.status
             FROM users u
-            JOIN customer_profiles cp ON cp.user_id = u.id
+            JOIN v_active_customer_profiles cp ON cp.user_id = u.id
             LEFT JOIN branches b ON b.id = u.home_branch_id
             LEFT JOIN products p ON p.id = cp.interested_product_id
             WHERE u.user_type = 'customer'
@@ -120,12 +120,13 @@ def _rows() -> dict[str, list[tuple[Any, ...]]]:
     return {"Khach_hang": customer_rows, "San_pham": product_rows, "Ton_kho": inventory_rows}
 
 
-def export_synced_workbook(path: Path = SYNCED_WORKBOOK) -> Path:
+def _write_workbook(data,path):
     # Giữ header/style nguồn, ghi dữ liệu mới vào file tạm rồi thay đích.
     from openpyxl import Workbook, load_workbook  # Đọc hoặc tạo workbook Excel.
     from openpyxl.styles import Font  # Định dạng header trong workbook Excel.
 
-    data = _rows()
+    path=Path(path)
+    if path.resolve()==SOURCE_WORKBOOK.resolve():raise ValueError('Không ghi đè workbook nguồn.')
     book = load_workbook(SOURCE_WORKBOOK) if SOURCE_WORKBOOK.exists() else Workbook()
     fallback_headers = {
         "Khach_hang": ["Mã KH", "Họ và tên", "Giới tính", "Ngày sinh", "Tuổi", "Số điện thoại", "Email", "Tỉnh/Thành phố", "Quận/Huyện", "Địa chỉ", "Nghề nghiệp", "Nguồn khách", "Chi nhánh phụ trách", "Mẫu xe quan tâm", "Hình thức thanh toán", "Ngày đăng ký", "Trạng thái", "Mã SP đã mua", "Giá trị mua (VNĐ)"],
@@ -141,6 +142,9 @@ def export_synced_workbook(path: Path = SYNCED_WORKBOOK) -> Path:
             cell.font = Font(bold=True)
         for row in rows:
             sheet.append(list(row))
+            for cell in sheet[sheet.max_row]:
+                if isinstance(cell.value,str):cell.data_type='s'
+                elif isinstance(cell.value,(date,datetime)):cell.number_format='dd/mm/yyyy'
         sheet.freeze_panes = "A2"
         sheet.auto_filter.ref = sheet.dimensions
         for table in sheet.tables.values():
@@ -156,24 +160,32 @@ def export_synced_workbook(path: Path = SYNCED_WORKBOOK) -> Path:
         temp_path = Path(temp.name)
     try:
         book.save(temp_path)
+        book.close()
+        with __import__('zipfile').ZipFile(temp_path) as archive:
+            if archive.testzip() is not None:raise ValueError('Workbook xuất bị lỗi ZIP.')
+        check=load_workbook(temp_path,read_only=True,data_only=True)
+        try:
+            for name,rows in data.items():
+                if name not in check.sheetnames or check[name].max_row!=len(rows)+1:
+                    raise ValueError('Workbook xuất thiếu dữ liệu: '+name)
+        finally:check.close()
         temp_path.replace(path)
-        if path.resolve() != SOURCE_WORKBOOK.resolve():
-            try:
-                shutil.copy2(path, SOURCE_WORKBOOK)
-            except PermissionError as exc:
-                raise ExcelSourceLocked(str(SOURCE_WORKBOOK)) from exc
     finally:
         temp_path.unlink(missing_ok=True)
     return path
 
 
+def export_synced_workbook(path=None) -> Path:
+    from excel_sync_worker import process_sync
+    target=Path(path) if path is not None else SYNCED_WORKBOOK
+    result=process_sync(force=True,path=target)
+    if result['status']!='completed':raise RuntimeError(result.get('error','Đang có tiến trình xuất Excel khác.'))
+    return target
+
+
 def sync_after_commit() -> dict[str, Any]:
-    from db import defer_until_commit
-    if defer_until_commit(sync_after_commit):
-        return {'status':'scheduled'}
-    try:
-        return {"status": "completed", "path": str(export_synced_workbook())}
-    except ExcelSourceLocked:
-        return {"status": "source_locked", "error": "Excel dang mo file nguon; hay dong Excel roi tai lai trang hoac luu lai du lieu."}
-    except Exception as exc:
-        return {"status": "failed", "error": type(exc).__name__}
+    # Triggers already enqueue in the data transaction. The worker, not a web
+    # request, exports after commit; failure never changes a successful DB result.
+    from excel_sync_worker import sync_status
+    try:return sync_status()
+    except Exception:return {'status':'pending','error':'Chưa đọc được trạng thái worker; dữ liệu đã lưu không bị mất.'}
