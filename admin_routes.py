@@ -79,7 +79,8 @@ def register_admin(app):
             if not isinstance(payload,dict):return jsonify(error='invalid-body'),400
             try:target=mutate(entity,target_id,payload,'delete' if request.method=='DELETE' else 'save')
             except (IntegrityError,TypeError,KeyError,ValueError) as error:
-                if isinstance(error,AdminRejected):raise
+                from customer_service import CustomerError
+                if isinstance(error,(AdminRejected,CustomerError)):raise
                 return jsonify(error='invalid-change',message='Dữ liệu trùng hoặc không hợp lệ.'),400
             return jsonify(id=target)
         if kind!='permission':app.add_url_rule('/api/admin/'+plural,endpoint='create_'+plural,view_func=require_permission(permission)(save),methods=['POST'])

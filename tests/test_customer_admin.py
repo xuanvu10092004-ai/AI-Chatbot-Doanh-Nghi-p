@@ -173,3 +173,21 @@ def test_export_failure_does_not_report_committed_edit_as_failed(auth_client,tar
     assert auth_client.get(f'/api/customers/{target}').json['customer']['full_name']=='Đã commit dù Excel khóa'
     status=auth_client.get('/api/excel-sync').json
     assert status['status']=='failed' and status['pending']>0 and status['next_retry_at']
+
+
+def test_generic_user_management_cannot_mask_customer_denial(auth_client,target):
+    with cursor() as cur:
+        cur.execute("SELECT id FROM permissions WHERE code='user:manage'");permission=cur.fetchone()['id']
+        cur.execute('SELECT data_scope FROM role_permissions WHERE role_id=3 AND permission_id=%s',(permission,));prior=cur.fetchone()
+        cur.execute("INSERT INTO role_permissions(role_id,permission_id,data_scope) VALUES(3,%s,'all') ON DUPLICATE KEY UPDATE data_scope='all'",(permission,))
+    try:
+        auth_client.login(3)
+        assert auth_client.get('/api/admin/users').status_code==200
+        result=auth_client.put(f'/api/admin/users/{target}',json={'full_name':'Không được sửa qua quản trị user'})
+        assert result.status_code==403,result.json
+        with cursor() as cur:
+            cur.execute('SELECT full_name FROM users WHERE id=%s',(target,));assert cur.fetchone()['full_name']=='Khách kiểm thử'
+    finally:
+        with cursor() as cur:
+            if prior:cur.execute('UPDATE role_permissions SET data_scope=%s WHERE role_id=3 AND permission_id=%s',(prior['data_scope'],permission))
+            else:cur.execute('DELETE FROM role_permissions WHERE role_id=3 AND permission_id=%s',(permission,))
