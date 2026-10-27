@@ -8,6 +8,7 @@ from tempfile import NamedTemporaryFile  # Lưu workbook tạm rồi thay thế 
 from typing import Any  # Mô tả tuple dữ liệu linh hoạt từ MySQL.
 from zipfile import ZipFile
 from zoneinfo import ZoneInfo
+import time
 
 from db import cursor  # Mở cursor hoặc connection MySQL.
 
@@ -171,7 +172,15 @@ def _write_workbook(data,path):
                 if name not in check.sheetnames or check[name].max_row!=len(rows)+1:
                     raise ValueError('Workbook xuất thiếu dữ liệu: '+name)
         finally:check.close()
-        temp_path.replace(path)
+        # Windows readers briefly deny rename while opening the ZIP. Retry the
+        # atomic replace; a persistent Excel lock still reaches durable retry.
+        for attempt in range(6):
+            try:
+                temp_path.replace(path)
+                break
+            except PermissionError:
+                if attempt==5:raise
+                time.sleep(.02*2**attempt)
     finally:
         temp_path.unlink(missing_ok=True)
     return path
