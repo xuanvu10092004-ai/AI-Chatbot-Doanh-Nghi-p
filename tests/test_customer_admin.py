@@ -191,3 +191,15 @@ def test_generic_user_management_cannot_mask_customer_denial(auth_client,target)
         with cursor() as cur:
             if prior:cur.execute('UPDATE role_permissions SET data_scope=%s WHERE role_id=3 AND permission_id=%s',(prior['data_scope'],permission))
             else:cur.execute('DELETE FROM role_permissions WHERE role_id=3 AND permission_id=%s',(permission,))
+
+
+def test_super_admin_account_form_preserves_unchanged_customer_fields(auth_client,target):
+    auth_client.login(1)
+    record=auth_client.get(f'/api/customers/{target}').json['customer']
+    # The existing account form always sends its readonly email and profile values.
+    response=auth_client.put(f'/api/admin/users/{target}',json={
+        'full_name':record['full_name'],'email':record['email'],
+        'home_branch_id':record['home_branch_id'],'is_active':True})
+    assert response.status_code==200,response.json
+    after=auth_client.get(f'/api/customers/{target}').json['customer']
+    assert all(after[k]==record[k] for k in ('full_name','email','phone','home_branch_id','address'))

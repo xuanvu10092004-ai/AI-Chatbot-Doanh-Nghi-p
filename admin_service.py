@@ -41,7 +41,7 @@ def mutate(kind,target_id,data,operation='save'):
     actor=g.user['id'];had_manage='rbac:manage' in permissions()
     if kind in {'user','assignment'} and target_id:
         with cursor() as cur:
-            cur.execute('SELECT user_type,full_name,home_branch_id FROM users WHERE id=%s',(target_id,));person=cur.fetchone()
+            cur.execute('SELECT user_type,full_name,email,phone,home_branch_id FROM users WHERE id=%s',(target_id,));person=cur.fetchone()
             if person and person['user_type']=='customer':
                 from customer_service import require_customer_admin,CustomerError
                 require_customer_admin()
