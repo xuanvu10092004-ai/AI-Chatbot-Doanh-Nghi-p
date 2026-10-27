@@ -1,0 +1,4 @@
+- [x] M1: semantic resolver và dialogue state; test nhiều lượt và tham số không được tự bịa.
+- [x] M2: capability matrix, entity lookup và nối toàn bộ backend đã có; test scope/version/replay.
+- [x] M3: điều phối có điều kiện và hybrid RAG; test rollback, dữ liệu số và nguồn.
+- [x] M4: UI additive, full regression trên DB riêng (339 passed, 5 skipped), kết quả và README.

@@ -5,6 +5,7 @@ import re  # Tách từ khóa tìm kiếm và nhận diện cụm tiếng Việt
 
 from access_control import authorize_intent, detect_intent  # Dùng session, intent và quyền của chatbot.
 from db import cursor  # Mở cursor hoặc connection MySQL.
+from question_language import normalize
 
 MAX_DOCS = 3
 
@@ -25,7 +26,7 @@ def extract_keywords(question: str) -> list[str]:
 
 
 # Tạo câu SQL tìm trong title/content nhưng vẫn nối với v_user_kb_access để không lộ tài liệu ngoài quyền.
-def _search_query(question: str, user_id: int | None, use_like: bool = False) -> tuple[str, tuple[object, ...]]:
+def _search_query(question: str, user_id: int | None, use_like: bool = False, limit: int = MAX_DOCS) -> tuple[str, tuple[object, ...]]:
     # Guest chỉ tìm trong tài liệu public; user đăng nhập phải khớp view v_user_kb_access.
     keywords = " ".join(extract_keywords(question))
     if use_like:
@@ -39,7 +40,7 @@ def _search_query(question: str, user_id: int | None, use_like: bool = False) ->
         else:
             query = 'SELECT DISTINCT d.id, d.title, d.content FROM kb_documents d JOIN v_user_kb_access a ON a.doc_id = d.id WHERE a.user_id = %s'
             params = (user_id, *params)
-        return query + ' AND (' + condition + ') ORDER BY d.id LIMIT %s', (*params, MAX_DOCS)
+        return query + ' AND (' + condition + ') ORDER BY d.id LIMIT %s', (*params, limit)
     if user_id is None:
         return (
             """
@@ -52,7 +53,7 @@ def _search_query(question: str, user_id: int | None, use_like: bool = False) ->
             ORDER BY MATCH(d.title, d.content) AGAINST (%s IN NATURAL LANGUAGE MODE) DESC, d.id
             LIMIT %s
             """,
-            (keywords, keywords, MAX_DOCS),
+            (keywords, keywords, limit),
         )
     return (
         """
@@ -64,7 +65,7 @@ def _search_query(question: str, user_id: int | None, use_like: bool = False) ->
         ORDER BY MATCH(d.title, d.content) AGAINST (%s IN NATURAL LANGUAGE MODE) DESC, d.id
         LIMIT %s
         """,
-        (user_id, keywords, keywords, MAX_DOCS),
+        (user_id, keywords, keywords, limit),
     )
 
 
@@ -81,9 +82,13 @@ def search_documents(question: str, user_id: int | None = None, session_id: int 
     with cursor("app") as db_cursor:
         db_cursor.execute('SELECT VERSION() AS version')
         mariadb = 'MariaDB' in db_cursor.fetchone()['version']
-        query, params = _search_query(question, user_id, use_like=mariadb)
-        db_cursor.execute(query, params)
-        documents = db_cursor.fetchall()
+        pools=[]
+        # Both branches apply access filtering in SQL, before content is loaded.
+        for use_like in ([True] if mariadb else [False,True]):
+            query, params = _search_query(question, user_id, use_like=use_like,limit=30)
+            db_cursor.execute(query, params)
+            pools.append(db_cursor.fetchall())
+        documents=rank_documents(question,pools)
 
     if not documents:
         return "Không tìm thấy bằng chứng trong tài liệu được phép truy cập."
@@ -94,3 +99,18 @@ def search_documents(question: str, user_id: int | None = None, session_id: int 
             f"[Nguồn id={document['id']} | tiêu đề={document['title']}]\n{document['content']}"
         )
     return "\n\n".join(context_parts)
+
+
+def rank_documents(question, pools):
+    """Fuse fulltext and lexical candidates; promote title/phrase matches."""
+    keywords={normalize(word) for word in extract_keywords(question)}
+    phrase=' '.join(normalize(word) for word in extract_keywords(question))
+    scores={};documents={}
+    for pool in pools:
+        for position,document in enumerate(pool):
+            identifier=document['id'];documents[identifier]=document
+            title=normalize(document['title']);content=normalize(document['content'])
+            lexical=sum(3*(word in title)+(word in content) for word in keywords)
+            phrase_score=4 if phrase and phrase in title else 0
+            scores[identifier]=scores.get(identifier,0)+1/(60+position)+lexical+phrase_score
+    return [documents[key] for key in sorted(scores,key=lambda key:(-scores[key],key))[:MAX_DOCS]]

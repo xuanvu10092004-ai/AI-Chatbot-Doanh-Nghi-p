@@ -15,6 +15,7 @@ form.addEventListener('submit',async event=>{
     const data=await response.json();
     // Dựng đậm/nghiêng bằng DOM an toàn, không parse HTML của LLM.
     ChatFormatting.render(bot,data.summary||data.answer||data.message||'Chưa xử lý được yêu cầu.');
+    renderConversationDetails(bot,data,input,form);
     if(data.action_draft){
       const draft=data.action_draft,preview=document.createElement('pre');preview.className='extracted-text';
       const names={branch_id:'ID chi nhánh',supplier:'Nhà cung cấp',reference_code:'Chứng từ',items:'Các dòng hàng',id:'Mã bản ghi',full_name:'Họ tên',phone:'SĐT',scheduled_at:'Ngày giờ',kind:'Loại lịch',status:'Trạng thái',list_price:'Giá niêm yết',model_name:'Mẫu xe',variant_name:'Phiên bản',model_year:'Năm đời',roles:'Vai trò',permissions:'Quyền'};
@@ -61,3 +62,28 @@ form.addEventListener('submit',async event=>{
 document.querySelectorAll('[data-question]').forEach(button=>button.addEventListener('click',()=>{document.getElementById('questionInput').value=button.dataset.question;document.getElementById('questionInput').focus();}));
 document.getElementById('chatCustomerFile')?.addEventListener('change',event=>{const file=event.target.files[0];document.getElementById('chatAttachmentName').textContent=file?'Đã chọn '+file.name+' — bấm Gửi để đọc và xem trước.':'';if(file)document.getElementById('questionInput').value='Nhập danh sách khách từ file '+file.name;});
 fetch('/api/chat/tools').then(r=>r.json()).then(data=>{const target=document.getElementById('chatToolCatalog');target.replaceChildren();for(const tool of data.tools||[]){const line=document.createElement('p');line.textContent=tool.description+(tool.requires_confirmation?' · Cần xác nhận':'');target.append(line);}}).catch(()=>{document.getElementById('chatToolCatalog').textContent='Nhập “Trợ giúp” để xem công cụ theo quyền hiện tại.';});
+
+function renderConversationDetails(target,data,input,chatForm){
+  if(data.clarification?.options?.length){
+    const choices=document.createElement('div');choices.className='actions chat-entity-choices';choices.setAttribute('role','group');choices.setAttribute('aria-label','Chọn đối tượng cần thao tác');
+    for(const option of data.clarification.options){const button=document.createElement('button');button.type='button';button.className='secondary';button.textContent='#'+option.id+' · '+option.label;
+      button.onclick=()=>{input.value='Chọn '+option.id;chatForm.requestSubmit();for(const node of choices.querySelectorAll('button'))node.disabled=true;};choices.append(button);}
+    target.append(choices);
+  }
+  if(data.workflow){const note=document.createElement('p');note.className='field-help';note.textContent='Quy trình còn '+data.workflow.remaining+' bước. Mỗi thao tác ghi cần xác nhận riêng.';target.append(note);}
+  for(const [index,step] of (data.steps||[]).entries()){
+    const details=document.createElement('details'),title=document.createElement('summary');title.textContent='Kết quả bước '+(index+1);details.append(title);
+    const text=document.createElement('div');ChatFormatting.render(text,step.answer||'Đã xử lý.');details.append(text);
+    if(step.rows?.length){const table=document.createElement('pre');table.className='extracted-text';table.textContent=step.rows.map(row=>Object.entries(row).map(([k,v])=>chatFieldLabel(k)+': '+chatFieldValue(k,v)).join('\n')).join('\n\n');details.append(table);}target.append(details);
+  }
+  for(const link of data.links||[]){if(typeof link.url!=='string'||!/^\/(?!\/)/.test(link.url)||link.url.includes('\\'))continue;const node=document.createElement('a');node.href=link.url;node.textContent=link.label;target.append(node);}
+  if(data.action_draft?.condition){const note=document.createElement('p');note.className='field-help';const c=data.action_draft.condition;note.textContent='Chỉ thực hiện nếu tồn kho SP'+c.variant_id+' tại '+c.branch_code+' '+({duoi:'dưới',tren:'trên',bang:'bằng'}[c.operator]||'')+' '+c.threshold+' xe. Điều kiện được kiểm tra lại khi xác nhận.';target.append(note);}
+}
+
+function chatFieldLabel(key){return ({total_stock:'Tổng tồn kho',empty_rows:'Phiên bản hết hàng',orders:'Số đơn',net_revenue:'Doanh thu thuần',customers:'Số khách',label:'Nhóm',value:'Giá trị',model_name:'Mẫu xe',variant_name:'Phiên bản',branch_code:'Chi nhánh',quantity:'Số xe',list_price:'Giá niêm yết',scheduled_at:'Thời gian hẹn',status:'Trạng thái',id:'Mã bản ghi',full_name:'Họ tên',phone:'Điện thoại',email:'Email'})[key]||key;}
+function chatFieldValue(key,value){
+  if(value===null||value===undefined)return 'Chưa có dữ liệu';
+  if(/price|amount|revenue|margin/.test(key)&&!isNaN(Number(value)))return new Intl.NumberFormat('vi-VN',{style:'currency',currency:'VND'}).format(Number(value));
+  if(/(?:_at|_date)$/.test(key)){const date=new Date(value);if(!isNaN(date.getTime()))return date.toLocaleString('vi-VN',{dateStyle:'short',timeStyle:'short',timeZone:'Asia/Ho_Chi_Minh'});}
+  return typeof value==='object'?JSON.stringify(value,null,2):String(value);
+}

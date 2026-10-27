@@ -41,6 +41,14 @@ TOOLS={
  'document_publish':('Đưa tài liệu đã hiệu đính vào kho tri thức','document:manage',True,True,'id version'),
  'orders_list':('Danh sách đơn hàng','order:read',True,False,''),
  'invoice_export':('Xuất chứng từ PDF của đơn hàng','invoice:export',True,False,'id'),
+ 'product_search':('Tra cứu sản phẩm và giá niêm yết','kb:public:read',False,False,'query'),
+ 'inventory_search':('Tra cứu tồn kho theo quyền chi nhánh','inventory:read',True,False,'query'),
+ 'customer_search':('Tra cứu hồ sơ khách hàng','customer:read',True,False,'query'),
+ 'customer_input':('Thêm/cập nhật khách hàng qua bản nháp nhập liệu','customer:write',True,True,''),
+ 'customer_imports':('Lịch sử nhập tài liệu khách hàng','customer:read',True,False,''),
+ 'document_detail':('Đọc kết quả trích xuất và hiệu đính tài liệu','document:manage',True,False,'id'),
+ 'document_process':('Trích xuất lại tài liệu đã tải lên','document:manage',True,True,'id version'),
+ 'document_upload':('Tải tài liệu lên để trích xuất và kiểm tra','document:manage',True,False,''),
 }
 REQUIRED={
  'stock_receive':('branch_id','supplier','items'),
@@ -52,6 +60,7 @@ REQUIRED={
  'role_delete':('id',),'permission_save':('id','description'),
  'assignment_save':('id','roles'),'assignment_delete':('id','role_id'),
  'document_review':('id','title','content'),'document_publish':('id',),'invoice_export':('id',),
+ 'document_detail':('id',),'document_process':('id',),
 }
 ALIASES={'chi nhanh':'branch_code','nha cung cap':'supplier','chung tu':'reference_code','ma chung tu':'reference_code',
  'ma sp':'variant_id','so luong':'quantity','ho ten':'full_name','ho va ten':'full_name','sdt':'phone','dien thoai':'phone',
@@ -68,7 +77,8 @@ def staff():return bool(g.user and g.user.get('user_type')=='staff')
 def available_tools():
     grants=permissions()
     return {k:v for k,v in TOOLS.items() if v[1] in grants and (not v[2] or staff())
-            and (v[1]!='rbac:manage' or grants[v[1]]['scope']=='all')}
+            and (v[1]!='rbac:manage' or grants[v[1]]['scope']=='all')
+            and (k!='invoice_export' or 'order:read' in grants)}
 
 
 def allowed(name,session_id):
@@ -91,6 +101,21 @@ def endpoint(name,**kwargs):
 
 
 def run(name,data,session_id):
+    if name in {'product_search','inventory_search','customer_search'}:
+        from sql_service import answer_sql_question
+        from answer_renderer import QueryEvidence
+        prefix={'product_search':'Giá xe ', 'inventory_search':'Tồn kho ', 'customer_search':'Khách hàng '}
+        evidence=answer_sql_question(prefix[name]+data.get('query',''),g.user['id'] if g.user else None,session_id)
+        return {'rows':evidence.rows if isinstance(evidence,QueryEvidence) else [],'message':str(evidence)}
+    if name=='customer_imports':return endpoint('customer_import_history')
+    if name=='document_upload':return {'message':'Chọn file trên trang tài liệu, xem metadata rồi bấm tải lên để xác nhận. Sau đó có thể hiệu đính và xuất bản qua chat.','links':[{'url':'/documents','label':'Mở trang tài liệu'}]}
+    if name in {'document_detail','document_process'}:
+        from document_service import get_document,process_document,_load,DocumentError
+        if name=='document_detail':return {'rows':[get_document(data['id'])]}
+        with cursor() as cur:
+            row=_load(cur,data['id'],True)
+            if row['version']!=data['version']:raise DocumentError('Tài liệu đã thay đổi, hãy xem lại.',409)
+        return process_document(data['id'])
     if name=='stock_receive':
         from stock_service import receive_stock  # Ghi phiếu nhập và cộng số lượng tồn.
         return receive_stock(data)
@@ -121,7 +146,7 @@ def run(name,data,session_id):
     if name=='documents_list':
         from document_service import list_documents  # Lấy danh sách tài liệu được phép quản lý.
         return list_documents()
-    if name.startswith('document_'):
+    if name in {'document_review','document_publish'}:
         from document_service import save_review,publish_document  # Hiệu đính hoặc xuất bản bản đã kiểm tra.
         return (save_review if name=='document_review' else publish_document)(data['id'],{**data,'confirmed':True})
     from admin_service import mutate  # Lưu thay đổi user, role và permission qua service RBAC.
@@ -238,13 +263,13 @@ def prepare(name,raw):
         row=next((r for r in endpoint('catalog_list')['rows'] if r['id']==data['id']),None)
         if not row:raise OperationRejected('Không tìm thấy xe trong phạm vi được cấp.',404)
         data={**row,**data,'version':row['version']};data.pop('product_id',None)
-    if name in {'booking_update','appointment_update'}:
+    if name in {'booking_update','appointment_update'} and data.get('id'):
         rows=run('booking_list' if name=='booking_update' else 'appointment_list',{},None)['rows']
         row=next((r for r in rows if r['id']==data.get('id')),None)
         if not row:raise OperationRejected('Không tìm thấy lịch trong phạm vi được cấp.',404)
         data['version']=row['version']
         if data.get('status')!='cancelled' and 'booking:manage' not in permissions():raise OperationRejected(DENIED,403)
-    if name.startswith('document_') and name!='documents_list' and data.get('id'):
+    if name in {'document_review','document_publish','document_process'} and data.get('id'):
         from document_service import get_document  # Đọc version trước khi tạo lệnh hiệu đính.
         row=get_document(data['id']);data['version']=row['version']
     if name=='user_save' and data.get('id'):
@@ -277,8 +302,9 @@ def prepare(name,raw):
 
 
 def reply_result(name,result):
-    return {'type':'tool','answer':TOOLS[name][0]+': đã thực hiện.'+(' '+result.get('message','') if isinstance(result,dict) else ''),
+    return {'type':'tool','tool':name,'answer':TOOLS[name][0]+(': đã thực hiện.' if TOOLS[name][3] else '.')+(' '+result.get('message','') if isinstance(result,dict) else ''),
             'rows':result.get('rows',[]) if isinstance(result,dict) else [],'result':result,
+            'links':result.get('links',[]) if isinstance(result,dict) else [],
             'download_url':result.get('download_url') if isinstance(result,dict) else None}
 
 
@@ -296,6 +322,10 @@ def confirm_action(action_id,session_id,confirmation,secret=None):
         if row['expired'] or row['status']!='draft':raise OperationRejected('Lệnh đã hết hạn hoặc bị hủy. Hãy nhập lại.',409)
         if confirmation and confirmation!=(row['id'],row['version']):raise OperationRejected('Bản xem trước đã thay đổi.',409)
         data=json.loads(row['arguments_json'])
+        if '_condition' in data:
+            from chat_workflows import check_condition
+            matched,_=check_condition(data.pop('_condition'),lock=True)
+            if not matched:raise OperationRejected('Điều kiện đã thay đổi, không thực hiện lệnh. Hãy kiểm tra lại.',409)
         if '_rbac_version' in data:
             with cursor() as cur:cur.execute('SELECT version FROM rbac_meta WHERE id=1 FOR UPDATE');version=cur.fetchone()['version']
             if data.pop('_rbac_version')!=version:raise OperationRejected('Quyền hoặc tài khoản đã thay đổi. Hãy tạo lại lệnh để xem trước.',409)
@@ -310,6 +340,62 @@ def confirm_action(action_id,session_id,confirmation,secret=None):
 
 
 def handle_tool_chat(question,session_id,confirmation=None,secret=None):
+    from dialogue_state import dialogue_turn
+    with dialogue_turn(session_id,g.user['id'] if g.user else None) as state:
+        q=normalize(question)
+        if re.search(r"\b(?:password|mat khau)[\"']?\s*[:=]",q):
+            return {'type':'tool','answer':'Không nhập mật khẩu vào câu lệnh. Hãy nhập trong ô bảo mật của bản xem trước.','rows':[]}
+        if q in {'xac nhan','dong y','dong y thuc hien','huy','bo qua'} and state.get('action_id'):
+            question=('Hủy lệnh ' if q in {'huy','bo qua'} else 'Xác nhận lệnh ')+str(state['action_id'])
+            confirmation=confirmation or (state['action_id'],state['action_version'])
+        from chat_workflows import start_workflow,advance_workflow
+        execute=lambda text:_handle_tool_chat(text,session_id,None,None,state)
+        try:
+            control=bool(re.fullmatch(r'(?:xac nhan|huy) lenh\s*#?\d+',normalize(question)))
+            if not control and start_workflow(question,state,session_id):
+                result=advance_workflow(state,session_id,execute)
+            else:
+                result=_handle_tool_chat(question,session_id,confirmation,secret,state)
+                workflow=state.get('workflow')
+                action_match=re.fullmatch(r'xac nhan lenh\s*#?(\d+)',normalize(question))
+                if workflow and action_match and result and result.get('result') and workflow.get('waiting_action')==int(action_match[1]):
+                    workflow['completed'].append(result)
+                    workflow['remaining'].pop(0);workflow.pop('waiting_action',None)
+                    state.pop('active_tool',None);state.pop('arguments',None)
+                    next_reply=advance_workflow(state,session_id,execute)
+                    next_reply.setdefault('result',result['result'])
+                    if next_reply is not result:next_reply['answer']=result['answer']+' '+next_reply['answer']
+                    result=next_reply
+                elif workflow and normalize(question).startswith('huy lenh'):
+                    state.pop('workflow',None)
+                elif workflow and result and result.get('action_draft'):
+                    step=workflow['remaining'][0]
+                    if state.get('active_tool')==step['tool']:
+                        if step.get('condition'):
+                            from chat_workflows import attach_condition
+                            attach_condition(result['action_draft'],step['condition'])
+                        workflow['waiting_action']=result['action_draft']['id']
+                    else:state.pop('workflow',None)
+        except OperationRejected as error:
+            denied=error.status in {403,404}
+            if denied:
+                with cursor() as cur:cur.execute("INSERT INTO chatbot_audit_log(session_id,user_id,decision,reason) VALUES(%s,%s,'denied',%s)",(session_id,g.user['id'] if g.user else None,'Quy trình hoặc điều kiện ngoài quyền được cấp'))
+            result={'type':'clarification','answer':DENIED if denied else str(error),'access_denied':denied,'rows':[]}
+        if result and result.get('action_draft'):
+            draft=result['action_draft'];state.update(action_id=draft['id'],action_version=draft['version'])
+        if result and result.get('tool') in {'booking_list','appointment_list','orders_list'}:
+            rows=result.get('rows',[])
+            entity={'booking_list':'booking_id','appointment_list':'appointment_id','orders_list':'order_id'}[result['tool']]
+            state.setdefault('entities',{}).pop(entity,None)
+            if len(rows)==1:state['entities'][entity]=rows[0]['id']
+        if result and result.get('result') and not result.get('action_draft') and result.get('type')!='clarification':
+            state.pop('active_tool',None);state.pop('arguments',None)
+        if normalize(question).startswith('huy lenh'):
+            for key in ('active_tool','arguments','pending_fields','selection','action_id','action_version'):state.pop(key,None)
+        return result
+
+
+def _handle_tool_chat(question,session_id,confirmation=None,secret=None,state=None):
     q=normalize(question)
     if q in {'tro giup','cac chuc nang','ban lam duoc gi','huong dan lenh'}:
         items=[v[0] for v in available_tools().values()]
@@ -335,25 +421,44 @@ def handle_tool_chat(question,session_id,confirmation=None,secret=None):
         if cancel:
             with cursor() as cur:cur.execute("UPDATE chat_action_drafts SET status='cancelled' WHERE id=%s AND session_id=%s AND user_id <=> %s AND status='draft'",(int(cancel.group(1)),session_id,g.user['id'] if g.user else None))
             return {'type':'tool','answer':'Đã xử lý hủy lệnh trong phiên hiện tại.','rows':[]}
-        name=infer(question)
+        from intent_resolver import resolve
+        resolution=resolve(question,state,available_tools())
+        if resolution.clarification:
+            return {'type':'clarification','answer':resolution.clarification,'rows':[],
+                    'error':'ai-unavailable' if resolution.unavailable else None}
+        name=resolution.tool
         if not name:return None
         ok,audit_id=allowed(name,session_id)
         if not ok:return {'type':'tool','answer':DENIED,'access_denied':True,'rows':[]}
+        if name=='customer_input':
+            from customer_chat import handle_customer_chat
+            return handle_customer_chat('Thêm khách hàng: '+question,session_id)
         if re.search(r"\b(?:password|mat khau)[\"']?\s*[:=]",q):
             return {'type':'tool','answer':'Không nhập mật khẩu vào câu lệnh. Hãy tạo lệnh tài khoản trước, sau đó nhập mật khẩu trong ô bảo mật ở bước xác nhận.','rows':[]}
-        raw=parse_args(question,name)
+        raw=resolution.arguments
+        if name in {'product_search','inventory_search','customer_search'}:raw['query']=question
+        state.update(active_tool=name,arguments=raw)
+        from entity_lookup import resolve_references
+        raw,clarification=resolve_references(name,raw,state,session_id,question)
+        if clarification:return clarification
+        state['arguments']=raw
         try:data=prepare(name,raw)
         except OperationRejected as error:
-            if error.status!=400 or not os.getenv('GROQ_API_KEY'):raise
-            guessed=model_args(question,name)
-            if not guessed:raise error
-            data=prepare(name,guessed)
+            if error.status!=400:raise
+            state['pending_fields']=str(error).removeprefix('Cần bổ sung: ').split('.')[0].split(', ') if str(error).startswith('Cần bổ sung: ') else []
+            return {'type':'clarification','answer':str(error),'rows':[],
+                    'clarification':{'tool':name,'pending':True}}
+        state.pop('pending_fields',None)
         if name=='stock_receive':
             mentioned={int(m) for m in re.findall(r'\bsp\s*(\d+)\b',q)}
             actual={number(item,'variant_id',1,2**31-1) for item in data['items'] if isinstance(item,dict)}
             if not mentioned<=actual:raise OperationRejected('Bản nhập còn thiếu mã SP bạn đã nêu. Hãy nhập từng cặp “SP014: 3; SP015: 2”.')
-        if not TOOLS[name][3]:return reply_result(name,run(name,data,session_id))
+        if not TOOLS[name][3]:
+            state.pop('active_tool',None);state.pop('arguments',None)
+            return reply_result(name,run(name,data,session_id))
+        # A revision invalidates the previous preview, so stale buttons cannot run it.
         with cursor() as cur:
+            cur.execute("UPDATE chat_action_drafts SET status='cancelled' WHERE session_id=%s AND user_id <=> %s AND status='draft'",(session_id,g.user['id'] if g.user else None))
             cur.execute('INSERT INTO chat_action_drafts(session_id,user_id,tool_name,arguments_json) VALUES(%s,%s,%s,%s)',(session_id,g.user['id'] if g.user else None,name,json.dumps(data,ensure_ascii=False,default=str)))
             action_id=cur.lastrowid
         public={k:v for k,v in data.items() if not k.startswith('_')}

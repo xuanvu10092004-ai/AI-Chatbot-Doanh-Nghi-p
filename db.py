@@ -8,6 +8,7 @@ from threading import Lock  # Bảo vệ thao tác khởi tạo pool dùng chung
 from pathlib import Path  # Tạo đường dẫn tới file .env.
 from contextlib import contextmanager  # Cho phép dùng cursor và transaction với with.
 from contextvars import ContextVar  # Lưu connection transaction riêng cho từng request.
+from uuid import uuid4
 from typing import Any, Iterator  # Mô tả kiểu dữ liệu dùng trong file.
 
 import mysql.connector  # Driver thực hiện kết nối và chạy lệnh MySQL.
@@ -25,6 +26,14 @@ _TEXT_SQL_POOL: MySQLConnectionPool | None = None
 _POOL_LOCK = Lock()
 # Lưu connection transaction đang mở cho các cursor lồng trong cùng request.
 _TRANSACTION = ContextVar('app_transaction',default=None)
+_AFTER_COMMIT = ContextVar('app_after_commit',default=None)
+
+
+def defer_until_commit(callback):
+    callbacks=_AFTER_COMMIT.get()
+    if callbacks is None:return False
+    if callback not in callbacks:callbacks.append(callback)
+    return True
 
 
 # Kiểm tra biến môi trường bắt buộc trước khi dùng nó tạo connection.
@@ -136,10 +145,25 @@ def cursor(role: str = "app", dictionary: bool = True) -> Iterator[Any]:
 def transaction():
     """Một transaction cho công cụ và trạng thái xác nhận; cursor lồng không tự commit."""
     if _TRANSACTION.get() is not None:
-        yield
+        # A dialogue may catch a tool error and commit its clarification/audit.
+        connection=_TRANSACTION.get()
+        savepoint='tool_'+uuid4().hex
+        callbacks=_AFTER_COMMIT.get()
+        callback_count=len(callbacks)
+        with connection.cursor() as cur:cur.execute('SAVEPOINT '+savepoint)
+        try:
+            yield
+        except Exception:
+            with connection.cursor() as cur:cur.execute('ROLLBACK TO SAVEPOINT '+savepoint)
+            del callbacks[callback_count:]
+            raise
+        finally:
+            with connection.cursor() as cur:cur.execute('RELEASE SAVEPOINT '+savepoint)
         return
     connection=get_connection('app')
     token=_TRANSACTION.set(connection)
+    callbacks=[]
+    callback_token=_AFTER_COMMIT.set(callbacks)
     try:
         yield
         connection.commit()
@@ -148,7 +172,9 @@ def transaction():
         raise
     finally:
         _TRANSACTION.reset(token)
+        _AFTER_COMMIT.reset(callback_token)
         connection.close()
+    for callback in callbacks:callback()
 
 
 # Dùng parameter binding cho giá trị động; context manager sẽ lo commit hoặc rollback.

@@ -236,10 +236,12 @@ def main() -> int:
     parser.add_argument("--reset", action="store_true", help="Xóa và tạo lại database honda_chatbot.")
     parser.add_argument("--create-if-missing", action="store_true", help="Tạo/seed chỉ khi database chưa tồn tại.")
     parser.add_argument("--extensions-only", action="store_true", help="Áp dụng extension, giữ nguyên dữ liệu.")
+    parser.add_argument('--extension', choices=[p.name for p in sorted((PROJECT_ROOT/'data/schema/extensions').glob('[0-9][0-9]_*.sql'))],
+                        help='Chỉ chạy một extension được chỉ định; không seed hoặc đổi account.')
     args = parser.parse_args()
 
-    if sum((args.reset, args.create_if_missing, args.extensions_only)) != 1:
-        parser.error("Chọn đúng một chế độ: --create-if-missing, --extensions-only, --reset.")
+    if sum((args.reset, args.create_if_missing, args.extensions_only, bool(args.extension))) != 1:
+        parser.error("Chọn đúng một chế độ: --create-if-missing, --extensions-only, --extension, --reset.")
 
     try:
         config = get_config()
@@ -248,6 +250,14 @@ def main() -> int:
         return 1
     connection = None
     try:
+        if args.extension:
+            connection=connect(config,with_database=True)
+            execute_script(connection,PROJECT_ROOT/'data/schema/extensions'/args.extension)
+            with connection.cursor() as cur:
+                cur.execute('INSERT IGNORE INTO schema_migrations(filename) VALUES(%s)',(args.extension,))
+            connection.commit()
+            print('Applied '+args.extension+' only; no seed or account changes.')
+            return 0
         connection = connect(config, with_database=False)
         with connection.cursor() as cur:
             cur.execute("SELECT COUNT(*) FROM information_schema.SCHEMATA WHERE SCHEMA_NAME = %s", (config['database'],))

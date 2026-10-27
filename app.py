@@ -198,8 +198,10 @@ def chat():
         engine = 'database'
         if denied or no_evidence:
             answer = context
-        elif isinstance(context, QueryEvidence) and os.getenv('GROQ_API_KEY'):
-            answer = context.display
+        elif isinstance(context, QueryEvidence):
+            # Preserve the legacy dev response contract; neither path asks the
+            # language model to rewrite database quantities, prices or dates.
+            answer = str(context) if not os.getenv('GROQ_API_KEY') and os.getenv('APP_ENV')=='dev' else context.display
             engine = context.engine
         elif not os.getenv('GROQ_API_KEY') and os.getenv('APP_ENV') == 'dev':
             answer = context
@@ -212,6 +214,9 @@ def chat():
                 record_message(session_id, 'bot', answer)
                 return jsonify(answer=answer, error='ai-unavailable', session_id=session_id), 503
         answer = normalize_dashes(str(answer))
+        if isinstance(context,QueryEvidence):
+            from dialogue_state import remember_evidence
+            remember_evidence(session_id,user_id,context.rows)
         record_message(session_id, "bot", answer)
         return jsonify({
             "answer": answer,
