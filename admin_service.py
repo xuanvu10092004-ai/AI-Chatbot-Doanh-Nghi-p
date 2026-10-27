@@ -39,6 +39,16 @@ def check_invariants(cur,actor,had_manage):
 def mutate(kind,target_id,data,operation='save'):
     # Chụp người thao tác và trạng thái quyền trước khi khóa metadata RBAC.
     actor=g.user['id'];had_manage='rbac:manage' in permissions()
+    if kind in {'user','assignment'} and target_id:
+        with cursor() as cur:
+            cur.execute('SELECT user_type,full_name,home_branch_id FROM users WHERE id=%s',(target_id,));person=cur.fetchone()
+            if person and person['user_type']=='customer':
+                from customer_service import require_customer_admin,CustomerError
+                require_customer_admin()
+                cur.execute('SELECT deleted_at FROM customer_admin_state WHERE customer_id=%s',(target_id,));state=cur.fetchone()
+                if state and state['deleted_at']:raise CustomerError('Khách hàng đã xóa; hãy khôi phục bằng chức năng Khách hàng.',409)
+                if any(key in data and data[key]!=person.get(key) for key in ('full_name','home_branch_id','email','phone')):
+                    raise CustomerError('Sử dụng chức năng Sửa khách hàng để kiểm tra phiên bản hồ sơ.',409)
     if kind in {'user','assignment'}:
         grant=permissions()['user:manage']
         if grant['scope']!='all':
@@ -82,6 +92,8 @@ def mutate(kind,target_id,data,operation='save'):
                 if before:before['permissions']=old_permissions
                 cur.execute('DELETE FROM role_permissions WHERE role_id=%s',(target_id,))
                 for grant in data['permissions']:
+                    cur.execute('SELECT code FROM permissions WHERE id=%s',(int(grant['permission_id']),));permission=cur.fetchone()
+                    if permission and permission['code']=='customer:admin:manage':raise AdminRejected('Quyền sửa khách chỉ dành cho super_admin.')
                     if grant.get('data_scope') not in {'all','branch','own'}:raise AdminRejected('Phạm vi quyền không hợp lệ.')
                     cur.execute('INSERT INTO role_permissions(role_id,permission_id,data_scope) VALUES(%s,%s,%s)',(target_id,int(grant['permission_id']),grant['data_scope']))
             if operation!='delete':

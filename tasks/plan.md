@@ -1,4 +1,15 @@
-# Trợ lý hội thoại nghiệp vụ
+# Khách hàng chỉ admin sửa/xóa và Excel bền vững
+
+Baseline main c8ac638, workspace sạch. Giữ schema chuẩn, thêm metadata/version và journal bằng extension 17/18. Không reset DB dùng chung hoặc sửa workbook nguồn.
+
+1. Quyền customer:admin:manage + xác minh super_admin; service sửa/xóa mềm/khôi phục; khóa mọi bypass batch/import/chat/admin account. Kiểm tra API, scope, snapshot và rollback.
+2. Journal trigger trong cùng transaction với dữ liệu; worker gom các thay đổi đã commit, snapshot nhất quán, khóa nhiều process, replace nguyên tử, ack đúng tập journal đã thấy và retry bền vững. Kiểm tra direct SQL/rollback/lock/restart/concurrency.
+3. Nối UI Sửa/Xóa/Khôi phục và tool chat vào cùng service; giữ điều hướng/form cũ. Kiểm thử browser và quyền mọi đường ghi.
+4. Chạy focused rồi full regression trên server/workspace riêng, tài liệu worker Windows và kết quả thật. Commit từng phần, không push.
+
+---
+
+# Kế hoạch đã hoàn tất: Trợ lý hội thoại nghiệp vụ
 
 Giữ nguyên UI/API hiện có và các thay đổi đã stage. Không đồng bộ upstream (đang chậm 3 commit), không reset MySQL dùng chung.
 

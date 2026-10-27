@@ -26,7 +26,7 @@ def candidates(tool, key, reference, session_id):
         code = 'booking:create' if tool == 'booking_create' else 'customer:read'
         where, params = scope_filter(code, 'u.home_branch_id', 'u.id')
         with cursor() as cur:
-            cur.execute("SELECT u.id,u.full_name,u.phone FROM users u JOIN customer_profiles cp ON cp.user_id=u.id "
+            cur.execute("SELECT u.id,u.full_name,u.phone FROM users u JOIN v_active_customer_profiles cp ON cp.user_id=u.id "
                         'WHERE ' + where + ' AND (u.full_name LIKE %s OR u.phone=%s OR u.email=%s OR cp.customer_code=%s) '
                         'ORDER BY u.id LIMIT 20', (*params, '%' + reference + '%', reference, reference, reference))
             return [{'id': r['id'], 'label': r['full_name'] + ' · ' + (r['phone'] or '')} for r in cur.fetchall()]

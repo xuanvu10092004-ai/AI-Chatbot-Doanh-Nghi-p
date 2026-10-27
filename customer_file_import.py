@@ -117,7 +117,10 @@ def stage_document(document_id,chat_session_id=None):
                 provided=set(row.pop('_source_columns',row.keys()))
                 canonical,_=normalize_row(row)
                 try:existing=_existing(cur,canonical)
-                except ValueError as error:raise CustomerInputError(str(error)) from None
+                except ValueError as error:
+                    from customer_service import CustomerError
+                    if isinstance(error,CustomerError):raise
+                    raise CustomerInputError(str(error)) from None
                 if existing:
                     for key in FIELDS:
                         if key not in provided and key in existing:row[key]=existing[key] if existing[key] is not None else ''

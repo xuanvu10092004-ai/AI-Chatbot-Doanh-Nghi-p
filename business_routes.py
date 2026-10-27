@@ -12,7 +12,7 @@ def records(kind,low_stock=False):
     page=max(1,int(request.args.get('page',1)));size=max(1,min(100,int(request.args.get('size',20))))
     if kind=='customers':
         where,params=scope_filter('customer:read','u.home_branch_id','u.id')
-        source='users u JOIN customer_profiles cp ON cp.user_id=u.id LEFT JOIN branches b ON b.id=u.home_branch_id'
+        source='users u JOIN v_active_customer_profiles cp ON cp.user_id=u.id LEFT JOIN branches b ON b.id=u.home_branch_id'
         columns='u.id AS customer_id,cp.customer_code,u.full_name,u.email,u.phone,b.code AS branch_code,cp.province,cp.lead_source,cp.registered_at'
         searchable=['u.full_name','u.email','u.phone','cp.customer_code']
         sort_map={'name':'u.full_name','date':'cp.registered_at'}
@@ -52,7 +52,6 @@ def records(kind,low_stock=False):
 def register_business(app):
     for kind,permission in [('customers','customer:read'),('inventory','inventory:read')]:
         def page(dataset=kind):
-            sync_after_commit()
             return render_template('records.html',dataset=dataset)
         def api(dataset=kind):
             try:return jsonify(records(dataset))

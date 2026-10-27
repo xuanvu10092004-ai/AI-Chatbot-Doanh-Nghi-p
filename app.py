@@ -75,6 +75,8 @@ register_sales(app)
 register_operations(app)
 register_stock(app)
 register_chat_actions(app)
+from customer_service import register_customers
+register_customers(app)
 
 @app.after_request
 def security_headers(response):
@@ -88,7 +90,8 @@ def security_headers(response):
 @app.context_processor
 def shell_context():
     # Cấp CSRF token, user và menu đã lọc quyền cho mọi template.
-    return dict(csrf_token=csrf_token,current_user=g.user,menu=navigation() if g.user or session.get('guest') else [],identity=' · '.join(r['name']+' - '+(r['branch_code'] or 'Toàn hệ thống') for r in g.roles) if g.user else 'Khách',can=lambda code:code in permissions())
+    from customer_service import is_customer_admin
+    return dict(csrf_token=csrf_token,current_user=g.user,menu=navigation() if g.user or session.get('guest') else [],identity=' · '.join(r['name']+' - '+(r['branch_code'] or 'Toàn hệ thống') for r in g.roles) if g.user else 'Khách',can=lambda code:code in permissions(),can_manage_customers=is_customer_admin())
 
 
 @app.route("/")

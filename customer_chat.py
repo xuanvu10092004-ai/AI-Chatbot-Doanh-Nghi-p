@@ -37,7 +37,22 @@ def parse_customer_values(text):
 
 
 def handle_customer_chat(question,session_id,confirmation=None):
+    from customer_service import CustomerError
+    try:return _handle_customer_chat(question,session_id,confirmation)
+    except CustomerError as error:
+        denied=error.status in {403,404}
+        if denied:
+            from access_control import mark_audit_denied
+            authorization=authorize_intent(session_id,g.user['id'] if g.user else None,'add_customer')
+            mark_audit_denied(authorization['audit_id'],'Không có quyền quản trị hồ sơ khách hàng')
+        return {'type':'customer-input','answer':'Tôi không thể hỗ trợ yêu cầu này.' if denied else str(error),'access_denied':denied,'rows':[]}
+
+
+def _handle_customer_chat(question,session_id,confirmation=None):
     q=normalize(question)
+    if re.match(r'^(?:sua|cap nhat) khach hang\b',q):
+        from customer_service import require_customer_admin
+        require_customer_admin()
     quick=bool(re.match(r'^(?:them|tao|nhap) (?:nhanh )?khach (?:hang )?(?:mua xe|da dong y mua)\b',q))
     starting=quick or bool(re.match(r'^(?:them|tao|nhap|sua|cap nhat) (?:(?:mot|nhanh) )?khach hang\b',q))
     with cursor() as cur:
@@ -69,7 +84,6 @@ def handle_customer_chat(question,session_id,confirmation=None):
             if confirmation is not None and confirmation!=(batch['id'],batch['version']):
                 raise CustomerInputError('Bản nháp đã thay đổi. Hãy xem bản mới nhất trước khi xác nhận.',409)
             outcome=commit(batch['id'],batch['version'],True)
-            outcome['excel_sync']=sync_after_commit()
             return {'answer':f"Đã thêm {outcome['created']} khách hàng, cập nhật {outcome['updated']} hồ sơ và tạo {outcome['orders_created']} đơn chờ duyệt.",'type':'customer-input','result':outcome}
         except CustomerInputError as error:
             return {'answer':str(error),'type':'customer-input','customer_draft':batch}

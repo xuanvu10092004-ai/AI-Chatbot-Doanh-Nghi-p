@@ -37,7 +37,7 @@ def widget_data(widget):
         where,params=scope_filter('customer:read','u.home_branch_id','u.id')
         column={'customer-status':'cp.status','customer-source':'cp.lead_source'}.get(widget)
         select='COUNT(*) AS customers' if not column else column+' AS label,COUNT(*) AS value'
-        query=f'SELECT {select} FROM users u JOIN customer_profiles cp ON cp.user_id=u.id WHERE {where}'
+        query=f'SELECT {select} FROM users u JOIN v_active_customer_profiles cp ON cp.user_id=u.id WHERE {where}'
         if column:query+=f' GROUP BY {column} ORDER BY value DESC,label'
     elif widget=='profit':
         filters=[];params=()

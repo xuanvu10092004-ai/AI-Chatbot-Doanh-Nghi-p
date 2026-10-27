@@ -99,7 +99,6 @@ def register_customer_input(app):
             raise CustomerInputError('Yêu cầu xác nhận không hợp lệ.')
         try:
             result = commit(batch_id, data.get('version'), data.get('confirmed'))
-            result['excel_sync'] = sync_after_commit()
             return jsonify(result)
         except IntegrityError:
             raise CustomerInputError(

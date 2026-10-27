@@ -123,17 +123,21 @@ def read_customer_workbook(path):
     finally:book.close()
 
 
-def _existing(cur,row):
+def _existing(cur,row,lock=False):
     cur.execute('''SELECT u.id,u.email,u.full_name,u.phone,b.code AS branch_code,u.home_branch_id,
                    cp.customer_code,cp.gender,cp.birth_date,cp.province,cp.district,cp.address,cp.occupation,
-                   cp.lead_source,p.model_name AS interested_model,cp.payment_preference,cp.registered_at,cp.status
+                   cp.lead_source,p.model_name AS interested_model,cp.payment_preference,cp.registered_at,cp.status,s.version,s.deleted_at
                    FROM users u JOIN customer_profiles cp ON cp.user_id=u.id LEFT JOIN branches b ON b.id=u.home_branch_id
+                   LEFT JOIN customer_admin_state s ON s.customer_id=u.id
                    LEFT JOIN products p ON p.id=cp.interested_product_id
-                   WHERE u.user_type='customer' AND (cp.customer_code=%s OR u.email=%s)''',(row['customer_code'],row['email']))
+                   WHERE u.user_type='customer' AND (cp.customer_code=%s OR u.email=%s)'''+(' FOR UPDATE' if lock else ''),(row['customer_code'],row['email']))
     matches=cur.fetchall()
     if len(matches)>1:raise ValueError('Email và mã KH không cùng hồ sơ; cần sửa trước khi lưu.')
     existing=matches[0] if matches else None
     if existing:
+        from customer_service import require_customer_admin,CustomerError
+        require_customer_admin()
+        if existing['deleted_at']:raise CustomerError('Không sửa hồ sơ đã xóa; cần khôi phục trước.',409)
         if not _branch_allowed('customer:write',existing['home_branch_id']) or not _branch_allowed('customer:read',existing['home_branch_id']):raise ValueError('Dòng khách hàng không hợp lệ trong phạm vi được cấp.')
         if row['customer_code'] and row['customer_code']!=existing['customer_code']:raise ValueError('Email và mã KH không cùng hồ sơ; cần sửa trước khi lưu.')
         cur.execute('SELECT id FROM users WHERE email=%s AND id<>%s',(row['email'],existing['id']))
@@ -144,7 +148,7 @@ def _existing(cur,row):
     return existing
 
 
-def preview_rows(cur,rows):
+def preview_rows(cur,rows,lock=False):
     if not isinstance(rows,list) or not 1<=len(rows)<=MAX_ROWS:raise CustomerInputError(f'Bản nháp phải có từ 1 đến {MAX_ROWS} khách hàng.')
     result=[];seen_emails=set();seen_codes=set()
     for number,raw in enumerate(rows,1):
@@ -152,10 +156,13 @@ def preview_rows(cur,rows):
         purchase_missing='Khách Đã mua cần mã SP và giá trị mua để ghi nhận đơn hàng.'
         if purchase_missing in errors and not row['purchased_sku'] and not row['purchase_amount']:
             try:
-                existing_profile=_existing(cur,row)
+                existing_profile=_existing(cur,row,lock)
                 if existing_profile and existing_profile['status']=='Đã mua':
                     errors.remove(purchase_missing);row['purchase_amount']=None
-            except ValueError as error:errors.append(str(error))
+            except ValueError as error:
+                from customer_service import CustomerError
+                if isinstance(error,CustomerError):raise
+                errors.append(str(error))
         item={'row':number,'data':row,'errors':errors,'action':'create','changes':{},'before':None,'order_action':None}
         if row['birth_date'] and not errors:
             birthday=date.fromisoformat(row['birth_date']);now=today()
@@ -165,6 +172,7 @@ def preview_rows(cur,rows):
         seen_emails.add(row['email']);seen_codes.add(row['customer_code'])
         if not errors:
             try:
+                existing=_existing(cur,row,lock)
                 cur.execute('SELECT id FROM branches WHERE code=%s',(row['branch_code'],));branch=cur.fetchone()
                 if not branch or not _branch_allowed('customer:write',branch['id']):raise ValueError('Chi nhánh không hợp lệ trong phạm vi được cấp.')
                 item['branch_id']=branch['id']
@@ -180,7 +188,7 @@ def preview_rows(cur,rows):
                     if not product:raise ValueError('Mẫu xe quan tâm không có trong danh mục; cần chọn đúng tên.')
                     product_id=product['id'];row['interested_model']=product['model_name']
                 item['product_id']=product_id
-                existing=_existing(cur,row);item['before']=existing
+                item['before']=existing
                 if existing:
                     item['action']='update';item['customer_id']=existing['id']
                     item['data']['customer_code']=existing['customer_code']
@@ -200,7 +208,10 @@ def preview_rows(cur,rows):
                         order=cur.fetchone()
                         if order:item['order_action']='existing';item['order_id']=order['id']
                 item['snapshot']=hashlib.sha256(json.dumps(existing,default=str,sort_keys=True,ensure_ascii=False).encode()).hexdigest()
-            except ValueError as error:errors.append(str(error))
+            except ValueError as error:
+                from customer_service import CustomerError
+                if isinstance(error,CustomerError):raise
+                errors.append(str(error))
         result.append(item)
     return result
 
@@ -268,7 +279,7 @@ def commit(batch_id,version,confirmed):
             cur.execute('SELECT document_version FROM customer_import_sources WHERE batch_id=%s',(batch_id,));source=cur.fetchone()
             if source and source['document_version']!=document['version']:
                 raise CustomerInputError('File đã thay đổi. Hãy tạo lại bản xem trước từ file mới.',409)
-        preview=preview_rows(cur,json.loads(batch['rows_json']))
+        preview=preview_rows(cur,json.loads(batch['rows_json']),lock=True)
         prior=json.loads(batch['preview_json'])
         if any(item['errors'] for item in preview):raise CustomerInputError('Có dòng không hợp lệ; chưa lưu khách hàng hoặc đơn hàng nào.')
         if [r['snapshot'] for r in preview]!=[r.get('snapshot') for r in prior]:raise CustomerInputError('Hồ sơ đã thay đổi kể từ lần xem trước. Hãy kiểm tra lại bản nháp.',409)
@@ -284,6 +295,7 @@ def commit(batch_id,version,confirmed):
                                VALUES(%s,%s,%s,'customer',%s,%s,FALSE,TRUE)''',
                             (row['email'],row['full_name'],row['phone'],item['branch_id'],'!disabled:'+secrets.token_hex(32)))
                 user_id=cur.lastrowid
+                cur.execute('INSERT IGNORE INTO customer_admin_state(customer_id) VALUES(%s)',(user_id,))
                 code=row['customer_code'] or f'KH{next_code:04d}'
                 if not row['customer_code']:next_code+=1
                 cur.execute('INSERT INTO customer_profiles(user_id,customer_code) VALUES(%s,%s)',(user_id,code))
