@@ -1,3 +1,5 @@
+"""Kiểm thử công cụ đánh giá chất lượng câu trả lời AI trên bộ câu hỏi chuẩn."""
+
 from pathlib import Path
 
 from scripts.ai_evaluation import evaluate_case, load_cases, validate_cases

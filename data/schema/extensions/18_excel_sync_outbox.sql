@@ -1,3 +1,4 @@
+-- Tạo outbox, trạng thái và trigger để đồng bộ thay đổi dữ liệu sang Excel.
 USE honda_chatbot;
 CREATE TABLE IF NOT EXISTS excel_sync_changes (
  id BIGINT AUTO_INCREMENT PRIMARY KEY, table_name VARCHAR(64) NOT NULL, operation VARCHAR(16) NOT NULL,
@@ -122,4 +123,3 @@ DROP TRIGGER IF EXISTS tr_customer_version_customer_profiles_delete;
 CREATE TRIGGER tr_customer_version_customer_profiles_delete AFTER DELETE ON customer_profiles FOR EACH ROW
  INSERT INTO customer_admin_state(customer_id) SELECT OLD.user_id
  ON DUPLICATE KEY UPDATE version=version+1;
-

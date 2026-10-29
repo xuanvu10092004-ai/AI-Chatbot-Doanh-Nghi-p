@@ -1,3 +1,5 @@
+"""Kiểm thử xác thực và xử lý dữ liệu khách hàng đầu vào từ tệp."""
+
 from pathlib import Path  # Tạo và kiểm tra đường dẫn file trong dự án.
 import pytest  # Khai báo fixture, tham số hóa test và kiểm tra kết quả.
 

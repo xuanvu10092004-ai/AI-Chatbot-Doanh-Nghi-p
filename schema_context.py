@@ -70,7 +70,10 @@ def build_schema_context(connection: Any, database: str, allowed_views: frozense
 
     comments = {row["TABLE_NAME"]: row.get("TABLE_COMMENT") or "" for row in views}
     # Ưu tiên mô tả tiếng Việt đã biên tập trong từ điển, sau đó mới dùng COMMENT của MySQL.
-    dictionary = _fetch_rows(connection, 'SELECT view_name, column_name, description_vi FROM ai_data_dictionary', ())
+    try:
+        dictionary = _fetch_rows(connection, 'SELECT view_name, column_name, description_vi FROM ai_data_dictionary', ())
+    except Exception:
+        dictionary = []
     descriptions = {(row['view_name'], row['column_name']): row['description_vi'] for row in dictionary}
     grouped: dict[str, list[dict[str, Any]]] = {name: [] for name in view_names}
     for column in columns:

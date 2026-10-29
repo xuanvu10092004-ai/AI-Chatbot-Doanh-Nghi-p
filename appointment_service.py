@@ -1,3 +1,5 @@
+"""Nghiệp vụ tạo, liệt kê và cập nhật lịch hẹn theo quyền và phạm vi chi nhánh."""
+
 from datetime import datetime, timedelta  # Tính giới hạn thời gian đặt lịch.
 from zoneinfo import ZoneInfo  # Diễn giải giờ hẹn theo múi giờ Việt Nam.
 import re  # Chuẩn hóa số điện thoại và kiểm tra email.

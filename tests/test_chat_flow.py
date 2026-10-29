@@ -1,3 +1,5 @@
+"""Kiểm thử các luồng hội thoại chính từ câu hỏi đến phản hồi của chatbot."""
+
 import os  # Đọc biến môi trường hoặc thông tin hệ điều hành được dùng trong file.
 import pytest  # Khai báo fixture, tham số hóa test và kiểm tra kết quả.
 from mysql.connector import Error  # Dùng driver MySQL và kiểu lỗi/kết nối database.

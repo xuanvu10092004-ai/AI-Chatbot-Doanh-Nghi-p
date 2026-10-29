@@ -1,3 +1,147 @@
-<!-- Biểu mẫu đăng nhập, đăng nhập khách tùy cấu hình và tài khoản demo chỉ trong dev. -->
-{# Mật khẩu demo không hiển thị trên trang; thông tin xác thực nằm trong cấu hình môi trường. #}
-<!doctype html><html lang="vi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Đăng nhập · Trợ lý AI Honda</title><link rel="stylesheet" href="/static/portal.css"><script src="/static/login-effects.js" defer></script></head><body class="auth-body"><main class="auth-card"><div class="brand"><img class="brand-logo" src="{{ url_for('static', filename='images/logo.jpg') }}" alt="Logo Honda"><span class="brand-name">TRỢ LÝ AI</span></div><h1>Chào mừng trở lại</h1><p>Dữ liệu mô phỏng phục vụ thử nghiệm</p>{% if error %}<p role="alert" class="error">{{ error }}</p>{% endif %}<form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="next" value="{{ next_path }}"><label for="email">Email</label><input id="email" name="email" type="email" required autocomplete="username"><label for="password">Mật khẩu</label><input id="password" name="password" type="password" required autocomplete="current-password"><button>Đăng nhập</button></form>{% if allow_guest %}<form method="post" action="/guest"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="secondary">Tiếp tục với tư cách khách</button></form>{% endif %}{% if emails %}<details><summary>Email demo (dev)</summary>{% for email in emails %}<div>{{ email }}</div>{% endfor %}<p>Mật khẩu được cấu hình trong .env, không hiển thị tại đây.</p></details>{% endif %}</main></body></html>
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Đăng nhập · Trợ lý AI Honda</title>
+  <link rel="stylesheet" href="/static/portal.css">
+  <script src="/static/login-effects.js" defer></script>
+</head>
+<body class="auth-body futuristic-auth">
+  <!-- Watermark logo Honda góc trên bên trái -->
+  <header class="auth-brand-watermark">
+    <img src="/static/images/honda-logo-white.png" alt="Honda" class="watermark-logo">
+  </header>
+
+  <!-- Bố cục trung tâm: Card đăng nhập + Cụm tính năng -->
+  <main class="auth-main-container">
+    <!-- Card đăng nhập Glassmorphism -->
+    <section class="auth-card futuristic-card" aria-labelledby="login-title">
+      <!-- Thương hiệu trên đỉnh card: Logo đỏ + TRỢ LÝ AI -->
+      <div class="card-brand">
+        <img src="/static/images/honda-logo-red.png" alt="Honda" class="card-brand-logo">
+        <span class="card-brand-divider" aria-hidden="true"></span>
+        <span class="card-brand-title">TRỢ LÝ AI</span>
+      </div>
+
+      <h1 id="login-title">Chào mừng trở lại</h1>
+      <p class="auth-subtitle">Đăng nhập để truy cập hệ thống trợ lý AI Honda</p>
+
+      {% if error %}
+      <p role="alert" class="error login-error">{{ error }}</p>
+      {% endif %}
+
+      <form method="post" class="futuristic-form" novalidate>
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="next" value="{{ next_path }}">
+
+        <!-- Email field -->
+        <label for="email" class="input-label">
+          <svg class="label-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+            <path d="M20 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z"/>
+          </svg>
+          Email
+        </label>
+        <input id="email" name="email" type="email" required autocomplete="username" placeholder="Nhập email của bạn">
+
+        <!-- Password field with toggle -->
+        <label for="password" class="input-label">
+          <svg class="label-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+            <path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z"/>
+          </svg>
+          Mật khẩu
+        </label>
+        <div class="password-field-wrap">
+          <input id="password" name="password" type="password" required autocomplete="current-password" placeholder="Nhập mật khẩu của bạn">
+          <button type="button" class="btn-toggle-eye" id="togglePasswordBtn" aria-label="Hiện hoặc ẩn mật khẩu" title="Hiện hoặc ẩn mật khẩu">
+            <svg class="eye-icon eye-show" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+              <circle cx="12" cy="12" r="3"/>
+            </svg>
+            <svg class="eye-icon eye-hide" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" style="display:none;">
+              <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/>
+              <line x1="1" y1="1" x2="23" y2="23"/>
+            </svg>
+          </button>
+        </div>
+
+        <!-- Submit Button -->
+        <button class="primary-login-btn" type="submit">
+          <span>Đăng nhập</span>
+          <span class="btn-arrow" aria-hidden="true">→</span>
+        </button>
+      </form>
+
+      {% if allow_guest %}
+      <form method="post" action="/guest" class="guest-form">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button class="guest-login-btn" type="submit">
+          <svg class="guest-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/>
+            <circle cx="12" cy="7" r="4"/>
+          </svg>
+          <span>Tiếp tục với tư cách khách</span>
+        </button>
+      </form>
+      {% endif %}
+
+      {% if emails %}
+      <details class="demo-details">
+        <summary class="demo-summary">Email demo (dev)</summary>
+        <div class="demo-list">
+          {% for email in emails %}<div>{{ email }}</div>{% endfor %}
+        </div>
+        <p class="demo-note">Mật khẩu được cấu hình trong .env và không hiển thị tại đây.</p>
+      </details>
+      {% endif %}
+    </section>
+
+    <!-- Cụm tính năng bên phải card: POWER YOUR RIDE + 3 badges -->
+    <aside class="auth-features-sidebar" aria-label="Điểm nổi bật hệ thống">
+      <div class="feature-brand-callout">
+        <div class="feature-stripes" aria-hidden="true">///////</div>
+        <div class="feature-slogan">
+          <span class="slogan-bar" aria-hidden="true">|</span>
+          <div class="slogan-text">
+            <span class="slogan-power">POWER</span>
+            <span class="slogan-your">YOUR</span>
+            <span class="slogan-ride">RIDE</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="feature-badges-stack">
+        <div class="feature-badge-item">
+          <div class="badge-icon-box" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="18" y1="20" x2="18" y2="10"/>
+              <line x1="12" y1="20" x2="12" y2="4"/>
+              <line x1="6" y1="20" x2="6" y2="14"/>
+            </svg>
+          </div>
+          <span class="badge-label">Dữ liệu chính xác</span>
+        </div>
+
+        <div class="feature-badge-item">
+          <div class="badge-icon-box" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+            </svg>
+          </div>
+          <span class="badge-label">Tra cứu nhanh chóng</span>
+        </div>
+
+        <div class="feature-badge-item">
+          <div class="badge-icon-box" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+              <path d="m9 12 2 2 4-4"/>
+            </svg>
+          </div>
+          <span class="badge-label">Hỗ trợ 24/7</span>
+        </div>
+      </div>
+    </aside>
+  </main>
+</body>
+</html>

@@ -1,3 +1,5 @@
+"""Kiểm thử việc cài đặt và khởi tạo các phần mở rộng hội thoại trong CSDL."""
+
 import init_db
 from db import cursor
 

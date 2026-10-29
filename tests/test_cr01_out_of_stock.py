@@ -1,3 +1,5 @@
+"""Kiểm thử truy vấn và phản hồi tồn kho hết hàng tại chi nhánh CR01."""
+
 from query_planner import plan_query  # Tạo SQL template cho intent được nhận diện.
 from sql_service import answer_sql_question  # Thực thi câu hỏi SQL hoặc truy vấn đã kiểm tra.
 

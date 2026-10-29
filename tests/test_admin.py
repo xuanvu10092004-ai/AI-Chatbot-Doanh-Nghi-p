@@ -1,3 +1,5 @@
+"""Kiểm thử chức năng quản trị và các quyền truy cập liên quan."""
+
 from db import cursor  # Mở cursor hoặc connection MySQL.
 
 

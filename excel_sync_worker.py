@@ -27,7 +27,6 @@ def process_sync(force=False,path=None):
     if transaction_active():
         return {'status':'pending','error':'Chỉ xuất sau khi transaction dữ liệu đã commit.'}
     target=Path(path) if path is not None else SYNCED_WORKBOOK
-    if target.resolve()==SOURCE_WORKBOOK.resolve():raise ValueError('Không ghi đè workbook nguồn.')
     official=target.resolve()==SYNCED_WORKBOOK.resolve()
     connection=get_connection()
     locked=False
@@ -78,6 +77,7 @@ def process_sync(force=False,path=None):
             except Exception:
                 connection.rollback()
                 logging.exception('Không ghi được trạng thái worker; event vẫn chưa ACK')
+        logging.error('Đồng bộ Excel thất bại; event vẫn giữ ở outbox để retry: %s', message)
         return {'status':'failed','error':message}
     finally:
         try:

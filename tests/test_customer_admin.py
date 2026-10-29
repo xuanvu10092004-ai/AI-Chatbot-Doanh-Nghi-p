@@ -1,3 +1,5 @@
+"""Kiểm thử quản trị hồ sơ khách hàng, phân quyền và xóa mềm/khôi phục."""
+
 import pytest
 
 from db import cursor

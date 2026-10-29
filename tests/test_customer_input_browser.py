@@ -1,3 +1,5 @@
+"""Kiểm thử luồng nhập dữ liệu khách hàng trên giao diện trình duyệt."""
+
 import os  # Đọc biến môi trường hoặc thông tin hệ điều hành được dùng trong file.
 from threading import Thread  # Tạo hoặc đồng bộ các luồng chạy đồng thời.
 from pathlib import Path  # Tạo và kiểm tra đường dẫn file trong dự án.

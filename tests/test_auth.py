@@ -1,3 +1,5 @@
+"""Kiểm thử đăng nhập, phiên người dùng và bảo vệ các chức năng theo quyền."""
+
 import os  # Đọc biến môi trường hoặc thông tin hệ điều hành được dùng trong file.
 from datetime import datetime,timedelta  # Tạo, so sánh hoặc định dạng ngày giờ.
 from db import cursor  # Mở cursor hoặc connection MySQL.

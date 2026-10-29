@@ -1,3 +1,5 @@
+"""Kiểm thử kiểm soát truy cập theo vai trò và các ranh giới an toàn."""
+
 import os  # Đọc biến môi trường hoặc thông tin hệ điều hành được dùng trong file.
 from db import cursor  # Mở cursor hoặc connection MySQL.
 

@@ -1,3 +1,5 @@
+"""Kiểm thử nâng cấp và chuẩn hóa câu hỏi trước khi phân loại hoặc truy vấn."""
+
 import json  # Đọc hoặc ghi dữ liệu JSON trong luồng xử lý của file.
 from types import SimpleNamespace  # Tạo response giả cho client model trong test.
 import pytest  # Khai báo fixture, tham số hóa test và kiểm tra kết quả.

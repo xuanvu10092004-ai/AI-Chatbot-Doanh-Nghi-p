@@ -1,3 +1,5 @@
+"""Kiểm thử các trang portal và quyền truy cập theo vai trò."""
+
 import pytest  # Khai báo fixture, tham số hóa test và kiểm tra kết quả.
 from db import cursor  # Mở cursor hoặc connection MySQL.
 

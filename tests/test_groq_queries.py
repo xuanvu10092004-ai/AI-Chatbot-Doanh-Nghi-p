@@ -1,3 +1,5 @@
+"""Kiểm thử các truy vấn chatbot qua nhà cung cấp mô hình Groq."""
+
 import os  # Đọc biến môi trường hoặc thông tin hệ điều hành được dùng trong file.
 import pytest  # Khai báo fixture, tham số hóa test và kiểm tra kết quả.
 from db import cursor  # Mở cursor hoặc connection MySQL.

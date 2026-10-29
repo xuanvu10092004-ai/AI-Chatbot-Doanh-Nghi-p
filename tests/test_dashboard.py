@@ -1,3 +1,5 @@
+"""Kiểm thử dữ liệu dashboard và giới hạn hiển thị theo quyền người dùng."""
+
 import pytest  # Khai báo fixture, tham số hóa test và kiểm tra kết quả.
 from db import cursor  # Mở cursor hoặc connection MySQL.
 

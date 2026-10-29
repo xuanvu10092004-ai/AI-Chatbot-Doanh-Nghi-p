@@ -1,3 +1,5 @@
+"""Kiểm thử worker xuất Excel, xử lý outbox và phục hồi khi gặp lỗi."""
+
 import ctypes
 import os
 from pathlib import Path

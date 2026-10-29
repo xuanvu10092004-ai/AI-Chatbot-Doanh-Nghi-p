@@ -1,3 +1,5 @@
+"""Kiểm thử quy tắc tồn kho, khả năng bán và phạm vi chi nhánh."""
+
 import pytest  # Khai báo fixture, tham số hóa test và kiểm tra kết quả.
 from db import cursor  # Mở cursor hoặc connection MySQL.
 from query_planner import plan_query  # Tạo SQL template cho intent được nhận diện.
@@ -41,5 +43,4 @@ def test_low_stock_api_uses_sales_scope(auth_client):
         cur.execute('SELECT COUNT(*) AS n FROM inventory WHERE branch_id=1 AND quantity>0 AND quantity<5');expected=cur.fetchone()['n']
     assert data['total']==expected
     assert all(r['branch_code']=='NT01' and 1<=r['quantity']<=4 for r in data['rows'])
-
 

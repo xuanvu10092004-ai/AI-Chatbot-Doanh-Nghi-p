@@ -1,3 +1,5 @@
+"""Fixture dùng chung cho ứng dụng Flask, MySQL và dữ liệu kiểm thử."""
+
 import os  # Đọc biến môi trường hoặc thông tin hệ điều hành được dùng trong file.
 import pytest  # Khai báo fixture, tham số hóa test và kiểm tra kết quả.
 from pathlib import Path

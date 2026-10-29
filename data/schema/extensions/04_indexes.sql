@@ -1,3 +1,4 @@
+-- Tạo chỉ mục phục vụ tìm kiếm tài liệu RAG và tra cứu đơn hàng.
 USE honda_chatbot;
 
 -- Tạo FULLTEXT index cho RAG bằng ngram; kiểm tra trước để chạy lại không lỗi.

@@ -1,3 +1,5 @@
+"""Đăng ký API vận hành cho danh mục xe và lịch sửa chữa, kèm kiểm tra đầu vào."""
+
 from datetime import datetime, timedelta  # Kiểm tra thời điểm đặt lịch và giới hạn ngày.
 from zoneinfo import ZoneInfo  # Áp múi giờ Việt Nam cho lịch dịch vụ.
 from decimal import Decimal, InvalidOperation  # Kiểm tra số nguyên/giá trị tiền không mất độ chính xác.
@@ -125,7 +127,10 @@ def register_operations(app):
             if before:before.pop('cost_price',None)
             audit(cur,'catalog_update' if before else 'catalog_create','variant',variant_id,before=before,
                   after={k:data.get(k) for k in ('model_name','variant_name','list_price','model_year','lifecycle')},actor=g.user['id'])
-        return jsonify(id=variant_id),200 if before else 201
+        # Cursor đã commit; đồng bộ workbook từ snapshot MySQL mới nhất.
+        from excel_sync import sync_after_commit
+        excel_sync=sync_after_commit()
+        return jsonify(id=variant_id,excel_sync=excel_sync),200 if before else 201
 
     @app.get('/bookings')
     @require_permission('booking:read')

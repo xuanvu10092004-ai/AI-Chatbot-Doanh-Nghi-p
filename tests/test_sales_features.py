@@ -1,3 +1,5 @@
+"""Kiểm thử chức năng bán hàng, đơn hàng và tạo chứng từ mô phỏng."""
+
 from io import BytesIO  # Tạo stream trong bộ nhớ cho upload hoặc PDF.
 import pdfplumber  # Đọc nội dung PDF để xác nhận chứng từ.
 import pytest  # Khai báo fixture, tham số hóa test và kiểm tra kết quả.

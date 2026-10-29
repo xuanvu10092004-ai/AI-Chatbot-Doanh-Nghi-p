@@ -1,3 +1,5 @@
+"""Đăng ký các trang và API quản lý tài liệu, gồm giới hạn yêu cầu tải lên."""
+
 from flask import jsonify, render_template, request, send_file  # Nhận upload/form và trả JSON, HTML hoặc file gốc.
 from mysql.connector import Error as DatabaseError  # Chuyển lỗi lưu file/database thành phản hồi dịch vụ.
 

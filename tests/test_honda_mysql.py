@@ -1,3 +1,5 @@
+"""Kiểm thử các view AI và dữ liệu nghiệp vụ trên MySQL thật."""
+
 from __future__ import annotations
 
 import pytest  # Khai báo fixture, tham số hóa test và kiểm tra kết quả.

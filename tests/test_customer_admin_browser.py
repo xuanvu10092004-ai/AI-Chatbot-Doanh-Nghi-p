@@ -1,3 +1,5 @@
+"""Kiểm thử giao diện quản trị khách hàng trên trình duyệt."""
+
 import os
 from threading import Thread,Event
 import time

@@ -1,3 +1,4 @@
+-- Thêm dữ liệu mô phỏng cho mẫu xe Air Blade 125 mà không ghi đè dữ liệu hiện có.
 USE honda_chatbot;
 SET NAMES utf8mb4;
 

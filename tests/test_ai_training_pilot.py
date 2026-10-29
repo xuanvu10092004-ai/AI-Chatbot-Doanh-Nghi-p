@@ -1,3 +1,5 @@
+"""Kiểm thử tạo và chạy bộ dữ liệu thử nghiệm huấn luyện AI."""
+
 import json
 from pathlib import Path
 

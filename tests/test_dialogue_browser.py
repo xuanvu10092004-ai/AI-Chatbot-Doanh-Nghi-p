@@ -1,3 +1,5 @@
+"""Kiểm thử giao diện hội thoại chatbot trong trình duyệt."""
+
 import os
 import re
 

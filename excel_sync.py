@@ -10,11 +10,13 @@ from zipfile import ZipFile
 from zoneinfo import ZoneInfo
 import time
 
-from db import cursor  # Mở cursor hoặc connection MySQL.
+from db import cursor, defer_until_commit, transaction_active  # Mở cursor/transaction và chạy đồng bộ sau commit.
 
 ROOT = Path(__file__).resolve().parent
+# Đây là workbook phụ duy nhất mà người dùng mở trong dự án. MySQL vẫn là
+# nguồn dữ liệu nghiệp vụ; workbook này chỉ được ghi lại từ snapshot MySQL.
 SOURCE_WORKBOOK = ROOT / "data" / "source" / "honda_dataset_khach_hang_san_pham.xlsx"
-SYNCED_WORKBOOK = ROOT / "data" / "exports" / "honda_chatbot_synced.xlsx"
+SYNCED_WORKBOOK = SOURCE_WORKBOOK
 
 
 # Báo workbook nguồn đang bị khóa để service trả trạng thái đồng bộ phù hợp.
@@ -129,8 +131,8 @@ def _write_workbook(data,path):
     from openpyxl.styles import Font  # Định dạng header trong workbook Excel.
 
     path=Path(path)
-    if path.resolve()==SOURCE_WORKBOOK.resolve():raise ValueError('Không ghi đè workbook nguồn.')
-    book = load_workbook(SOURCE_WORKBOOK) if SOURCE_WORKBOOK.exists() else Workbook()
+    template = path if path.exists() and path.resolve() == SOURCE_WORKBOOK.resolve() else SOURCE_WORKBOOK
+    book = load_workbook(template) if template.exists() else Workbook()
     fallback_headers = {
         "Khach_hang": ["Mã KH", "Họ và tên", "Giới tính", "Ngày sinh", "Tuổi", "Số điện thoại", "Email", "Tỉnh/Thành phố", "Quận/Huyện", "Địa chỉ", "Nghề nghiệp", "Nguồn khách", "Chi nhánh phụ trách", "Mẫu xe quan tâm", "Hình thức thanh toán", "Ngày đăng ký", "Trạng thái", "Mã SP đã mua", "Giá trị mua (VNĐ)"],
         "San_pham": ["Mã SP", "Mẫu xe", "Phiên bản", "Màu sắc", "Phân khúc", "Dung tích (cc)", "Loại động cơ", "Dung tích bình xăng (L)", "Khối lượng (kg)", "Tiêu hao (L/100km)", "Phanh", "Bảo hành", "Giá niêm yết (VNĐ)", "Giá vốn (VNĐ)", "Lợi nhuận gộp (VNĐ)", "Biên lợi nhuận (%)", "Tồn kho toàn hệ thống"],
@@ -194,9 +196,17 @@ def export_synced_workbook(path=None) -> Path:
     return target
 
 
+def _sync_after_commit_now() -> dict[str, Any]:
+    from excel_sync_worker import process_sync
+    try:
+        return process_sync(force=True)
+    except Exception as error:
+        # Không che lỗi đồng bộ: worker giữ event chưa ACK để retry.
+        return {'status':'failed', 'error':f'Lỗi đồng bộ Excel: {type(error).__name__}'}
+
 def sync_after_commit() -> dict[str, Any]:
-    # Triggers already enqueue in the data transaction. The worker, not a web
-    # request, exports after commit; failure never changes a successful DB result.
-    from excel_sync_worker import sync_status
-    try:return sync_status()
-    except Exception:return {'status':'pending','error':'Chưa đọc được trạng thái worker; dữ liệu đã lưu không bị mất.'}
+    # Nếu đang ở transaction lồng, callback chỉ chạy sau commit ngoài cùng.
+    if transaction_active():
+        defer_until_commit(_sync_after_commit_now)
+        return {'status':'pending', 'error':'Đã xếp đồng bộ sau khi transaction MySQL commit.'}
+    return _sync_after_commit_now()

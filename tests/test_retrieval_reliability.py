@@ -1,3 +1,5 @@
+"""Kiểm thử độ tin cậy của truy xuất tài liệu và căn cứ cho câu trả lời RAG."""
+
 import pytest
 
 from rag_service import rank_documents, search_documents

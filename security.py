@@ -76,7 +76,11 @@ def require_permission(*codes):
 def initialize_request():
     # Khôi phục user/role từ session; guest chỉ được vào các endpoint chat cho phép.
     g.user=None;g.roles=[]
-    user_id=session.get('user_id')
+    user_id = session.get('user_id')
+    # Chỉ mô phỏng danh tính bằng header trong môi trường dev.
+    demo_user_id = request.headers.get('X-Demo-User-Id')
+    if os.getenv('APP_ENV') == 'dev' and demo_user_id and demo_user_id.isdigit():
+        user_id = int(demo_user_id)
     if user_id:
         with cursor() as cur:
             cur.execute('SELECT id,email,full_name,user_type,phone,home_branch_id,is_active,must_change_password FROM users WHERE id=%s',(user_id,))

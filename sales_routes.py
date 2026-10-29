@@ -1,3 +1,5 @@
+"""Đăng ký trang/API bán hàng và tạo chứng từ PDF mô phỏng từ đơn hàng."""
+
 from io import BytesIO  # Giữ PDF đã tạo trong bộ nhớ trước khi gửi response.
 from pathlib import Path  # Tìm font chữ tiếng Việt trong thư mục static.
 from threading import Lock  # Ngăn đăng ký font PDF đồng thời nhiều lần.

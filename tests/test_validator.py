@@ -1,3 +1,5 @@
+"""Kiểm thử validator giới hạn câu lệnh SQL sinh ra cho chatbot."""
+
 import pytest  # Khai báo fixture, tham số hóa test và kiểm tra kết quả.
 
 from sql_safety import validate_sql  # Kiểm tra validator và timeout truy vấn SQL.

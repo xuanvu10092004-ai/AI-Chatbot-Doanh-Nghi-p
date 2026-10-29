@@ -1,3 +1,4 @@
+-- Tạo các view chỉ đọc dành riêng cho truy vấn AI, tách dữ liệu nhạy cảm.
 USE honda_chatbot;
 -- DROP + CREATE tương thích cả MySQL 8.0 và MariaDB (MySQL không có OR REPLACE FUNCTION).
 DROP FUNCTION IF EXISTS fn_session_branch;

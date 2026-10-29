@@ -1,3 +1,5 @@
+"""Kiểm thử tải lên, lưu trữ và xử lý tài liệu trong ứng dụng."""
+
 from io import BytesIO  # Tạo stream trong bộ nhớ cho upload hoặc PDF.
 import hashlib  # Tính SHA-256 độc lập để đối chiếu metadata file đã lưu.
 from pathlib import Path  # Tạo và kiểm tra đường dẫn file trong dự án.

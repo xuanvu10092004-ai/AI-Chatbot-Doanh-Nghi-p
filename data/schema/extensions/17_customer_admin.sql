@@ -1,3 +1,4 @@
+-- Bổ sung trạng thái quản trị khách hàng, quyền liên quan và view hồ sơ đang hoạt động.
 USE honda_chatbot;
 CREATE TABLE IF NOT EXISTS customer_admin_state (
  customer_id INT PRIMARY KEY,

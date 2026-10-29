@@ -1,4 +1,4 @@
-# File này khởi tạo Flask, đăng ký route và chuyển request tới các service xác thực, dữ liệu và chatbot.
+# File khởi tạo Flask, đăng ký route và chuyển request tới các service xác thực, dữ liệu và chatbot.
 from __future__ import annotations
 
 import os  # Đọc khóa session và trạng thái môi trường khi khởi tạo Flask.
@@ -22,6 +22,7 @@ from routing import route_question  # Phân loại câu hỏi SQL/RAG và nhãn 
 from sql_service import answer_sql_question  # Thực thi câu hỏi SQL hoặc truy vấn đã kiểm tra.
 from sql_service import SchemaExtensionRequired as SQLSchemaExtensionRequired  # Thực thi câu hỏi SQL hoặc truy vấn đã kiểm tra.
 from mysql.connector import Error as DatabaseError  # Dùng driver MySQL và kiểu lỗi/kết nối database.
+from db import cursor  # Ghi audit từ chối ở lớp router trước khi truy xuất dữ liệu.
 from question_language import resolve_followup  # Chuẩn hóa câu hỏi và nhận diện mẫu xe.
 from answer_renderer import QueryEvidence  # Định dạng kết quả truy vấn thành nội dung hiển thị.
 # Chuẩn hóa dấu gạch trước khi ghi lịch sử và trả JSON.
@@ -187,6 +188,12 @@ def chat():
             return jsonify(customer_reply)
         # Phân nhánh truy vấn có cấu trúc hoặc tìm tài liệu theo quyền của user.
         route = route_question(retrieval_question)
+        if route["type"] in {"OUT_OF_SCOPE", "DENY"}:
+            answer = ("Yêu cầu này nằm ngoài phạm vi hỗ trợ của trợ lý." if route["type"] == "OUT_OF_SCOPE" else "Tôi không thể hỗ trợ yêu cầu này.")
+            with cursor() as cur:
+                cur.execute("INSERT INTO chatbot_audit_log (session_id, user_id, decision, reason) VALUES (%s, %s, 'denied', %s)", (session_id, user_id, f"Request bị chặn bởi router: {route['type']}"))
+            record_message(session_id, "bot", answer)
+            return jsonify(answer=answer, type=route["type"], module=route["module"], session_id=session_id, engine="policy", access_denied=True, rows=[], summary=None, sources=[])
         if route["type"] == "CLARIFY":
             answer = "Bạn muốn xem tất cả sản phẩm, tồn kho hay khách hàng? Hãy nói rõ nhóm dữ liệu cần tra cứu."
             record_message(session_id, "bot", answer)
@@ -194,7 +201,7 @@ def chat():
         if route["type"] == "SQL":
             context = answer_sql_question(retrieval_question, user_id, session_id, include_inventory_details=True)
         else:
-            context = search_documents(question, user_id, session_id)
+            context = search_documents(retrieval_question, user_id, session_id)
         # Không gửi kết quả từ chối hoặc thiếu bằng chứng tới model để tránh suy diễn.
         denied = context == "Tôi không thể hỗ trợ yêu cầu này."
         no_evidence = context.startswith(('Không tìm thấy', 'Chưa tìm thấy', 'Cần làm rõ:', 'Chưa phân tích được'))
@@ -248,4 +255,3 @@ if __name__ == "__main__":
 
     threading.Timer(1.0, lambda: webbrowser.open("http://127.0.0.1:5000")).start()
     app.run(host="127.0.0.1", port=5000, debug=False, use_reloader=False)
-

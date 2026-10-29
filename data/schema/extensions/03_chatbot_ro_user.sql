@@ -1,3 +1,4 @@
+-- Cấp quyền đọc giới hạn cho tài khoản kết nối text-to-SQL của chatbot.
 USE honda_chatbot;
 -- init_db.py tạo/cập nhật chatbot_ro@localhost bằng tham số từ .env.
 -- Chỉ truy cập cục bộ; không đọc bảng gốc, không ghi.

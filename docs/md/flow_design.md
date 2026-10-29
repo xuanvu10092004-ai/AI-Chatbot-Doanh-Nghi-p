@@ -60,4 +60,4 @@ AI khong duoc ghi thang du lieu nghiep vu chua xac nhan.
 - RAG co nguon va co ca khong tim thay bang chung.
 - 6 module co it nhat mot luong end-to-end sau nang cap.
 
-![So do luong xu ly AI Chatbot](../images/luong_xu_ly_ai_chatbot.png)
+![So do luong xu ly AI Chatbot](../images/Luong_xu_ly_chatbot.png)

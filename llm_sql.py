@@ -63,7 +63,7 @@ def generate_query(question: str, allowed_views: frozenset[str]) -> tuple[str, t
     # Không gọi model nếu thiếu key; câu hỏi chưa đủ rõ được chuyển thành yêu cầu làm rõ.
     if not os.getenv('GROQ_API_KEY'):
         raise QueryClarification('Bạn hãy nêu rõ mẫu xe, số liệu hoặc điều kiện cần tra cứu; bộ phân tích nâng cao chưa được cấu hình.')
-    connection = get_connection()
+    connection = get_connection("text_to_sql")
     try:
         # Context chỉ gồm view đã được permission của user cho phép.
         schema = build_schema_context(connection, os.environ['DB_NAME'], allowed_views)

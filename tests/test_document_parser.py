@@ -1,3 +1,5 @@
+"""Kiểm thử trích xuất và chuẩn hóa nội dung từ các định dạng tài liệu."""
+
 import json  # Đọc hoặc ghi dữ liệu JSON trong luồng xử lý của file.
 import re  # Tìm và chuẩn hóa mẫu văn bản bằng biểu thức chính quy.
 from collections import Counter  # Đếm phần tử để so sánh dữ liệu.

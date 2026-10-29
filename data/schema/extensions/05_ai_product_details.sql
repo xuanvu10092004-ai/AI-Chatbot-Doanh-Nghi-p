@@ -1,3 +1,4 @@
+-- Mở rộng view sản phẩm AI với thông số kỹ thuật và từ điển mô tả cột.
 USE honda_chatbot;
 -- Bổ sung thông số đã có trong nguồn chuẩn; không thay đổi bảng nghiệp vụ.
 CREATE OR REPLACE VIEW v_ai_products AS
