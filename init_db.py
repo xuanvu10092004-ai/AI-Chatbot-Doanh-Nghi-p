@@ -1,310 +1,293 @@
-# File này tạo database, nạp schema/dữ liệu và chạy extension SQL theo thứ tự.
-from __future__ import annotations
+# ==========================================================
+# Tên file: init_db.py
+# Mục đích của file: Khởi tạo Cơ sở dữ liệu SQLite cho hệ thống AI Chatbot Doanh Nghiệp.
+# File này dùng để làm gì:
+#   - Khởi tạo file cơ sở dữ liệu SQLite mang tên `database.db`.
+#   - Thiết lập các bảng lưu trữ thông tin nghiệp vụ bao gồm:
+#       1. `customers`    : Quản lý thông tin khách hàng (Phần CRM).
+#       2. `inventory`    : Quản lý hàng hóa, tồn kho và bảng giá (Phần Warehouse).
+#       3. `opportunities`: Quản lý các cơ hội bán hàng (Phần Sales Opportunity).
+#       4. `quotes`       : Quản lý báo giá gửi tới khách hàng (Phần Sales Quote).
+#       5. `documents`    : Lưu trữ tài liệu nội bộ, quy trình, chính sách (Phần RAG Pipeline).
+#       6. `chat_logs`    : Lưu trữ nhật ký cuộc hội thoại giữa người dùng và Chatbot AI.
+# Khi nào file được gọi:
+#   - Được chạy trực tiếp MỘT LẦN duy nhất ở bước thiết lập môi trường đầu tiên (Setup phase).
+# Luồng hoạt động tổng quát:
+#   [Chạy script init_db.py]
+#           ↓
+#   [Kết nối / Tạo mới file database.db]
+#           ↓
+#   [Bật ràng buộc Khóa ngoại PRAGMA foreign_keys = ON]
+#           ↓
+#   [Thực thi các câu lệnh CREATE TABLE IF NOT EXISTS cho 6 bảng]
+#           ↓
+#   [Lưu thay đổi Commit & Đóng kết nối Database]
+#           ↓
+#   [In thông báo thành công ra màn hình Terminal]
+# ==========================================================
 
-import argparse  # Đọc chế độ reset, tạo mới hoặc áp dụng migration từ CLI.
-import os  # Đọc biến môi trường hoặc thông tin hệ điều hành được dùng trong file.
-import re  # Tìm và chuẩn hóa mẫu văn bản bằng biểu thức chính quy.
-import sys  # Đọc đối số và trạng thái trình thông dịch của công cụ.
-from pathlib import Path  # Tạo và kiểm tra đường dẫn file trong dự án.
-from typing import Iterator  # Khai báo kiểu dữ liệu cho tham số và kết quả.
+import sqlite3
+from database_path import DATABASE_PATH
 
-import mysql.connector  # Dùng driver MySQL và kiểu lỗi/kết nối database.
-from dotenv import load_dotenv  # Nạp cấu hình từ file .env.
-from mysql_accounts import ensure_account, provision_accounts
+# ---------------------------------------------------------
+# Khai báo tên file CSDL SQLite dùng chung trong toàn hệ thống
+# ---------------------------------------------------------
+DB_NAME = str(DATABASE_PATH)
 
 
-PROJECT_ROOT = Path(__file__).resolve().parent
-SCHEMA_FILE = PROJECT_ROOT / "data" / "schema" / "honda_chatbot_rbac.sql"
-SEED_FILE = PROJECT_ROOT / "data" / "seed" / "honda_import_data.sql"
-EXPECTED_COUNTS = {
-    "products": 11,
-    "product_variants": 31,
-    "inventory": 93,
-    "customers": 80,
-    "customer_profiles": 80,
-    "orders": 30,
-}
+# ==========================================================
+# Hàm create_database:
+# - Hàm dùng để làm gì: Tạo file database.db và thực thi chuỗi câu lệnh SQL khởi tạo 6 bảng dữ liệu.
+# - Tham số đầu vào: Không có.
+# - Giá trị trả về: Không có (None).
+# - Hàm này được gọi ở đâu: Được gọi trực tiếp trong khối `if __name__ == "__main__":` khi chạy script này.
+# - Vai trò trong hệ thống: Tầng định nghĩa Schema cơ sở dữ liệu (Database Schema Initialization).
+# ==========================================================
+def create_database():
+    """
+    Kết nối đến database (tạo mới nếu chưa tồn tại),
+    rồi tạo tất cả các bảng cần thiết cho hệ thống AI Chatbot doanh nghiệp.
+    """
 
+    # ---------------------------------------------------------
+    # Bước 1: Mở kết nối đến Cơ sở dữ liệu SQLite
+    # - Bước này đang làm gì: Mở hoặc tạo mới file database.db và lấy đối tượng con trỏ (cursor).
+    # - Vì sao cần bước này: SQLite cần một đường truyền kết nối và con trỏ cursor để thực thi các câu lệnh SQL.
+    # - Dữ liệu đi từ đâu đến đâu: Từ ổ đĩa tệp tin -> Nạp trình kết nối SQLite driver vào bộ nhớ RAM.
+    # - Sau bước này chương trình sẽ làm gì tiếp: Bật chế độ ràng buộc khóa ngoại (Foreign Keys).
+    # ---------------------------------------------------------
+    conn = sqlite3.connect(DB_NAME)
+    cursor = conn.cursor()
 
-# Nạp .env, kiểm tra các credential bắt buộc và tạo cấu hình MySQL cho init script.
-def get_config() -> dict[str, object]:
-    load_dotenv(PROJECT_ROOT / ".env")
-    required = (
-        "DB_HOST",
-        "DB_PORT",
-        "DB_USER",
-        "DB_PASSWORD",
-        "DB_NAME",
-        "CHATBOT_RO_PASSWORD",
-        "APP_DB_PASSWORD",
-        "DEMO_ACCOUNT_PASSWORD",
-        "ADMIN_DB_USER",
-        "ADMIN_DB_PASSWORD",
+    # ---------------------------------------------------------
+    # Câu lệnh SQL: PRAGMA foreign_keys = ON
+    # SQLite sẽ kiểm tra và thực thi các mối quan hệ giữa các bảng thông qua FOREIGN KEY
+    # - Mục đích: Bật tính năng kiểm tra ràng buộc khóa ngoại (Foreign Key Constraints).
+    # - Vì sao cần: Mặc định SQLite TẮT kiểm tra khóa ngoại để tương thích ngược. Bật tính năng này giúp đảm bảo tính toàn vẹn dữ liệu (VD: Không thể xóa khách hàng nếu còn báo giá liên quan).
+    # ---------------------------------------------------------
+    cursor.execute("PRAGMA foreign_keys = ON")
+
+    # ---------------------------------------------------------
+    # Bước 2: Tạo bảng `customers` (Quản lý khách hàng - CRM)
+    # ---------------------------------------------------------
+    # Câu lệnh SQL: CREATE TABLE IF NOT EXISTS customers
+    # - Bảng dùng để làm gì: Lưu trữ thông tin chi tiết của tất cả đối tác/khách hàng.
+    # - Tại sao dùng IF NOT EXISTS: Tránh gây ra lỗi crash chương trình nếu bảng đã tồn tại sẵn từ trước.
+    # - Ý nghĩa từng cột:
+    #     + id: Khóa chính (PRIMARY KEY), tự động tăng số nguyên (AUTOINCREMENT).
+    #     + name: Tên khách hàng (Bắt buộc NOT NULL).
+    #     + phone: Số điện thoại liên hệ.
+    #     + email: Địa chỉ Email.
+    #     + company: Tên công ty/Tổ chức công tác.
+    #     + address: Địa chỉ công ty/nhà riêng.
+    #     + status: Trạng thái phân loại ('new': mới, 'potential': tiềm năng, 'vip': khách VIP). Mặc định là 'new'.
+    #     + note: Ghi chú bổ sung thông tin.
+    #     + created_at: Thời điểm tạo bản ghi (Tự động lấy thời gian hệ thống CURRENT_TIMESTAMP).
+    # - Quan hệ với bảng khác: Là bảng CHA, được tham chiếu bởi `opportunities.customer_id` và `quotes.customer_id`.
+    # ---------------------------------------------------------
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS customers (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        phone TEXT,
+        email TEXT,
+        company TEXT,
+        address TEXT,
+        status TEXT DEFAULT 'new',
+        note TEXT,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP
     )
-    missing = [name for name in required if os.getenv(name) is None]
-    if missing:
-        raise RuntimeError(f"Thiếu biến môi trường: {', '.join(missing)}")
-    if len(os.environ['DEMO_ACCOUNT_PASSWORD'])<10:
-        raise RuntimeError('DEMO_ACCOUNT_PASSWORD must contain at least 10 characters')
-    if not os.environ['DB_PASSWORD'] or os.environ['APP_DB_PASSWORD'] != os.environ['DB_PASSWORD']:
-        raise RuntimeError('APP_DB_PASSWORD phải trùng DB_PASSWORD và không rỗng')
-    if not os.environ['CHATBOT_RO_PASSWORD']:
-        raise RuntimeError('CHATBOT_RO_PASSWORD không được rỗng')
-    if os.getenv('CHATBOT_RO_USER', 'chatbot_ro') != 'chatbot_ro':
-        raise RuntimeError('CHATBOT_RO_USER phải là chatbot_ro')
-    if not os.environ['ADMIN_DB_USER'] or not os.environ['DB_USER'] or os.environ['DB_USER'] in {
-        'root', 'chatbot_ro', os.environ['ADMIN_DB_USER']
-    }:
-        raise RuntimeError('DB_USER phải là tài khoản ứng dụng riêng, khác tài khoản quản trị và chatbot_ro')
+    """)
 
-    database = os.environ["DB_NAME"]
-    if database != "honda_chatbot":
-        raise RuntimeError("DB_NAME phải là honda_chatbot khi chạy script khởi tạo schema")
+    # ---------------------------------------------------------
+    # Bước 3: Tạo bảng `inventory` (Quản lý hàng hóa / kho hàng)
+    # ---------------------------------------------------------
+    # Câu lệnh SQL: CREATE TABLE IF NOT EXISTS inventory
+    # - Bảng dùng để làm gì: Theo dõi danh mục sản phẩm, số lượng tồn kho và giá bán.
+    # - Tại sao dùng IF NOT EXISTS: Giúp chạy lại script an toàn mà không làm mất bảng đã có.
+    # - Ý nghĩa từng cột:
+    #     + id: Khóa chính tự tăng.
+    #     + product_name: Tên sản phẩm / dịch vụ (NOT NULL).
+    #     + category: Phân loại danh mục (vd: Thiết bị, Phần mềm, Dịch vụ).
+    #     + quantity: Số lượng tồn kho (Số nguyên, mặc định = 0).
+    #     + unit: Đơn vị tính (Bộ, Cái, Gói, Tháng...).
+    #     + price: Giá bán đơn vị (Số thực REAL, mặc định = 0).
+    #     + supplier: Nhà cung cấp hàng hóa.
+    #     + note: Ghi chú chi tiết sản phẩm.
+    #     + created_at: Ngày giờ nhập dữ liệu sản phẩm.
+    # - Quan hệ với bảng khác: Là bảng CHA, được tham chiếu bởi `quotes.product_id`.
+    # ---------------------------------------------------------
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS inventory (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        product_name TEXT NOT NULL,
+        category TEXT,
+        quantity INTEGER DEFAULT 0,
+        unit TEXT,
+        price REAL DEFAULT 0,
+        supplier TEXT,
+        note TEXT,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )
+    """)
 
-    return {
-        "host": os.environ["DB_HOST"],
-        "port": int(os.environ["DB_PORT"]),
-        "user": os.environ['ADMIN_DB_USER'],
-        "password": os.environ['ADMIN_DB_PASSWORD'],
-        "chatbot_ro_password": os.environ["CHATBOT_RO_PASSWORD"],
-        "database": database,
-        "charset": "utf8mb4",
-        "collation": "utf8mb4_unicode_ci",
-        "connection_timeout": 5,
-    }
+    # ---------------------------------------------------------
+    # Bước 4: Tạo bảng `opportunities` (Quản lý cơ hội bán hàng)
+    # ---------------------------------------------------------
+    # Câu lệnh SQL: CREATE TABLE IF NOT EXISTS opportunities
+    # - Bảng dùng để làm gì: Lưu vết các dự án/thương vụ tiềm năng theo từng giai đoạn bán hàng.
+    # - Tại sao dùng IF NOT EXISTS: Tránh lỗi khi chạy khởi tạo nhiều lần.
+    # - Ý nghĩa từng cột:
+    #     + id: Khóa chính tự tăng.
+    #     + customer_id: Khóa ngoại liên kết tới `customers(id)` để biết cơ hội này thuộc về khách hàng nào.
+    #     + title: Tiêu đề cơ hội kinh doanh (NOT NULL).
+    #     + description: Mô tả nhu cầu khách hàng.
+    #     + value: Giá trị hợp đồng dự kiến (VNĐ).
+    #     + stage: Giai đoạn thương lượng ('new', 'negotiation', 'won', 'lost').
+    #     + probability: Tỷ lệ chốt hợp đồng thành công (0 đến 100%).
+    #     + expected_close_date: Ngày dự kiến chốt hợp đồng.
+    #     + created_at: Ngày tạo cơ hội.
+    # - Quan hệ với bảng khác: Bảng CON của `customers` qua `FOREIGN KEY (customer_id) REFERENCES customers(id)`.
+    # ---------------------------------------------------------
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS opportunities (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        customer_id INTEGER,
+        title TEXT NOT NULL,
+        description TEXT,
+        value REAL DEFAULT 0,
+        stage TEXT DEFAULT 'new',
+        probability INTEGER DEFAULT 0,
+        expected_close_date TEXT,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (customer_id) REFERENCES customers(id)
+    )
+    """)
 
+    # ---------------------------------------------------------
+    # Bước 5: Tạo bảng `quotes` (Quản lý báo giá)
+    # ---------------------------------------------------------
+    # Câu lệnh SQL: CREATE TABLE IF NOT EXISTS quotes
+    # - Bảng dùng để làm gì: Lưu trữ các đơn báo giá kinh doanh phát hành cho khách hàng.
+    # - Tại sao dùng IF NOT EXISTS: Đảm bảo tính lặp lại an toàn của script.
+    # - Ý nghĩa từng cột:
+    #     + id: Khóa chính tự tăng.
+    #     + customer_id: Khóa ngoại tham chiếu `customers(id)`.
+    #     + product_id: Khóa ngoại tham chiếu `inventory(id)`.
+    #     + quote_code: Mã quản lý báo giá (ví dụ: BG-2026-001).
+    #     + quantity: Số lượng sản phẩm báo giá.
+    #     + total_amount: Tổng số tiền báo giá (VNĐ).
+    #     + status: Trạng thái duyệt báo giá ('draft', 'pending', 'approved', 'rejected').
+    #     + note: Điều khoản hoặc ghi chú báo giá.
+    #     + created_at: Ngày phát hành báo giá.
+    # - Quan hệ với bảng khác: Bảng CON tham chiếu tới cả `customers` và `inventory`.
+    # ---------------------------------------------------------
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS quotes (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        customer_id INTEGER,
+        product_id INTEGER,
+        quote_code TEXT,
+        quantity INTEGER DEFAULT 1,
+        total_amount REAL DEFAULT 0,
+        status TEXT DEFAULT 'draft',
+        note TEXT,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (customer_id) REFERENCES customers(id),
+        FOREIGN KEY (product_id) REFERENCES inventory(id)
+    )
+    """)
 
-def split_sql_script(script: str) -> Iterator[str]:
-    # Tách statement theo dấu chấm phẩy nhưng bỏ qua dấu nằm trong chuỗi/comment.
-    statement: list[str] = []
-    quote: str | None = None
-    line_comment = False
-    block_comment = False
-    index = 0
+    # ---------------------------------------------------------
+    # Bước 6: Tạo bảng `documents` (Lưu tài liệu kiến thức RAG)
+    # ---------------------------------------------------------
+    # Câu lệnh SQL: CREATE TABLE IF NOT EXISTS documents
+    # - Bảng dùng để làm gì: Lưu trữ các đoạn văn bản tài liệu nội bộ, chính sách công ty để phục vụ tra cứu RAG (Retrieval-Augmented Generation).
+    # - Tại sao dùng IF NOT EXISTS: Tránh đè cấu trúc bảng nếu đã tồn tại.
+    # - Ý nghĩa từng cột:
+    #     + id: Khóa chính tự tăng.
+    #     + title: Tiêu đề văn bản/tài liệu (NOT NULL).
+    #     + content: Nội dung chi tiết văn bản (NOT NULL, dùng để tìm kiếm từ khóa LIKE).
+    #     + source: Tên file nguồn hoặc xuất xứ tài liệu.
+    #     + document_type: Loại văn bản ('policy': chính sách, 'guide': hướng dẫn quy trình).
+    #     + created_at: Ngày cập nhật tài liệu.
+    # - Quan hệ với bảng khác: Bảng độc lập dùng riêng cho `rag_service.py`.
+    # ---------------------------------------------------------
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS documents (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        title TEXT NOT NULL,
+        content TEXT NOT NULL,
+        source TEXT,
+        document_type TEXT,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )
+    """)
 
-    while index < len(script):
-        char = script[index]
-        next_char = script[index + 1] if index + 1 < len(script) else ""
+    # ---------------------------------------------------------
+    # Bước 6.5: Tạo bảng `bookings` (Quản lý giao dịch/đặt chỗ)
+    # ---------------------------------------------------------
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS bookings (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        customer_id INTEGER,
+        booking_date TEXT DEFAULT CURRENT_TIMESTAMP,
+        status TEXT DEFAULT 'confirmed',
+        note TEXT,
+        FOREIGN KEY (customer_id) REFERENCES customers(id)
+    )
+    """)
 
-        if line_comment:
-            statement.append(char)
-            if char in "\r\n":
-                line_comment = False
-            index += 1
-            continue
+    # ---------------------------------------------------------
+    # Bước 7: Tạo bảng `chat_logs` (Lưu lịch sử hội thoại Chatbot)
+    # ---------------------------------------------------------
+    # Câu lệnh SQL: CREATE TABLE IF NOT EXISTS chat_logs
+    # - Bảng dùng để làm gì: Theo dõi, ghi nhật ký tương tác người dùng - AI Chatbot.
+    # - Ý nghĩa từng cột:
+    #     + id: Khóa chính tự tăng.
+    #     + user_question: Câu hỏi người dùng gửi lên (NOT NULL).
+    #     + ai_answer: Câu trả lời do AI/Hệ thống phản hồi.
+    #     + module: Tên module đã xử lý câu hỏi (AI CRM, AI Warehouse, RAG...).
+    #     + created_at: Thời điểm diễn ra cuộc trò chuyện.
+    # ---------------------------------------------------------
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS chat_logs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_question TEXT NOT NULL,
+        ai_answer TEXT,
+        module TEXT,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )
+    """)
 
-        if block_comment:
-            statement.append(char)
-            if char == "*" and next_char == "/":
-                statement.append(next_char)
-                block_comment = False
-                index += 2
-            else:
-                index += 1
-            continue
+    # ---------------------------------------------------------
+    # Bước 8: Commit lưu thay đổi và đóng kết nối CSDL
+    # - Bước này đang làm gì: Ghi nhận tất cả thao tác DDL (Data Definition Language) vào file database.db và giải phóng tài nguyên conn.
+    # - Vì sao cần bước này: Nếu không commit, các câu lệnh tạo bảng sẽ nằm ở bộ nhớ đệm và không ghi chính thức vào file ổ đĩa.
+    # - Sau bước này chương trình sẽ làm gì tiếp: In thông báo hoàn tất ra màn hình console.
+    # ---------------------------------------------------------
+    conn.commit()
+    conn.close()
 
-        if quote:
-            statement.append(char)
-            if char == "\\" and next_char:
-                statement.append(next_char)
-                index += 2
-                continue
-            if char == quote:
-                if next_char == quote:
-                    statement.append(next_char)
-                    index += 2
-                    continue
-                quote = None
-            index += 1
-            continue
-
-        if char in "'\"`":
-            quote = char
-            statement.append(char)
-            index += 1
-            continue
-
-        if char == "#" or (char == "-" and next_char == "-" and (index + 2 == len(script) or script[index + 2].isspace())):
-            line_comment = True
-            statement.append(char)
-            if char == "-":
-                statement.append(next_char)
-                index += 2
-            else:
-                index += 1
-            continue
-
-        if char == "/" and next_char == "*":
-            block_comment = True
-            statement.extend((char, next_char))
-            index += 2
-            continue
-
-        if char == ";":
-            sql = "".join(statement).strip()
-            if sql:
-                yield sql
-            statement = []
-        else:
-            statement.append(char)
-        index += 1
-
-    sql = "".join(statement).strip()
-    if sql:
-        yield sql
-
-
-def connect(config: dict[str, object], with_database: bool) -> mysql.connector.MySQLConnection:
-    connection_config = dict(config)
-    connection_config.pop("chatbot_ro_password", None)
-    if not with_database:
-        connection_config.pop("database")
-    return mysql.connector.connect(**connection_config)
-
-
-def execute_script(
-    connection: mysql.connector.MySQLConnection,
-    path: Path,
-    skip_database_drop: bool = False,
-) -> None:
-    # Chạy lần lượt statement, tùy chọn bỏ DROP DATABASE và rollback nếu có lỗi.
-    script = path.read_text(encoding="utf-8")
-    cursor = connection.cursor()
-    try:
-        for statement in split_sql_script(script):
-            executable = re.sub(r"--[^\n]*|/\*.*?\*/", "", statement, flags=re.S).strip()
-            if skip_database_drop and executable.upper().startswith("DROP DATABASE"):
-                continue
-            cursor.execute(statement)
-            if cursor.with_rows:
-                cursor.fetchall()
-        connection.commit()
-    except Exception:
-        connection.rollback()
-        raise
-    finally:
-        cursor.close()
-
-
-def apply_extensions(connection, password: str) -> set[str]:
-    # Áp dụng extension theo số thứ tự và bỏ qua migration đã ghi nhận.
-    applied=set()
-    with connection.cursor() as cur:
-        cur.execute('CREATE TABLE IF NOT EXISTS schema_migrations(filename VARCHAR(255) PRIMARY KEY, applied_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)')
-    connection.commit()
-    # Các extension sau cần account này để GRANT. Cập nhật ngay cả khi 03 đã chạy.
-    ensure_account(connection, 'chatbot_ro', password, 'localhost')
-    for extension in sorted((PROJECT_ROOT / "data/schema/extensions").glob("[0-9][0-9]_*.sql")):
-        with connection.cursor() as cur:
-            cur.execute('SELECT filename FROM schema_migrations WHERE filename=%s',(extension.name,))
-            if cur.fetchone():
-                if extension.name == '08_air_blade_125_seed.sql':
-                    execute_script(connection, extension)
-                print(f'Skipped {extension.name}')
-                continue
-        execute_script(connection, extension)
-        with connection.cursor() as cur:
-            cur.execute('INSERT INTO schema_migrations(filename) VALUES(%s)',(extension.name,))
-        connection.commit()
-        applied.add(extension.name)
-        print(f"Applied {extension.name}")
-    return applied
-
-
-def verify_counts(connection: mysql.connector.MySQLConnection) -> dict[str, int]:
-    queries = {
-        "products": ("SELECT COUNT(*) FROM products", ()),
-        "product_variants": ("SELECT COUNT(*) FROM product_variants", ()),
-        "inventory": ("SELECT COUNT(*) FROM inventory", ()),
-        "customers": ("SELECT COUNT(*) FROM users WHERE id > %s AND user_type='customer'", (100,)),
-        "customer_profiles": ("SELECT COUNT(*) FROM customer_profiles", ()),
-        "orders": ("SELECT COUNT(*) FROM orders", ()),
-    }
-    cursor = connection.cursor()
-    try:
-        counts: dict[str, int] = {}
-        for name, (query, params) in queries.items():
-            cursor.execute(query, params)
-            counts[name] = int(cursor.fetchone()[0])
-        return counts
-    finally:
-        cursor.close()
+    # In thông báo xác nhận đã tạo thành công
+    print("Tạo database.db thành công!")
+    print("Đã tạo các bảng:")
+    print("- customers")
+    print("- inventory")
+    print("- opportunities")
+    print("- quotes")
+    print("- documents")
+    print("- bookings")
+    print("- chat_logs")
 
 
-def main() -> int:
-    parser = argparse.ArgumentParser(description="Khởi tạo schema và seed MySQL Honda.")
-    parser.add_argument("--reset", action="store_true", help="Xóa và tạo lại database honda_chatbot.")
-    parser.add_argument("--create-if-missing", action="store_true", help="Tạo/seed chỉ khi database chưa tồn tại.")
-    parser.add_argument("--extensions-only", action="store_true", help="Áp dụng extension, giữ nguyên dữ liệu.")
-    parser.add_argument('--extension', choices=[p.name for p in sorted((PROJECT_ROOT/'data/schema/extensions').glob('[0-9][0-9]_*.sql'))],
-                        help='Chỉ chạy một extension được chỉ định; không seed hoặc đổi account.')
-    args = parser.parse_args()
-
-    if sum((args.reset, args.create_if_missing, args.extensions_only, bool(args.extension))) != 1:
-        parser.error("Chọn đúng một chế độ: --create-if-missing, --extensions-only, --extension, --reset.")
-
-    try:
-        config = get_config()
-    except (RuntimeError, ValueError) as exc:
-        print(f"Configuration error: {exc}", file=sys.stderr)
-        return 1
-    connection = None
-    try:
-        if args.extension:
-            connection=connect(config,with_database=True)
-            execute_script(connection,PROJECT_ROOT/'data/schema/extensions'/args.extension)
-            with connection.cursor() as cur:
-                cur.execute('INSERT IGNORE INTO schema_migrations(filename) VALUES(%s)',(args.extension,))
-            connection.commit()
-            print('Applied '+args.extension+' only; no seed or account changes.')
-            return 0
-        connection = connect(config, with_database=False)
-        with connection.cursor() as cur:
-            cur.execute("SELECT COUNT(*) FROM information_schema.SCHEMATA WHERE SCHEMA_NAME = %s", (config['database'],))
-            exists = bool(cur.fetchone()[0])
-        initialize = args.reset or (args.create_if_missing and not exists)
-        if initialize:
-            execute_script(connection, SCHEMA_FILE, skip_database_drop=not args.reset)
-        connection.close()
-        connection = connect(config, with_database=True)
-        if initialize:
-            execute_script(connection, SEED_FILE)
-        applied=apply_extensions(connection, str(config['chatbot_ro_password']))
-        from scripts.backfill_customer_imports import backfill  # Khôi phục lịch sử các dòng khách đã commit.
-        recovered=backfill(connection)
-        if recovered:print(f'Recovered {recovered} customer import history rows.')
-        if initialize or '06_auth_dynamic_rbac.sql' in applied:
-            from scripts.seed_demo_passwords import seed  # Đặt lại mật khẩu demo sau khi seed schema.
-            seed(connection)
-        provision_accounts(connection, os.environ['DB_USER'], os.environ['DB_PASSWORD'],
-                           str(config['chatbot_ro_password']))
-        counts = verify_counts(connection)
-    except Exception as exc:
-        if connection is not None and connection.is_connected():
-            connection.close()
-        safe_message = str(exc)
-        for key in ("password", "chatbot_ro_password"):
-            if config.get(key):
-                safe_message = safe_message.replace(str(config[key]), "***")
-        for key in ('APP_DB_PASSWORD','DEMO_ACCOUNT_PASSWORD'):
-            if os.getenv(key):safe_message=safe_message.replace(os.environ[key],'***')
-        print(f"MySQL initialization failed: {safe_message}", file=sys.stderr)
-        return 1
-    finally:
-        if connection is not None and connection.is_connected():
-            connection.close()
-
-    print("MySQL schema and seed completed.")
-    for name, actual in counts.items():
-        expected = EXPECTED_COUNTS[name]
-        print(f"{name}: {actual} (expected {expected})")
-    if initialize and counts != EXPECTED_COUNTS:
-        print("Count verification failed.", file=sys.stderr)
-        return 1
-    return 0
-
-
+# ==========================================================
+# Khối lệnh kiểm tra điểm chạy trực tiếp (Main Execution Entry Point):
+# - __name__ là gì: Biến đặc biệt trong Python chứa tên của module hiện tại.
+# - __main__ là gì: Giá trị chuỗi mặc định của __name__ khi file được thực thi trực tiếp từ dòng lệnh.
+# - Vì sao phải dùng khối lệnh này: Để phân biệt khi chạy file trực tiếp với khi được import làm thư viện ở file khác.
+# - Khi import module này sang file khác (VD: `import init_db`): __name__ sẽ bằng "init_db", điều kiện == "__main__" trả về FALSE -> Hàm `create_database()` KHÔNG tự động chạy.
+# - Khi chạy trực tiếp file này (`python init_db.py`): __name__ bằng "__main__", điều kiện trả về TRUE -> Hàm `create_database()` được kích hoạt ngay lập tức.
+# ==========================================================
 if __name__ == "__main__":
-    sys.stdout.reconfigure(encoding='utf-8')
-    sys.stderr.reconfigure(encoding='utf-8')
-    raise SystemExit(main())
+    create_database()

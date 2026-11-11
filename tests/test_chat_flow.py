@@ -1,180 +1,227 @@
-"""Kiểm thử các luồng hội thoại chính từ câu hỏi đến phản hồi của chatbot."""
+import sqlite3
+from pathlib import Path
 
-import os  # Đọc biến môi trường hoặc thông tin hệ điều hành được dùng trong file.
-import pytest  # Khai báo fixture, tham số hóa test và kiểm tra kết quả.
-from mysql.connector import Error  # Dùng driver MySQL và kiểu lỗi/kết nối database.
-
-from app import app  # Dùng ứng dụng Flask đang được kiểm thử.
-from db import cursor, get_connection  # Mở cursor hoặc connection MySQL.
-from access_control import detect_intent, permitted_views  # Dùng session, intent và quyền của chatbot.
-from query_plans import plan_query  # Tạo kế hoạch truy vấn tồn kho theo câu hỏi.
-from sql_service import _execute_text_to_sql  # Thực thi câu hỏi SQL hoặc truy vấn đã kiểm tra.
-from rag_service import _search_query  # Tạo truy vấn RAG và lọc nguồn theo quyền.
-from schema_context import build_schema_context  # Tạo schema prompt từ metadata MySQL.
+import ai_service
+import app
+import database_service
+import rag_service
+import routing
+import sql_service
 
 
-@pytest.fixture
-def client(monkeypatch):
-    monkeypatch.setenv('APP_ENV', 'dev')
-    monkeypatch.delenv('GROQ_API_KEY', raising=False)
-    app.config.update(TESTING=True)
-    return app.test_client().login(None)
+ROOT = Path(__file__).resolve().parents[1]
 
 
-@pytest.mark.parametrize('body', [None, [], {'question': None}, {'question': 3}, {}, {'question': '  '}])
-def test_invalid_request(client, body):
-    assert client.post('/chat', json=body).status_code == 400
+def test_database_services_use_project_database_from_other_working_directory(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+
+    assert Path(database_service.DB_NAME) == ROOT / "database.db"
+    assert Path(sql_service.DB_NAME) == ROOT / "database.db"
+    assert Path(rag_service.DB_NAME) == ROOT / "database.db"
+    assert database_service.get_dashboard_stats()["customers"] == 60
+    assert "Tổng số khách hàng trong hệ thống: 60" in sql_service.answer_sql_question(
+        "có bao nhiêu khách hàng?"
+    )
+    assert rag_service.search_documents("Chính sách bảo hành là gì?") == (
+        "Không tìm thấy tài liệu liên quan trong hệ thống."
+    )
 
 
-def test_session_history_and_audit(client):
-    first = client.post('/chat', json={'question': 'SH 160i giá bao nhiêu?'}).get_json()
-    second = client.post('/chat', json={'question': 'Vision 110 có mấy phiên bản?'}).get_json()
-    assert first['session_id'] == second['session_id']
-    assert first['engine'] == 'database'
-    assert '92500000' in first['answer']
-    with cursor() as cur:
-        cur.execute('SELECT sender FROM chat_messages WHERE session_id = %s ORDER BY id', (first['session_id'],))
-        assert [r['sender'] for r in cur.fetchall()] == ['user', 'bot', 'user', 'bot']
-        cur.execute('SELECT COUNT(*) AS n FROM chatbot_audit_log WHERE session_id = %s', (first['session_id'],))
-        assert cur.fetchone()['n'] == 2
+def test_dashboard_and_inventory_endpoints_return_sqlite_data():
+    client = app.app.test_client()
+
+    dashboard = client.get("/api/dashboard")
+    assert dashboard.status_code == 200
+    assert dashboard.get_json()["customers"] == 60
+    assert dashboard.get_json()["inventory"] == 50
+
+    low_stock = client.get("/api/low-stock")
+    assert low_stock.status_code == 200
+    assert isinstance(low_stock.get_json(), list)
+    assert all(item["quantity"] < 10 for item in low_stock.get_json())
+
+    potential = client.get("/api/potential-customers")
+    assert potential.status_code == 200
+    assert all(item["status"] in {"potential", "vip", "new"} for item in potential.get_json())
 
 
-@pytest.mark.parametrize('user', [None, '3', '5'])
-def test_cost_denied_before_retrieval(client, monkeypatch, user):
-    def forbidden(*args, **kwargs):
-        pytest.fail('SQL retrieval must not run for a denied question')
-    monkeypatch.setattr('sql_service._execute_text_to_sql', forbidden)
-    response = client.post_as(int(user) if user else None, '/chat', json={'question': 'Giá vốn SH 160i?'})
-    assert response.status_code == 200
-    data = response.get_json()
-    assert data['answer'] == 'Tôi không thể hỗ trợ yêu cầu này.'
-    with cursor() as cur:
-        cur.execute('SELECT decision FROM chatbot_audit_log WHERE session_id = %s', (data['session_id'],))
-        assert [r['decision'] for r in cur.fetchall()] == ['denied']
+def test_chat_rejects_malformed_or_empty_input():
+    client = app.app.test_client()
+
+    malformed = client.post(
+        "/chat",
+        data="{",
+        content_type="application/json",
+    )
+    assert malformed.status_code == 400
+    assert malformed.get_json()["error"] == "invalid_json"
+
+    wrong_type = client.post("/chat", json={"question": 123})
+    assert wrong_type.status_code == 400
+    assert wrong_type.get_json()["error"] == "invalid_question"
+
+    empty = client.post("/chat", json={"question": "   "})
+    assert empty.status_code == 400
+    assert empty.get_json()["error"] == "empty_question"
 
 
-def test_sales_scope_and_pool_reset(client):
-    data = client.post_as(3, '/chat', json={'question': 'Tồn kho tại NT02'}).get_json()
-    assert data['answer'] == 'Không tìm thấy dữ liệu phù hợp.'
-    rows = _execute_text_to_sql('SELECT branch_code FROM v_ai_inventory', allowed_views=permitted_views(3), scope_branch_ids=[1])
-    assert len(rows) == 31 and {r['branch_code'] for r in rows} == {'NT01'}
-    rows = _execute_text_to_sql('SELECT branch_code FROM v_ai_inventory', allowed_views=permitted_views(1))
-    assert len(rows) == 93 and {r['branch_code'] for r in rows} == {'NT01', 'NT02', 'CR01'}
-    with cursor('text_to_sql') as cur:
-        cur.execute('SELECT @ai_branch AS scope, @@max_statement_time AS timeout')
-        row = cur.fetchone()
-        assert row['scope'] is None and float(row['timeout']) == 5
+def test_chat_reports_missing_groq_configuration_without_calling_provider(monkeypatch):
+    monkeypatch.setattr(ai_service, "API_KEY", None)
+    monkeypatch.setattr(app, "generate_answer", ai_service.generate_answer)
 
+    response = app.app.test_client().post(
+        "/chat",
+        json={"question": "có bao nhiêu khách hàng?"},
+    )
 
-@pytest.mark.parametrize('sql', ['SELECT * FROM users', 'SELECT * FROM product_variants', 'DELETE FROM v_ai_orders'])
-def test_readonly_database_privileges(sql):
-    with cursor('text_to_sql') as cur:
-        with pytest.raises(Error) as exc:
-            cur.execute(sql)
-        assert exc.value.errno == 1142
-
-
-@pytest.mark.parametrize('user,expected', [
-    (None, {'v_ai_products'}),
-    (5, {'v_ai_products', 'v_ai_inventory'}),
-    (3, {'v_ai_products', 'v_ai_inventory', 'v_ai_orders', 'v_ai_customers'}),
-    (6, {'v_ai_products', 'v_ai_orders', 'v_ai_product_costs', 'v_ai_inventory', 'v_ai_customers'}),  # Extension 15 baseline cấp quyền đọc kế toán.
-])
-def test_permission_whitelist(user, expected):
-    assert permitted_views(user) == expected
-
-
-def test_guest_schema_does_not_expose_costs():
-    conn = get_connection()
-    try:
-        prompt = build_schema_context(conn, os.environ['DB_NAME'], permitted_views(None))
-        assert 'VIEW v_ai_products' in prompt
-        assert 'VIEW v_ai_product_costs' not in prompt
-        assert 'Giá niêm yết (VNĐ)' in prompt
-        assert 'password_hash' not in prompt
-    finally:
-        conn.close()
-
-
-def test_guest_documents_never_include_sales_or_branch():
-    query, params = _search_query('Honda', None, use_like=True)
-    with cursor() as cur:
-        cur.execute(query, params)
-        ids = {r['id'] for r in cur.fetchall()}
-        cur.execute("SELECT d.id FROM kb_documents d JOIN kb_categories c ON c.id=d.category_id WHERE c.code='public' AND d.branch_id IS NULL")
-        allowed={r['id'] for r in cur.fetchall()}
-    assert ids and ids <= allowed
-
-
-def test_rag_sources_and_no_evidence(client):
-    data = client.post('/chat', json={'question': 'Thủ tục trả góp?'}).get_json()
-    assert '[Nguồn id=' in data['answer'] and 'tiêu đề=' in data['answer']
-    data = client.post('/chat', json={'question': 'Tài liệu zzznonexistent12345?'}).get_json()
-    assert data['answer'] == 'Không tìm thấy bằng chứng trong tài liệu được phép truy cập.'
-
-
-def test_prod_ignores_demo_header(client, monkeypatch):
-    monkeypatch.setenv('APP_ENV', 'prod')
-    data = client.post('/chat', json={'question': 'Tồn kho?'}, headers={'X-Demo-User-Id': '1'}).get_json()
-    assert data['answer'] == 'Tôi không thể hỗ trợ yêu cầu này.'
-
-
-def test_database_failure_is_controlled(client, monkeypatch):
-    def unavailable(*args):
-        raise Error('private_database_details')
-    monkeypatch.setattr('app.create_session', unavailable)
-    response = client.post('/chat', json={'question': 'Giá xe?'})
     assert response.status_code == 503
-    assert 'private_database_details' not in response.get_data(as_text=True)
+    assert response.get_json()["error"] == "llm_not_configured"
+    assert "GROQ_API_KEY" in response.get_json()["answer"]
 
 
-def test_prompt_is_sent_to_model(monkeypatch):
-    import ai_service  # Thay cấu hình/client để test không gọi dịch vụ ngoài.
-    from types import SimpleNamespace  # Tạo response giả có cấu trúc giống Groq SDK.
-    calls = []
-    def completion(**kwargs):
-        calls.append(kwargs)
-        return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content='answer'))])
-    monkeypatch.setattr(ai_service, 'API_KEY', 'test-key')
-    monkeypatch.setattr(ai_service, 'client', SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=completion))))
-    assert ai_service.generate_answer('Giá?', 'evidence', [{'sender': 'user', 'content': 'previous'}]) == 'answer'
-    assert calls[0]['messages'][0] == {'role': 'system', 'content': ai_service.SYSTEM_PROMPT}
-    assert 'evidence' in calls[0]['messages'][1]['content']
+def test_requested_sql_questions_are_grounded_in_database():
+    connection = sqlite3.connect(ROOT / "database.db")
+    try:
+        customer_count = connection.execute(
+            "SELECT COUNT(*) FROM customers"
+        ).fetchone()[0]
+        assert f"{customer_count} khách hàng" in sql_service.answer_sql_question(
+            "có bao nhiêu khách hàng?"
+        )
+
+        low_stock_names = [
+            row[0]
+            for row in connection.execute(
+                "SELECT product_name FROM inventory WHERE quantity < 10"
+            )
+        ]
+        low_stock_context = sql_service.answer_sql_question(
+            "kho nào sắp hết hàng?"
+        )
+        assert low_stock_names
+        assert all(name in low_stock_context for name in low_stock_names)
+
+        top_customers = [
+            row[0]
+            for row in connection.execute("""
+                SELECT c.name
+                FROM customers c
+                JOIN quotes q ON q.customer_id = c.id
+                WHERE q.status = 'approved'
+                GROUP BY c.id
+                ORDER BY SUM(q.total_amount) DESC
+                LIMIT 10
+            """)
+        ]
+        top_context = sql_service.answer_sql_question(
+            "top 10 khách hàng có doanh thu cao nhất"
+        )
+        assert top_customers
+        assert all(name in top_context for name in top_customers)
+
+        product_count = connection.execute(
+            "SELECT COUNT(*) FROM inventory"
+        ).fetchone()[0]
+        assert f"{product_count} sản phẩm" in sql_service.answer_sql_question(
+            "có bao nhiêu sản phẩm trong kho?"
+        )
+
+        open_opportunities = [
+            row[0]
+            for row in connection.execute("""
+                SELECT title
+                FROM opportunities
+                WHERE stage NOT IN ('won', 'lost')
+                ORDER BY value DESC
+                LIMIT 20
+            """)
+        ]
+        opportunity_context = sql_service.answer_sql_question(
+            "có cơ hội bán hàng nào đang chờ xử lý?"
+        )
+        assert open_opportunities
+        assert f"({len(open_opportunities)} cơ hội)" in opportunity_context
+        assert all(title in opportunity_context for title in open_opportunities)
+
+        quote_codes = [
+            row[0]
+            for row in connection.execute("""
+                SELECT quote_code
+                FROM quotes
+                ORDER BY total_amount DESC
+                LIMIT 20
+            """)
+        ]
+        quote_context = sql_service.answer_sql_question(
+            "cho tôi xem các báo giá hiện có"
+        )
+        assert quote_codes
+        assert all(code in quote_context for code in quote_codes)
+    finally:
+        connection.close()
 
 
-STANDARD_CASES = [
-    ('SH 160i giá bao nhiêu?', 'SELECT pv.list_price FROM product_variants pv JOIN products p ON p.id = pv.product_id WHERE p.model_name = %s ORDER BY pv.list_price', ('SH 160i',), 'list_price'),
-    ('Có bao nhiêu khách hàng đã mua xe?', 'SELECT COUNT(*) AS n FROM customer_profiles WHERE status = %s', ('Đã mua',), 'purchased_customers'),
-    ('Tổng số đơn hàng?', 'SELECT COUNT(*) AS n FROM orders', (), 'orders'),
-    ('Tổng tồn kho toàn hệ thống?', 'SELECT SUM(quantity) AS n FROM inventory', (), 'total_stock'),
-    ('Mỗi phân khúc có bao nhiêu phiên bản?', 'SELECT p.segment, COUNT(*) AS variants FROM products p JOIN product_variants pv ON pv.product_id = p.id GROUP BY p.segment ORDER BY p.segment', (), None),
-    ('Mẫu xe nào có giá niêm yết cao nhất?', 'SELECT p.model_name, pv.variant_name, pv.list_price FROM products p JOIN product_variants pv ON pv.product_id = p.id ORDER BY pv.list_price DESC LIMIT 1', (), None),
-    ('Tổng doanh thu thuần của các đơn?', 'SELECT SUM(oi.quantity * oi.unit_price - o.discount_amount) AS n FROM orders o JOIN order_items oi ON oi.order_id = o.id', (), 'net_revenue'),
-    ('Bao nhiêu khách hàng chọn trả góp?', 'SELECT COUNT(*) AS n FROM customer_profiles WHERE payment_preference = %s', ('Trả góp',), 'installment_customers'),
-    ('Có bao nhiêu dòng tồn kho đang hết hàng?', 'SELECT COUNT(*) AS n FROM inventory WHERE quantity = 0', (), 'empty_inventory_rows'),
-    ('Vision 110 có bao nhiêu phiên bản?', 'SELECT COUNT(*) AS n FROM products p JOIN product_variants pv ON pv.product_id = p.id WHERE p.model_name = %s', ('Vision 110',), 'variants'),
-]
+def test_quote_waiting_query_does_not_match_the_word_for():
+    pending_context = sql_service.answer_sql_question(
+        "báo giá nào đang chờ duyệt?"
+    )
+    list_context = sql_service.answer_sql_question(
+        "cho tôi xem các báo giá hiện có"
+    )
+
+    assert "Không tìm thấy báo giá" in pending_context
+    assert "Danh sách báo giá" in list_context
 
 
-@pytest.mark.parametrize('question,oracle,params,key', STANDARD_CASES)
-def test_standard_answers_against_base_sql(question, oracle, params, key, client):
-    sql, bind = plan_query(question, detect_intent(question))
-    actual = _execute_text_to_sql(sql, bind, allowed_views=permitted_views(1))
-    with cursor() as cur:
-        cur.execute(oracle, params)
-        expected = cur.fetchall()
-    if key:
-        assert [r[key] for r in actual] == [next(iter(r.values())) for r in expected]
-    else:
-        assert actual == expected
-    response = client.post_as(1, '/chat', json={'question': question})
-    assert response.status_code == 200
-    answer = response.get_json()['answer']
-    for row in expected:
-        for value in row.values():
-            assert str(value) in answer
+def test_requested_rag_questions_retrieve_evidence_and_report_no_evidence():
+    greeting_routes = [
+        routing.route_question("chào"),
+        routing.route_question("xin chào, bạn có thể giúp gì cho tôi?"),
+    ]
+    assert all(result["type"] == "RAG" for result in greeting_routes)
+
+    unsupported_policy_context = rag_service.search_documents(
+        "Chính sách bảo hành là gì?"
+    )
+    assert unsupported_policy_context == (
+        "Không tìm thấy tài liệu liên quan trong hệ thống."
+    )
+
+    relevant_context = rag_service.search_documents(
+        "Quy trình RAG hoạt động ra sao?"
+    )
+    assert "Luồng xử lý RAG" in relevant_context
+
+    missing_context = rag_service.search_documents(
+        "qzxv-no-evidence-987654"
+    )
+    assert missing_context == "Không tìm thấy tài liệu liên quan trong hệ thống."
 
 
-def test_unknown_model_does_not_invent_price(client):
-    response = client.post('/chat', json={'question': 'Honda Rebel 500 giá bao nhiêu?'})
-    assert response.get_json()['answer'] == 'Không tìm thấy dữ liệu phù hợp.'
+def test_all_requested_prompts_are_routed_to_the_expected_retriever():
+    prompts = [
+        ("chào", "RAG"),
+        ("xin chào, bạn có thể giúp gì cho tôi?", "RAG"),
+        ("có bao nhiêu khách hàng?", "SQL"),
+        ("kho nào sắp hết hàng?", "SQL"),
+        ("top 10 khách hàng có doanh thu cao nhất", "SQL"),
+        ("có bao nhiêu sản phẩm trong kho?", "SQL"),
+        ("có cơ hội bán hàng nào đang chờ xử lý?", "SQL"),
+        ("cho tôi xem các báo giá hiện có", "SQL"),
+        ("Quy trình RAG hoạt động ra sao?", "RAG"),
+        ("qzxv-no-evidence-987654", "RAG"),
+    ]
+
+    for question, expected_type in prompts:
+        result = routing.route_question(question)
+        assert result["type"] == expected_type
+        if expected_type == "SQL":
+            context = sql_service.answer_sql_question(question)
+            assert context
+            assert "chưa có truy vấn SQL phù hợp" not in context
+        elif question == "Quy trình RAG hoạt động ra sao?":
+            assert "Luồng xử lý RAG" in rag_service.search_documents(question)
+        elif question.startswith("qzxv-"):
+            assert rag_service.search_documents(question) == (
+                "Không tìm thấy tài liệu liên quan trong hệ thống."
+            )

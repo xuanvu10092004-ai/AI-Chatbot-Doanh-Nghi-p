@@ -1,9 +1,111 @@
-<!-- Trang chat hiển thị danh tính từ session và chỉ bật gợi ý theo quyền backend. -->
-﻿{% extends 'base.html' %}
-{% block content %}
-<h1>Trợ lý AI</h1><p class="muted" id="chatModeHint">{{ "Chế độ nhân viên: thao tác nghiệp vụ theo quyền, lệnh ghi cần xác nhận." if current_user and current_user.user_type=="staff" else "Chế độ khách: hỏi giá xe, đặt lịch bảo dưỡng hoặc tư vấn ngay trong chat." }}</p><details class="panel chat-tool-guide"><summary>Các lệnh tôi có thể dùng</summary><div id="chatToolCatalog">Đang đọc quyền hiện tại…</div>{% if current_user and current_user.user_type=="staff" %}<p>Ví dụ: Nhập hàng: Chi nhánh: NT01; Nhà cung cấp: Kho mô phỏng; Mã SP: SP014; Số lượng: 3</p>{% endif %}<p>Đặt lịch tư vấn: Chi nhánh: NT01; Họ tên: Nguyễn An; SĐT: 0901234567; Ngày giờ: 20/10/2026 09:00</p></details>
-<p class="field-help">Có thể bổ sung thông tin qua nhiều lượt. Khi có nhiều kết quả, hãy chọn đúng đối tượng; kiểm tra bản xem trước rồi xác nhận hoặc hủy. Ví dụ thời gian: “ngày mai 9h30”.</p>
-<div class="identity-chip">Đang đăng nhập: {{ current_user.full_name if current_user else 'Khách' }} · {{ identity }}</div>
-<div class="suggestions"><button type="button" class="secondary" data-question="Giá SH Mode 125">Giá SH Mode 125</button><button type="button" class="secondary" data-question="Chương trình khuyến mãi">Khuyến mãi</button>{% if can('inventory:read') %}<button type="button" class="secondary" data-question="Tổng tồn kho">Tồn kho</button>{% endif %}{% if can('order:read') %}<button type="button" class="secondary" data-question="Tổng số đơn hàng">Đơn hàng</button>{% endif %}{% if can('customer:write') %}<button type="button" class="secondary" data-question="Thêm khách hàng">Thêm khách hàng</button><button type="button" class="secondary" data-question="Thêm khách mua xe">Thêm khách mua xe</button><a class="button-link secondary" href="/customer-input?quick=1">Mở biểu mẫu</a><button type="button" class="secondary" data-question="Tiếp tục nhập khách hàng">Tiếp tục bản nháp</button>{% endif %}</div>
-<section class="panel chat-panel"><div id="chatMessages" class="chat-messages" role="log" aria-label="Lịch sử trò chuyện" aria-live="polite" aria-relevant="additions text" tabindex="0"><div class="message bot-message">Xin chào! Bạn có thể hỏi giá, thông số, chi nhánh còn xe hoặc so sánh xe trong bộ dữ liệu mô phỏng.</div></div><form id="chatForm" data-can-export="{{ 'true' if can('invoice:export') else 'false' }}" class="chat-form"><label class="visually-hidden" for="questionInput">Câu hỏi</label><input id="questionInput" placeholder="Nhập câu hỏi của bạn…" maxlength="4000" required autocomplete="off">{% if can("customer:write") and can("document:manage") %}<label class="button-link secondary chat-attach" for="chatCustomerFile">Đính kèm khách hàng<input id="chatCustomerFile" type="file" accept=".pdf,.docx,.xlsx" class="visually-hidden"></label>{% endif %}<button id="sendButton">Gửi</button></form><p id="chatAttachmentName" class="field-help" role="status"></p></section>
-{% endblock %}{% block scripts %}<!-- Nạp bộ dựng văn bản trước script gửi câu hỏi và hiển thị nguồn. --><script src="/static/chat-formatting.js" defer></script><script src="/static/chat.js" defer></script>{% endblock %}
+<!DOCTYPE html>
+<html lang="vi">
+
+<head>
+    <meta charset="UTF-8">
+    <title>AI Chatbot Doanh nghiệp</title>
+
+    <!-- Bootstrap 5: Framework CSS giúp layout responsive và các component sẵn có -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+
+    <!-- CSS tùy chỉnh của dự án (định nghĩa stat-card, chat-box, user/bot message) -->
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+
+<body>
+
+    <!-- Wrapper chính: container Bootstrap giới hạn chiều rộng và thêm padding dọc -->
+    <div class="container py-4">
+
+        <!-- ================================================
+             Tiêu đề trang
+             ================================================ -->
+        <div class="text-center mb-4">
+            <h1>Hệ thống Trợ lý AI Doanh nghiệp</h1>
+            <p class="text-muted">AI Chat • CRM • Opportunity • Quote • Warehouse • Dashboard</p>
+        </div>
+
+        <!-- ================================================
+             Hàng thẻ thống kê (stat-cards): 4 module chính
+             Mỗi thẻ chiếm 3/12 cột (col-md-3) trên màn hình trung bình
+             ================================================ -->
+        <div class="row mb-4">
+
+            <!-- Thẻ: AI CRM - Quản lý khách hàng -->
+            <div class="col-md-3">
+                <div class="card stat-card">
+                    <h5>AI CRM</h5>
+                    <p>Quản lý khách hàng</p>
+                </div>
+            </div>
+
+            <!-- Thẻ: AI Warehouse - Quản lý tồn kho -->
+            <div class="col-md-3">
+                <div class="card stat-card">
+                    <h5>AI Warehouse</h5>
+                    <p>Quản lý tồn kho</p>
+                </div>
+            </div>
+
+            <!-- Thẻ: AI Quote - Quản lý báo giá -->
+            <div class="col-md-3">
+                <div class="card stat-card">
+                    <h5>AI Quote</h5>
+                    <p>Quản lý báo giá</p>
+                </div>
+            </div>
+
+            <!-- Thẻ: AI Dashboard - Thống kê tổng quan -->
+            <div class="col-md-3">
+                <div class="card stat-card">
+                    <h5>AI Dashboard</h5>
+                    <p>Thống kê tổng quan</p>
+                </div>
+            </div>
+
+        </div>
+        <!-- Kết thúc hàng thẻ thống kê -->
+
+        <!-- ================================================
+             Khu vực chatbox
+             ================================================ -->
+        <div class="card chat-box">
+
+            <!-- Header chatbox -->
+            <div class="card-header">
+                <strong>AI Chatbox</strong>
+            </div>
+
+            <div class="card-body">
+
+                <!-- Khu vực hiển thị tin nhắn (id="chatMessages")
+                     script.js sẽ thêm các div .user-message và .bot-message vào đây -->
+                <div id="chatMessages" class="chat-messages mb-3">
+                    <!-- Tin nhắn chào mừng mặc định từ bot khi trang vừa mở -->
+                    <div class="bot-message">
+                        Xin chào! Tôi là trợ lý AI doanh nghiệp. Bạn có thể hỏi về khách hàng, kho, báo giá, cơ hội bán
+                        hàng hoặc tài liệu nội bộ.
+                    </div>
+                </div>
+
+                <!-- Ô nhập câu hỏi + nút Gửi
+                     - input#questionInput: nơi người dùng gõ câu hỏi
+                     - button onclick="sendQuestion()": gọi hàm trong script.js
+                     - Phím Enter cũng kích hoạt sendQuestion() (xem script.js) -->
+                <div class="input-group">
+                    <input type="text" id="questionInput" class="form-control" placeholder="Nhập câu hỏi của bạn...">
+                    <button id="sendButton" class="btn btn-primary" onclick="sendQuestion()">Gửi</button>
+                </div>
+
+            </div>
+        </div>
+        <!-- Kết thúc chatbox -->
+
+    </div>
+    <!-- Kết thúc container chính -->
+
+    <!-- Script xử lý logic chatbot (gửi câu hỏi, hiển thị câu trả lời) -->
+    <script src="/static/script.js"></script>
+</body>
+
+</html>

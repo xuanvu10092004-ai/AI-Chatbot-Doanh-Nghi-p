@@ -1,257 +1,274 @@
-# File khởi tạo Flask, đăng ký route và chuyển request tới các service xác thực, dữ liệu và chatbot.
-from __future__ import annotations
+# ==========================================================
+# Tên file: app.py
+# Mục đích của file: File chính (Entry Point) của ứng dụng Web Flask Server.
+# File này dùng để làm gì:
+#   - Khởi tạo ứng dụng Web Flask (`app = Flask(__name__)`).
+#   - Định nghĩa các đường dẫn API Endpoint phục vụ Frontend (Giao diện HTML/JS):
+#       + Route `/`                     : Trả về giao diện trang web chính (index.html).
+#       + Route `GET /api/dashboard`    : Trả về số liệu thống kê tổng quan của các bảng.
+#       + Route `GET /api/low-stock`    : Trả về danh sách sản phẩm sắp hết hàng (tồn kho < 10).
+#       + Route `GET /api/potential-customers`: Trả về danh sách khách hàng tiềm năng/VIP/mới.
+#       + Route `POST /chat`            : Tiếp nhận câu hỏi Chatbot, định tuyến SQL/RAG và sinh câu trả lời bằng Groq LLM.
+#   - Khởi chạy Web Server cục bộ và tự động bật trình duyệt.
+# Khi nào file được gọi:
+#   - Được gọi đầu tiên khi khởi động ứng dụng Web backend bằng lệnh `python app.py`.
+# Luồng hoạt động tổng quát Chatbot & REST API:
+#   Người dùng nhập câu hỏi trên Giao diện Web
+#           ↓
+#   [Gửi HTTP POST JSON request tới Route /chat]
+#           ↓
+#   [Hàm chat() nhận request -> Gọi routing.route_question(question)]
+#           ↓
+#   [Kiểm tra result["type"] == "SQL" hay "RAG"]
+#       ├─ SQL: Gọi sql_service.answer_sql_question(question) lấy dữ liệu CSDL
+#       └─ RAG: Lấy dữ liệu tài liệu chính sách công ty
+#           ↓
+#   [Gọi ai_service.generate_answer(question, context) -> Groq LLM sinh câu trả lời]
+#           ↓
+#   [Trả về HTTP JSON response {"answer", "type", "module"}]
+#           ↓
+#   [JavaScript render hiển thị câu trả lời lên giao diện khung chat Web]
+# ==========================================================
 
-import os  # Đọc khóa session và trạng thái môi trường khi khởi tạo Flask.
-import re  # Phát hiện thông tin mật khẩu trước khi lưu câu hỏi vào lịch sử chat.
-from typing import Any  # Dùng cho kiểu dữ liệu trong các hàm backend.
+import threading
+import webbrowser
+import logging
+from flask import Flask, render_template, request, jsonify
+from ai_service import AIConfigurationError, AIServiceError
 
-from flask import Flask, jsonify, render_template, request, session, g, redirect  # Tạo ứng dụng, xử lý request và dựng response.
+# Import hàm phân loại câu hỏi (SQL hay RAG) và xác định module
+from routing import route_question
 
-from access_control import create_session, record_message, resume_session, read_history  # Dùng session, intent và quyền của chatbot.
-# Gọi model để diễn đạt câu trả lời từ bằng chứng SQL hoặc RAG.
-from ai_service import generate_answer
-# Lấy số liệu tổng quan, tồn thấp và khách tiềm năng cho các API cũ.
+# Import các hàm truy vấn database cho Dashboard và các widget
 from database_service import (
-    SchemaExtensionRequired,  # Báo module cũ cần schema extension chưa có.
-    get_dashboard_stats,  # Đọc số đếm tổng quan cho dashboard.
-    get_low_stock_products,  # Lấy phiên bản sắp hết hoặc đã hết hàng.
-    get_potential_customers,  # Lấy khách tiềm năng, đang tư vấn hoặc đã mua.
+    get_dashboard_stats,       # Thống kê tổng quan (số dòng mỗi bảng)
+    get_low_stock_products,    # Sản phẩm sắp hết hàng
+    get_potential_customers    # Khách hàng tiềm năng / VIP
 )
-from rag_service import search_documents  # Tạo truy vấn RAG và lọc nguồn theo quyền.
-from routing import route_question  # Phân loại câu hỏi SQL/RAG và nhãn module.
-from sql_service import answer_sql_question  # Thực thi câu hỏi SQL hoặc truy vấn đã kiểm tra.
-from sql_service import SchemaExtensionRequired as SQLSchemaExtensionRequired  # Thực thi câu hỏi SQL hoặc truy vấn đã kiểm tra.
-from mysql.connector import Error as DatabaseError  # Dùng driver MySQL và kiểu lỗi/kết nối database.
-from db import cursor  # Ghi audit từ chối ở lớp router trước khi truy xuất dữ liệu.
-from question_language import resolve_followup  # Chuẩn hóa câu hỏi và nhận diện mẫu xe.
-from answer_renderer import QueryEvidence  # Định dạng kết quả truy vấn thành nội dung hiển thị.
-# Chuẩn hóa dấu gạch trước khi ghi lịch sử và trả JSON.
-from text_formatting import normalize_dashes
-from security import initialize_request,permissions,navigation,csrf_token,require_permission  # Dùng xác thực, permission hoặc audit của backend.
-# Đăng ký route đăng nhập và đổi mật khẩu.
-from auth_routes import register_auth
-# Đăng ký dashboard cùng API widget.
-from dashboard_routes import register_dashboard
-# Đăng ký API quản trị user, role, permission và audit.
-from admin_routes import register_admin
-# Đăng ký danh sách khách hàng và tồn kho.
-from business_routes import register_business
-# Đăng ký upload tài liệu và giới hạn kích thước request.
-from document_routes import register_documents, document_request_limits
-# Đăng ký biểu mẫu Excel và API nhập khách.
-from customer_input_routes import register_customer_input
-from customer_chat import handle_customer_chat  # Phân tích thông tin khách gửi qua chat.
-# Đăng ký API danh sách đơn hàng và xuất chứng từ PDF.
-from sales_routes import register_sales
-# Đăng ký danh mục xe và lịch dịch vụ.
-from operations_routes import register_operations
-# Đăng ký trang/API nhận và đọc phiếu nhập kho.
-from stock_routes import register_stock
-# Đăng ký API lịch hẹn và thao tác chat.
-from chat_action_routes import register_chat_actions
-# Thực thi lệnh nghiệp vụ trong chat sau khi kiểm tra quyền.
-from chat_tools import handle_tool_chat
 
+# Import hàm xử lý câu hỏi dạng SQL (truy vấn database)
+from sql_service import answer_sql_question
 
+# Import hàm gọi Groq AI để sinh câu trả lời tự nhiên
+from ai_service import generate_answer
+
+# Import hàm tìm tài liệu trong bảng documents (RAG)
+from rag_service import search_documents
+
+# ---------------------------------------------------------
+# Khởi tạo đối tượng ứng dụng Web Flask
+# ---------------------------------------------------------
 app = Flask(__name__)
-# Giữ thứ tự key JSON theo dữ liệu trả về của route.
-app.json.sort_keys = False
-# Session cần secret key cấu hình; ứng dụng dừng thay vì dùng khóa mặc định không an toàn.
-secret_key = os.getenv("FLASK_SECRET_KEY")
-if secret_key:
-    app.secret_key = secret_key
-else:
-    raise RuntimeError('FLASK_SECRET_KEY is required')
-app.config.update(SESSION_COOKIE_HTTPONLY=True,SESSION_COOKIE_SAMESITE='Lax',SESSION_COOKIE_SECURE=os.getenv('APP_ENV')!='dev',MAX_CONTENT_LENGTH=65536)
-# Chạy giới hạn upload và nạp danh tính/quyền trước mọi route.
-app.before_request(document_request_limits)
-app.before_request(initialize_request)
-register_auth(app)
-register_dashboard(app)
-register_admin(app)
-register_business(app)
-register_documents(app)
-register_customer_input(app)
-register_sales(app)
-register_operations(app)
-register_stock(app)
-register_chat_actions(app)
-from customer_service import register_customers
-register_customers(app)
-
-@app.after_request
-def security_headers(response):
-    # Ngăn nhúng trang, sniff kiểu nội dung và lưu cache response nhạy cảm.
-    response.headers['Content-Security-Policy']="default-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
-    response.headers['X-Frame-Options']='DENY'
-    response.headers['X-Content-Type-Options']='nosniff'
-    response.headers['Cache-Control']='no-store'
-    return response
-
-@app.context_processor
-def shell_context():
-    # Cấp CSRF token, user và menu đã lọc quyền cho mọi template.
-    from customer_service import is_customer_admin
-    return dict(csrf_token=csrf_token,current_user=g.user,menu=navigation() if g.user or session.get('guest') else [],identity=' · '.join(r['name']+' - '+(r['branch_code'] or 'Toàn hệ thống') for r in g.roles) if g.user else 'Khách',can=lambda code:code in permissions(),can_manage_customers=is_customer_admin())
+logger = logging.getLogger(__name__)
 
 
+# ==========================================================
+# Hàm home (Route "/"):
+# - Hàm dùng để làm gì: Trả về trang HTML giao diện người dùng chính (Single Page Application - SPA).
+# - Tham số đầu vào: Không có.
+# - Giá trị trả về: Nguồn mã HTML của file `templates/index.html`.
+# - Hàm này được gọi ở đâu: Được Flask gọi khi người dùng truy cập trang chủ.
+# - Vai trò trong hệ thống: Route render giao diện người dùng (Frontend View Renderer).
+# ==========================================================
 @app.route("/")
 def home():
-    if not g.user or g.user['user_type']!='staff':return redirect('/chat')
-    return redirect(g.roles[0]['landing_path'] if g.roles else '/chat')
-
-@app.get('/chat')
-@require_permission('kb:public:read')
-def chat_page():
-    return render_template('index.html',demo_mode=False)
+    """
+    Route: Trang chủ
+    Trả về file index.html trong thư mục templates/
+    """
+    return render_template("index.html")
 
 
+# ==========================================================
+# Hàm dashboard (Route "GET /api/dashboard"):
+# - Hàm dùng để làm gì: Trả về dữ liệu JSON chứa số lượng bản ghi của 6 bảng CSDL.
+# - Tham số đầu vào: Không có.
+# - Giá trị trả về: JSON Response đại diện cho từ điển thống kê.
+# - Hàm này được gọi ở đâu: JavaScript frontend gọi qua fetch('/api/dashboard').
+# - Vai trò trong hệ thống: REST API Endpoint cung cấp số liệu tổng quan Dashboard.
+# ==========================================================
 @app.route("/api/dashboard", methods=["GET"])
-@require_permission('dashboard:view')
 def dashboard():
-    from dashboard_service import WIDGETS,widget_data  # Lọc widget theo permission và truy vấn số liệu.
-    return jsonify({code:widget_data(code) for code,(_,codes) in WIDGETS.items() if all(c in permissions() for c in codes)})
+    """
+    Route: API lấy thống kê Dashboard
+    GET /api/dashboard
+    Trả về số lượng bản ghi của từng bảng trong database
+    """
+    stats = get_dashboard_stats()
+    return jsonify(stats)
 
 
+# ==========================================================
+# Hàm low_stock (Route "GET /api/low-stock"):
+# - Hàm dùng để làm gì: Cung cấp danh sách các sản phẩm kho có tồn kho < 10.
+# - Tham số đầu vào: Không có.
+# - Giá trị trả về: JSON Array danh sách các sản phẩm.
+# - Hàm này được gọi ở đâu: JavaScript frontend gọi để hiển thị Widget Sản phẩm sắp hết hàng.
+# ==========================================================
 @app.route("/api/low-stock", methods=["GET"])
-@require_permission('inventory:read')
 def low_stock():
-    from business_routes import records  # Tạo danh sách tồn kho đã áp scope backend.
-    return jsonify(records('inventory',low_stock=True))
+    """
+    Route: API lấy danh sách sản phẩm sắp hết hàng
+    GET /api/low-stock
+    Trả về các sản phẩm có quantity < 10
+    """
+    products = get_low_stock_products()
+    return jsonify(products)
 
 
+# ==========================================================
+# Hàm potential_customers (Route "GET /api/potential-customers"):
+# - Hàm dùng để làm gì: Cung cấp danh sách các khách hàng tiềm năng/VIP/mới.
+# - Tham số đầu vào: Không có.
+# - Giá trị trả về: JSON Array danh sách thông tin khách hàng.
+# - Hàm này được gọi ở đâu: JavaScript frontend gọi để render Widget Khách hàng trọng tâm.
+# ==========================================================
 @app.route("/api/potential-customers", methods=["GET"])
-@require_permission('customer:read')
 def potential_customers():
-    from business_routes import records  # Tạo danh sách khách hàng đã áp scope backend.
-    return jsonify(records('customers'))
+    """
+    Route: API lấy danh sách khách hàng tiềm năng
+    GET /api/potential-customers
+    Trả về khách hàng có status là 'potential', 'vip', hoặc 'new'
+    """
+    customers = get_potential_customers()
+    return jsonify(customers)
 
 
-def _current_user_id() -> int | None:
-    return g.user['id'] if g.user else None
-
-
-def _legacy_not_implemented(module: str):
-    return jsonify({
-        "error": "schema-extension-required",
-        "message": f"{module} chưa có trong schema Honda; chưa tự thiết kế bảng.",
-    }), 501
-
-
-@app.route("/api/opportunities", methods=["GET", "POST"])
-@require_permission('order:read')
-def opportunities():
-    return _legacy_not_implemented("Opportunity")
-
-
-@app.route("/api/quotes", methods=["GET", "POST"])
-@require_permission('order:read')
-def quotes():
-    return _legacy_not_implemented("Quote")
-
-
-@app.route("/chat", methods=["POST"],endpoint='chat_api')
-@require_permission('kb:public:read')
+# ==========================================================
+# Hàm chat (Route "POST /chat"):
+# - Hàm dùng để làm gì: Xử lý toàn bộ quy trình nhận câu hỏi, phân loại SQL/RAG, chuẩn bị context và nhờ Groq LLM trả lời.
+# - Luồng dữ liệu Flask API:
+#     Request JSON -> Route POST /chat -> Hàm chat() -> Xử lý (routing + sql_service / rag_service) -> Database -> Groq LLM -> Response JSON
+# - Tham số đầu vào:
+#     + JSON body gửi từ client: {"question": "Nội dung câu hỏi"}
+# - Giá trị trả về:
+#     + JSON response: {"answer": "...", "type": "SQL"/"RAG", "module": "AI CRM"}
+# - Hàm này được gọi ở đâu: Được JavaScript trên giao diện Web bấm gửi tin nhắn gọi tới.
+# - Vai trò trong hệ thống: Trái tim tiếp nhận hội thoại Chatbot (Chat Controller Endpoint).
+# ==========================================================
+@app.route("/chat", methods=["POST"])
 def chat():
-    # Chỉ nhận JSON có câu hỏi văn bản, giới hạn độ dài trước khi truy xuất dữ liệu.
-    data = request.get_json(silent=True)
-    if not isinstance(data, dict) or not isinstance(data.get('question'), str) or not data['question'].strip():
-        return jsonify({"answer": "Vui lòng nhập câu hỏi.", "type": "None", "module": "None"}), 400
-    question = data['question'].strip()
-    if len(question) > 4000:
-        return jsonify(answer="Câu hỏi quá dài."), 400
-    session_id = None
+    """
+    Route: API xử lý câu hỏi từ chatbox
+    POST /chat
+    Nhận câu hỏi từ người dùng, phân loại (SQL/RAG),
+    rồi trả về câu trả lời tương ứng.
+    """
+    # ---------------------------------------------------------
+    # Khối try-except bắt lỗi ngoại lệ trong quá trình xử lý API
+    # ---------------------------------------------------------
     try:
-        user_id = _current_user_id()
-        existing_id = session.get('chat_session_id') if app.secret_key else None
-        if existing_id is not None and resume_session(existing_id, user_id):
-            session_id = existing_id
+        # ---------------------------------------------------------
+        # Bước 1 trong hàm: Trích xuất chuỗi câu hỏi từ request JSON
+        # ---------------------------------------------------------
+        data = request.get_json(silent=True)
+        if not isinstance(data, dict):
+            return jsonify({
+                "answer": "Nội dung gửi lên phải là JSON hợp lệ.",
+                "type": "ERROR",
+                "module": "ERROR",
+                "error": "invalid_json",
+            }), 400
+
+        question = data.get("question")
+        if not isinstance(question, str):
+            return jsonify({
+                "answer": "Trường question phải là chuỗi văn bản.",
+                "type": "ERROR",
+                "module": "ERROR",
+                "error": "invalid_question",
+            }), 400
+
+        # ---------------------------------------------------------
+        # Điều kiện IF: Kiểm tra xem câu hỏi có bị rỗng hay chỉ toàn khoảng trắng hay không
+        # - Khi TRUE: Trả về câu thông báo yêu cầu nhập câu hỏi ngay lập tức.
+        # - Khi FALSE: Tiếp tục chuyển sang bước phân loại routing.
+        # ---------------------------------------------------------
+        if not question.strip():
+            return jsonify({
+                "answer": "Vui lòng nhập câu hỏi.",
+                "type": "None",
+                "module": "None",
+                "error": "empty_question",
+            }), 400
+
+        # ---------------------------------------------------------
+        # Bước 2 trong hàm: Gọi routing.py để phân loại loại xử lý (SQL/RAG) và xác định module
+        # ---------------------------------------------------------
+        result = route_question(question)
+
+        # ---------------------------------------------------------
+        # Bước 3 trong hàm: Lấy dữ liệu ngữ cảnh (Context) dựa vào kết quả phân loại
+        # - Điều kiện IF / ELSE:
+        #     + Khi result["type"] == "SQL": Gọi `answer_sql_question(question)` lấy dữ liệu CSDL SQLite thực tế.
+        #     + Khi ELSE (RAG): Sử dụng chuỗi văn bản chính sách tài liệu nội bộ công ty.
+        # ---------------------------------------------------------
+        if result["type"] == "SQL":
+            # SQL -> truy vấn database lấy dữ liệu thật làm context
+            context = answer_sql_question(question)
         else:
-            session_id = create_session(user_id, "web")
-            if app.secret_key:
-                session['chat_session_id'] = session_id
-        history = read_history(session_id)
-        retrieval_question = resolve_followup(question, history)
-        safe_question='[Thông tin mật khẩu đã được ẩn; dùng ô nhập bảo mật]' if re.search(r"\b(?:password|mật khẩu|mat khau)[\"']?\s*[:=]",question,re.I) else question
-        record_message(session_id, "user", safe_question)
-        tool_confirmation=(data.get('action_id'),data.get('action_version')) if 'action_id' in data else None
-        tool_reply=handle_tool_chat(question,session_id,tool_confirmation,data.get('action_secret'))
-        if tool_reply is not None:
-            record_message(session_id,'bot',tool_reply['answer'])
-            tool_reply['session_id']=session_id
-            return jsonify(tool_reply)
-        confirmation = (data.get('customer_batch_id'), data.get('customer_batch_version')) if 'customer_batch_id' in data else None
-        customer_reply = handle_customer_chat(question, session_id, confirmation)
-        if customer_reply is not None:
-            record_message(session_id, 'bot', customer_reply['answer'])
-            customer_reply['session_id'] = session_id
-            return jsonify(customer_reply)
-        # Phân nhánh truy vấn có cấu trúc hoặc tìm tài liệu theo quyền của user.
-        route = route_question(retrieval_question)
-        if route["type"] in {"OUT_OF_SCOPE", "DENY"}:
-            answer = ("Yêu cầu này nằm ngoài phạm vi hỗ trợ của trợ lý." if route["type"] == "OUT_OF_SCOPE" else "Tôi không thể hỗ trợ yêu cầu này.")
-            with cursor() as cur:
-                cur.execute("INSERT INTO chatbot_audit_log (session_id, user_id, decision, reason) VALUES (%s, %s, 'denied', %s)", (session_id, user_id, f"Request bị chặn bởi router: {route['type']}"))
-            record_message(session_id, "bot", answer)
-            return jsonify(answer=answer, type=route["type"], module=route["module"], session_id=session_id, engine="policy", access_denied=True, rows=[], summary=None, sources=[])
-        if route["type"] == "CLARIFY":
-            answer = "Bạn muốn xem tất cả sản phẩm, tồn kho hay khách hàng? Hãy nói rõ nhóm dữ liệu cần tra cứu."
-            record_message(session_id, "bot", answer)
-            return jsonify(answer=answer, type=route["type"], module=route["module"], session_id=session_id, engine="clarification", access_denied=False, rows=[], summary=None, sources=[])
-        if route["type"] == "SQL":
-            context = answer_sql_question(retrieval_question, user_id, session_id, include_inventory_details=True)
-        else:
-            context = search_documents(retrieval_question, user_id, session_id)
-        # Không gửi kết quả từ chối hoặc thiếu bằng chứng tới model để tránh suy diễn.
-        denied = context == "Tôi không thể hỗ trợ yêu cầu này."
-        no_evidence = context.startswith(('Không tìm thấy', 'Chưa tìm thấy', 'Cần làm rõ:', 'Chưa phân tích được'))
-        engine = 'database'
-        if denied or no_evidence:
-            answer = context
-        elif isinstance(context, QueryEvidence):
-            # Preserve the legacy dev response contract; neither path asks the
-            # language model to rewrite database quantities, prices or dates.
-            answer = str(context) if not os.getenv('GROQ_API_KEY') and os.getenv('APP_ENV')=='dev' else context.display
-            engine = context.engine
-        elif not os.getenv('GROQ_API_KEY') and os.getenv('APP_ENV') == 'dev':
-            answer = context
-        else:
-            try:
-                answer = generate_answer(question, context, history)
-                engine = 'groq'
-            except Exception:
-                answer = "Dịch vụ AI chưa sẵn sàng. Vui lòng thử lại sau."
-                record_message(session_id, 'bot', answer)
-                return jsonify(answer=answer, error='ai-unavailable', session_id=session_id), 503
-        answer = normalize_dashes(str(answer))
-        if isinstance(context,QueryEvidence):
-            from dialogue_state import remember_evidence
-            remember_evidence(session_id,user_id,context.rows)
-        record_message(session_id, "bot", answer)
+            # RAG -> tìm tài liệu liên quan trong bảng documents bằng SQLite LIKE search
+            context = search_documents(question)
+
+        # ---------------------------------------------------------
+        # Bước 4 trong hàm: Gửi (question + context) tới Groq AI LLM sinh câu trả lời tự nhiên
+        # ---------------------------------------------------------
+        answer = generate_answer(question, context)
+
+        # ---------------------------------------------------------
+        # Bước 5 trong hàm: Đóng gói và trả về JSON Response cho Frontend
+        # ---------------------------------------------------------
         return jsonify({
             "answer": answer,
-            "type": route["type"],
-            "module": route["module"],
-            "session_id": session_id,
-            "engine": engine,
-            "access_denied": denied,
-            "rows": context.rows if isinstance(context,QueryEvidence) else [],
-            "summary": context.summary if isinstance(context, QueryEvidence) else None,
-            "sources": [{'id':int(i),'title':normalize_dashes(title)} for i,title in re.findall(r'\[Nguồn id=(\d+) \| tiêu đề=([^\]]+)\]',str(context))],
+            "type": result["type"],
+            "module": result["module"]
         })
-    except (SchemaExtensionRequired, SQLSchemaExtensionRequired) as exc:
-        message = str(exc)
-        record_message(session_id, "bot", message)
-        return jsonify({"error": "schema-extension-required", "message": message}), 501
-    except (DatabaseError, RuntimeError):
-        return jsonify(error='database-unavailable', answer="Chưa kết nối được cơ sở dữ liệu. Vui lòng thử lại sau."), 503
+
+    # ---------------------------------------------------------
+    # Khối EXCEPT: Bắt tất cả ngoại lệ bất ngờ xảy ra ở backend
+    # - Trả về mã lỗi JSON không làm crash trang web frontend.
+    # ---------------------------------------------------------
+    except AIConfigurationError as e:
+        logger.warning("Chat request blocked: LLM configuration is missing.")
+        return jsonify({
+            "answer": str(e),
+            "type": "ERROR",
+            "module": "ERROR",
+            "error": "llm_not_configured",
+        }), 503
+    except AIServiceError as e:
+        logger.warning(
+            "Chat provider failure: %s (HTTP %s)",
+            e.error_code,
+            e.provider_status or "unavailable",
+        )
+        return jsonify({
+            "answer": str(e),
+            "type": "ERROR",
+            "module": "ERROR",
+            "error": e.error_code,
+        }), 502
     except Exception:
-        return jsonify(error='backend-error', answer="Chưa xử lý được yêu cầu. Vui lòng thử lại sau."), 500
+        logger.exception("Unexpected error while processing chat request.")
+        return jsonify({
+            "answer": "Đã xảy ra lỗi khi xử lý câu hỏi. Vui lòng thử lại.",
+            "type": "ERROR",
+            "module": "ERROR",
+            "error": "internal_error",
+        }), 500
 
 
+# ==========================================================
+# Khối lệnh kiểm tra điểm chạy trực tiếp (Main Execution Entry Point):
+# - __name__ là gì: Biến lưu tên của module Python hiện tại.
+# - __main__ là gì: Giá trị chuỗi mặc định khi khởi chạy trực tiếp file từ dòng lệnh (`python app.py`).
+# - Vì sao phải dùng: Để khởi chạy Flask dev server và tự động mở trình duyệt web khi người dùng chạy `python app.py`.
+# - Khi import sang file khác: __name__ != "__main__" -> Server Flask KHÔNG tự kích hoạt.
+# - Khi chạy trực tiếp: __name__ == "__main__" -> Khởi tạo timer mở trình duyệt và chạy app.run(debug=True).
+# ==========================================================
 if __name__ == "__main__":
-    import threading  # Mở trình duyệt sau khoảng trễ khi chạy ứng dụng trực tiếp.
-    import webbrowser  # Mở trang local mặc định cho nhà phát triển.
-
-    threading.Timer(1.0, lambda: webbrowser.open("http://127.0.0.1:5000")).start()
-    app.run(host="127.0.0.1", port=5000, debug=False, use_reloader=False)
+    url = "http://127.0.0.1:5000"
+    # Dùng threading.Timer để chờ Flask khởi động xong (1.2s) rồi mới tự động mở trình duyệt web
+    threading.Timer(1.2, lambda: webbrowser.open(url)).start()
+    # Chạy ứng dụng Flask ở port 5000 với tính năng debug và tắt reloader phụ
+    app.run(debug=True, use_reloader=False)
